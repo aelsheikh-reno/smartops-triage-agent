@@ -38,6 +38,7 @@ def load():
         "detections": _by_id("detections/*/*.yaml"),
         "techniques": _by_id("techniques/T*.yaml"),
         "pilot": _load(os.path.join(BANK, "pilot.yaml")),
+        "use_cases": (_load(os.path.join(BANK, "use_cases.yaml")) or {}).get("use_cases", []) if os.path.exists(os.path.join(BANK, "use_cases.yaml")) else [],
     }
 
 

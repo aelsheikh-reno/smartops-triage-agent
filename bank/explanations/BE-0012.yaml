@@ -1,0 +1,8 @@
+id: BE-0012
+name: Approved AV exclusion
+description: IT adds a Defender exclusion that is on the customer's approved exclusion list (vendor guidance for databases, backup, EDR coexistence).
+source:
+- splunk/security_content detections/endpoint/add_or_set_windows_defender_exclusion.yml (known_false_positives)
+license:
+- Apache-2.0
+version: 1

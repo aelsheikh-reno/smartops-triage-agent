@@ -1,0 +1,19 @@
+id: CF-0017
+name: approved_driver_exceptions
+description: Known vulnerable drivers the customer has accepted on specific hosts, by hash.
+fields:
+- sha256
+- hosts
+- reason
+- ticket
+- expires
+match_rule: sha256 exact plus host
+collected_by: customer
+example:
+  sha256: <hash>
+  hosts:
+  - lab-hw-01
+  reason: Vendor hardware utility, no patched version
+  ticket: RISK-0091
+  expires: '2027-03-31'
+version: 1

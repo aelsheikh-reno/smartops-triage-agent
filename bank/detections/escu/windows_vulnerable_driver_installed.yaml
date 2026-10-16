@@ -1,0 +1,51 @@
+id: escu:windows_vulnerable_driver_installed
+escu_uuid: 1dda7586-57be-4a1b-8de1-a9ad802b9a7f
+name: Windows Vulnerable Driver Installed
+techniques:
+- T1543.003
+data_source:
+- Windows Event Log System 7045
+required_alert_fields:
+- ImagePath
+- _time
+- dest
+intent: Detects a kernel driver service install (7045) whose file name matches LOLDrivers, from Windows System logs.
+fp_quality: good
+enrichment:
+  note: Driver hash and signer come from the driver-load event (Sysmon EID 6) for the same ImagePath. 7045 carries neither, and ESCU matches LOLDrivers on file name only.
+explanations:
+- BE-0015
+- BE-0014
+fingerprint:
+- dest
+- ImagePath
+- driver_hash
+precedent_validity: 7d
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0025
+  on_yes: close:benign_true_positive:approved_driver_exception
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0024
+  on_yes: escalate
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0019
+  on_yes: close:false_positive:driver_name_collision
+  on_no: escalate
+  on_unknown: flag
+  bind:
+    subject_guid: ImagePath
+    enrichment: driver_load_by_path
+source: splunk/security_content detections/endpoint/windows_vulnerable_driver_installed.yml
+license: Apache-2.0
+status: draft
+version: 1

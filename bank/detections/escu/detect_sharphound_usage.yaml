@@ -1,0 +1,42 @@
+id: escu:detect_sharphound_usage
+escu_uuid: dd04b29a-beed-11eb-87bc-acde48001122
+name: Detect SharpHound Usage
+techniques:
+- T1069.001
+- T1069.002
+- T1087.001
+- T1087.002
+- T1482
+data_source:
+- Sysmon EventID 1
+- Windows Event Log Security 4688
+- CrowdStrike ProcessRollup2
+required_alert_fields:
+- _time
+- dest
+- process_hash
+- user
+intent: Detects SharpHound (BloodHound collector) execution by process or original file name from process creation logs.
+fp_quality: none
+explanations:
+- BE-0016
+fingerprint:
+- dest
+- user
+- process_hash
+precedent_validity: 72h
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0026
+  on_yes: close:benign_true_positive:authorized_security_test
+  on_no: escalate
+  on_unknown: flag
+source: splunk/security_content detections/endpoint/detect_sharphound_usage.yml
+license: Apache-2.0
+status: draft
+version: 1

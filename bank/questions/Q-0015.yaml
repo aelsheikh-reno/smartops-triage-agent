@@ -1,0 +1,23 @@
+id: Q-0015
+text: Has the same normalized command line, with the same parent binary (hash or signer plus path), run on at least 5 distinct hosts in the 30 days before the alert window?
+tests: BE-0008
+answer_source: baseline
+needs:
+  baseline:
+  - cmdline_parent_prevalence_30d
+  alert_fields:
+  - process
+  - parent_process_guid
+  enrichment:
+  - process_creation_by_guid
+notes: 'Command lines are normalized before comparison: GUIDs, hex strings, numbers, temp file names and user profile names are masked. Prevalence is counted before the alert window so a campaign hitting
+  many hosts at once cannot make itself prevalent.'
+source:
+- splunk/security_content detections/endpoint/windows_schtasks_create_run_as_system.yml
+- splunk/security_content detections/endpoint/malicious_powershell_process___execution_policy_bypass.yml
+license:
+- Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 1

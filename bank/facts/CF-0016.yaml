@@ -1,0 +1,15 @@
+id: CF-0016
+name: loldrivers_samples
+description: Known vulnerable and malicious driver samples from LOLDrivers, keyed by SHA256.
+fields:
+- sha256
+- filename
+- category
+- loldrivers_id
+match_rule: sha256 exact
+collected_by: bank_seed
+seed_from: magicsword-io/LOLDrivers yaml/*.yaml KnownVulnerableSamples[].SHA256 (loaded by tools, not copied into the bank)
+source:
+- magicsword-io/LOLDrivers
+license: Apache-2.0
+version: 1

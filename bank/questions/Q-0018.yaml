@@ -1,0 +1,20 @@
+id: Q-0018
+text: Has the same registry value name with the same normalized data been written on at least 5 distinct hosts in the 30 days before the alert window?
+tests: BE-0008
+answer_source: baseline
+needs:
+  baseline:
+  - registry_value_prevalence_30d
+  alert_fields:
+  - registry_path
+  - registry_value_name
+  - registry_value_data
+notes: 'Command lines are normalized before comparison: GUIDs, hex strings, numbers, temp file names and user profile names are masked.'
+source:
+- splunk/security_content detections/endpoint/registry_keys_used_for_persistence.yml (many legitimate applications)
+license:
+- Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 1

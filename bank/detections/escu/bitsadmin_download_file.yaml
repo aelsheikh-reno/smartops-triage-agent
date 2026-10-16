@@ -1,0 +1,65 @@
+id: escu:bitsadmin_download_file
+escu_uuid: 80630ff4-8e4c-11eb-aab5-acde48001122
+name: BITSAdmin Download File
+techniques:
+- T1197
+- T1105
+data_source:
+- Sysmon EventID 1
+- Windows Event Log Security 4688
+- CrowdStrike ProcessRollup2
+required_alert_fields:
+- _time
+- dest
+- parent_process_guid
+- parent_process_name
+- parent_process_path
+- process
+- user
+intent: Detects bitsadmin.exe /transfer or /addfile downloading a file from process creation logs.
+fp_quality: vague
+explanations:
+- BE-0002
+- BE-0010
+- BE-0007
+- BE-0003
+derived_fields:
+  url_host:
+    from: process
+    pattern: https?://([^/\s:\"']+)
+    note: first URL host in the command line
+fingerprint:
+- dest
+- parent_process_name
+- url_host
+precedent_validity: 72h
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0001
+  on_yes: close:benign_true_positive:sanctioned_deployment_tool
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0017
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 4
+  question: Q-0014
+  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_no: next
+  on_unknown: next
+- step: 5
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+source: splunk/security_content detections/endpoint/bitsadmin_download_file.yml
+license: Apache-2.0
+status: draft
+version: 1

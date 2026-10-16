@@ -1,0 +1,61 @@
+id: escu:creation_of_shadow_copy
+escu_uuid: eb120f5f-b879-4a63-97c1-93352b5df844
+name: Creation of Shadow Copy
+techniques:
+- T1003.003
+data_source:
+- Sysmon EventID 1
+- Windows Event Log Security 4688
+- CrowdStrike ProcessRollup2
+required_alert_fields:
+- _time
+- dest
+- parent_process_guid
+- parent_process_name
+- parent_process_path
+- process
+- process_hash
+- user
+intent: Detects vssadmin or wmic creating a volume shadow copy from process creation logs.
+fp_quality: vague
+notes: 'ESCU maps this to T1003.003 (NTDS): shadow copies are used to copy ntds.dit. On domain controllers the crown-jewel guardrail blocks auto-close.'
+explanations:
+- BE-0011
+- BE-0007
+- BE-0001
+- BE-0003
+fingerprint:
+- dest
+- parent_process_name
+- process_hash
+precedent_validity: 7d
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0021
+  on_yes: close:benign_true_positive:sanctioned_backup_tool
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0014
+  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0002
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 5
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+source: splunk/security_content detections/endpoint/creation_of_shadow_copy.yml
+license: Apache-2.0
+status: draft
+version: 1

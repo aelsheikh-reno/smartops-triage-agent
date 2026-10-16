@@ -1,0 +1,14 @@
+id: CF-0010
+name: approved_download_domains
+description: Internal domains and approved external domains that tools may download from (internal repos, PKI/CRL endpoints, vendor update CDNs). Domains, not tools, so the hash rule does not apply.
+fields:
+- domain
+- scope
+- owner
+match_rule: exact domain or subdomain of a listed domain; IP literals never match
+collected_by: customer
+example:
+  domain: pki.corp.local
+  scope: internal
+  owner: PKI team
+version: 1

@@ -1,0 +1,49 @@
+id: T1069.001
+name: Local Groups
+attack_version: '20.0'
+template: ad_discovery
+covers: Account, group or trust discovery
+max_mode: recommend
+assumed_alert_fields:
+- dest
+- user
+- process
+- process_name
+- process_path
+- process_hash
+- process_guid
+- parent_process_name
+- parent_process_path
+- parent_process_guid
+- _time
+fingerprint:
+- dest
+- user
+- process_hash
+- parent_process_name
+precedent_validity: 24h
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0026
+  on_yes: close:benign_true_positive:authorized_security_test
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0014
+  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
+license: MITRE ATT&CK Terms of Use
+status: draft
+version: 1

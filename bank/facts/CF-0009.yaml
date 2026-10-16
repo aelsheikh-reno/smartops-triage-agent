@@ -1,0 +1,11 @@
+id: CF-0009
+name: rdp_allowed_hosts
+description: Hosts whose role requires RDP to be enabled (terminal servers, jump hosts, admin servers).
+fields:
+- host
+- role
+collected_by: customer
+example:
+  host: jump01.corp.local
+  role: Admin jump host
+version: 1

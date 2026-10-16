@@ -1,0 +1,16 @@
+id: CF-0011
+name: sanctioned_backup_tools
+description: Backup and snapshot software the customer runs (Veeam, Commvault, Windows Server Backup, Datto).
+fields:
+- tool_name
+- process_path
+- signer
+- sha256
+match_rule: sha256, or signer plus process_path. Never name or path alone.
+collected_by: customer
+example:
+  tool_name: Veeam Agent
+  process_path: C:\Program Files\Veeam\Endpoint Backup\Veeam.EndPoint.Service.exe
+  signer: Veeam Software Group GmbH
+  sha256: null
+version: 1

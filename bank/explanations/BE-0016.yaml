@@ -1,0 +1,8 @@
+id: BE-0016
+name: Authorized security testing
+description: A penetration test, red team or AD audit with an approved scope and window.
+source:
+- splunk/security_content detections/endpoint/detect_sharphound_usage.yml (known_false_positives)
+license:
+- Apache-2.0
+version: 1

@@ -1,0 +1,57 @@
+id: escu:suspicious_regsvr32_register_suspicious_path
+escu_uuid: 62732736-6250-11eb-ae93-0242ac130002
+name: Suspicious Regsvr32 Register Suspicious Path
+techniques:
+- T1218.010
+data_source:
+- Sysmon EventID 1
+- Windows Event Log Security 4688
+- CrowdStrike ProcessRollup2
+required_alert_fields:
+- _time
+- dest
+- parent_process_guid
+- process
+- process_guid
+- user
+intent: Detects regsvr32.exe registering a non-DLL file from AppData, ProgramData or Windows\Temp from process creation logs.
+fp_quality: none
+notes: 'fp_quality none: ESCU gives no benign cause. The tested cause (signed per-user installers) comes from analyst practice and needs review.'
+enrichment:
+  note: The registered file's hash and signer come from regsvr32's image-load event (Sysmon EID 7), joined on process_guid. Without EID 7 the gate answers unknown and the alert is flagged.
+explanations:
+- BE-0018
+- BE-0008
+- BE-0003
+fingerprint:
+- dest
+- process
+precedent_validity: 72h
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0019
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+  bind:
+    subject_guid: process_guid
+    enrichment: image_load_by_guid
+- step: 3
+  question: Q-0015
+  on_yes: close:benign_true_positive:prevalent_in_org
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+source: splunk/security_content detections/endpoint/suspicious_regsvr32_register_suspicious_path.yml
+license: Apache-2.0
+status: draft
+version: 1

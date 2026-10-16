@@ -1,0 +1,18 @@
+id: Q-0023
+text: Is the host in a rebuilding or decommissioning state in the asset inventory at the alert time?
+tests: BE-0013
+answer_source: context
+needs:
+  context:
+  - CF-0015
+  alert_fields:
+  - dest
+  - _time
+source:
+- splunk/security_content detections/endpoint/windows_event_log_cleared.yml
+license:
+- Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 1

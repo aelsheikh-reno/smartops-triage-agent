@@ -1,0 +1,61 @@
+id: escu:process_execution_via_wmi
+escu_uuid: 24869767-8579-485d-9a4f-d9ddfd8f0cac
+name: Process Execution via WMI
+techniques:
+- T1047
+data_source:
+- Sysmon EventID 1
+- Windows Event Log Security 4688
+- CrowdStrike ProcessRollup2
+required_alert_fields:
+- _time
+- dest
+- parent_process_guid
+- process
+- process_guid
+- process_hash
+- user
+intent: Detects a process spawned by WmiPrvSE.exe (local or remote WMI execution) from process creation logs.
+fp_quality: vague
+explanations:
+- BE-0002
+- BE-0007
+- BE-0001
+- BE-0003
+fingerprint:
+- dest
+- process_hash
+- process
+precedent_validity: 72h
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0013
+  on_yes: close:benign_true_positive:sanctioned_management_tool
+  on_no: next
+  on_unknown: next
+  bind:
+    subject_guid: process_guid
+- step: 3
+  question: Q-0014
+  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0002
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 5
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+source: splunk/security_content detections/endpoint/process_execution_via_wmi.yml
+license: Apache-2.0
+status: draft
+version: 1

@@ -1,0 +1,43 @@
+id: escu:windows_event_log_cleared
+escu_uuid: ad517544-aff9-4c96-bd99-d6eb43bfbb6a
+name: Windows Event Log Cleared
+techniques:
+- T1685.005
+data_source:
+- Windows Event Log Security 1102
+- Windows Event Log System 104
+required_alert_fields:
+- EventCode
+- _time
+- dest
+- user
+intent: Detects the Security log (1102) or System log (104) being cleared on an endpoint from Windows event logs.
+fp_quality: vague
+explanations:
+- BE-0013
+- BE-0003
+fingerprint:
+- dest
+- user
+- EventCode
+precedent_validity: 24h
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0023
+  on_yes: close:benign_true_positive:host_rebuild
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+source: splunk/security_content detections/endpoint/windows_event_log_cleared.yml
+license: Apache-2.0
+status: draft
+version: 1

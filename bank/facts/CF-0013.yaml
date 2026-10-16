@@ -1,0 +1,11 @@
+id: CF-0013
+name: provisioning_service_accounts
+description: Service accounts that legitimately create local accounts or add local admins (LAPS, imaging, provisioning tools).
+fields:
+- account
+- purpose
+collected_by: customer
+example:
+  account: CORP\svc-imaging
+  purpose: OS imaging task sequence
+version: 1

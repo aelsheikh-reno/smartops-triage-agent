@@ -1,23 +1,43 @@
 id: CF-0008
 name: trusted_code_signers
-description: Code-signing publishers the customer trusts for baseline-based closure, with dump-capable binaries excluded even when trusted-signed.
-fields: [signer, excluded_binaries]
+description: Code-signing publishers the customer trusts for closure, plus binaries that never count as trusted even when Microsoft-signed (dump tools, LOLBins, script hosts).
+fields:
+- signer
+- excluded_binaries
 match_rule: valid signature AND signer on the list AND binary not in excluded_binaries. The exclusion list may match on name because it only blocks closure.
 collected_by: customer
 seed:
-  signers: [Microsoft Windows, Microsoft Corporation]
-  excluded_binaries:   # Microsoft-signed tools that can dump LSASS; from LOLBAS Category Dump plus Sysinternals ProcDump and rundll32 (comsvcs MiniDump host)
-    - procdump.exe
-    - procdump64.exe
-    - rundll32.exe
-    - createdump.exe
-    - dumpminitool.exe
-    - dump64.exe
-    - rdrleakdiag.exe
-    - sqldumper.exe
-    - tttracer.exe
-    - adplus.exe
+  signers:
+  - Microsoft Windows
+  - Microsoft Corporation
+  excluded_binaries:
+  - adplus.exe
+  - bitsadmin.exe
+  - certutil.exe
+  - cmd.exe
+  - createdump.exe
+  - cscript.exe
+  - dump64.exe
+  - dumpminitool.exe
+  - installutil.exe
+  - msbuild.exe
+  - mshta.exe
+  - msiexec.exe
+  - powershell.exe
+  - procdump.exe
+  - procdump64.exe
+  - pwsh.exe
+  - rdrleakdiag.exe
+  - reg.exe
+  - regasm.exe
+  - regsvcs.exe
+  - regsvr32.exe
+  - rundll32.exe
+  - sqldumper.exe
+  - tttracer.exe
+  - wmic.exe
+  - wscript.exe
 source:
-  - LOLBAS-Project/LOLBAS yml (Category Dump)
-license: GPL-3.0   # LOLBAS; binary names only (facts), confirm with legal
-version: 1
+- LOLBAS-Project/LOLBAS yml (Category Dump; commonly abused Execute/Download binaries)
+license: GPL-3.0
+version: 2

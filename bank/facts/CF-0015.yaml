@@ -1,0 +1,13 @@
+id: CF-0015
+name: asset_lifecycle_status
+description: Lifecycle state per host from the asset inventory or CMDB (in service, rebuilding, decommissioning).
+fields:
+- host
+- status
+- since
+collected_by: customer
+example:
+  host: wks-0412
+  status: rebuilding
+  since: 2026-10-16T08:00Z
+version: 1

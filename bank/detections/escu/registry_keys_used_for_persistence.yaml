@@ -1,0 +1,64 @@
+id: escu:registry_keys_used_for_persistence
+escu_uuid: f5f6af30-7aa7-4295-bfe9-07fe87c01a4b
+name: Registry Keys Used For Persistence
+techniques:
+- T1547.001
+data_source:
+- Sysmon EventID 13
+required_alert_fields:
+- _time
+- dest
+- process_guid
+- registry_path
+- registry_value_data
+- registry_value_name
+- user
+intent: Detects writes to Run/RunOnce and other autostart registry keys on an endpoint from Sysmon registry events.
+fp_quality: good
+enrichment:
+  note: Writer hash and signer come from the writing process's creation event, joined on process_guid (Sysmon EID 13 carries neither).
+explanations:
+- BE-0002
+- BE-0008
+- BE-0018
+- BE-0003
+fingerprint:
+- dest
+- registry_path
+- registry_value_name
+- registry_value_data
+precedent_validity: 7d
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0013
+  on_yes: close:benign_true_positive:sanctioned_management_tool
+  on_no: next
+  on_unknown: next
+  bind:
+    subject_guid: process_guid
+- step: 3
+  question: Q-0018
+  on_yes: close:benign_true_positive:prevalent_in_org
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0019
+  on_yes: close:benign_true_positive:trusted_signed_software
+  on_no: next
+  on_unknown: next
+  bind:
+    subject_guid: process_guid
+- step: 5
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+source: splunk/security_content detections/endpoint/registry_keys_used_for_persistence.yml
+license: Apache-2.0
+status: draft
+version: 1

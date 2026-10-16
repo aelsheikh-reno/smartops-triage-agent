@@ -17,6 +17,8 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 - Every question records `source` and `license`. Flag text copied from non-Apache sources for legal review.
 - New questions start as `status: draft`. Only a human marks them `approved`.
 - The Knowledge Steward agent proposes; a human approves anything that reduces scrutiny. The triage agent's own auto-closures are never evidence for a steward proposal.
+- No language model output decides a verdict.
+- Every language-model step that reads alert or customer content goes through the injection classifier first. A hit escalates.
 - Public source repos are cloned into `sources/`, which is git-ignored. Never commit them.
 - Work on a feature branch, push it, and open a draft PR. Never commit to `main` directly.
   Exception: docs-only changes (README, CLAUDE.md, docs/) may be committed directly to main. Anything under bank/ or tools/ goes through a branch and PR.

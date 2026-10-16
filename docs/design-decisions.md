@@ -106,5 +106,36 @@ Capabilities it needs (specification only; to be added to `bank/capabilities.yam
 - `closure.history`: analyst closures with reason and analyst id.
 - `rule.inventory`: enabled detections and their change dates.
 
-## 13. Later phases
+## 13. Model guardrails
+The structure is the primary defence. No language model decides a verdict: verdicts come from yes/no capability lookups rated for attacker influence (§4, §5). The controls below are defence in depth on top of that structure, not a replacement for it.
+
+### Prompt-injection classifier
+It runs on every input a language model reads that contains alert or customer-sourced content:
+- the explanation writer (the runtime model step that turns the answered checks into the analyst-facing explanation; it never changes the verdict)
+- the steward's closure mining (§12)
+- the rule intent service, on SPL and rule descriptions (§8)
+- investigation (later phase)
+
+On a hit:
+- The text is not passed to the model.
+- The alert escalates with reason code `injection_suspected`, in every mode.
+- The hit is logged with its score.
+- A hit is never benign evidence. Injection text inside an alert is itself evidence of an attacker.
+
+Model choice is open. Candidates:
+- Protect AI's DeBERTa-v3 prompt-injection classifier. Splunk's post on the OWASP Top 10 for LLM applications points to Protect AI's detection model.
+- A guard model from Cisco Foundation AI, if one exists. A quick search in October 2026 found none; Foundation-sec-8B is a security LLM, not a classifier.
+- Meta's Prompt Guard, a public prompt-attack classifier, under the Llama community license.
+
+Before choosing, check each license and evaluate the candidates on our own test set of benign and injected alert text: command lines, email bodies, URLs, rule descriptions. The threshold is set per deployment, and the false-positive rate is reported. The classifier runs in-region, on the same deployment as the agents.
+
+### Reranker
+Offline and supporting paths only, never the runtime triage path, which stays SQL-only:
+- the rule intent service, after the vector search for the closest known detections, so the analyst approving a mapping sees the best candidates first
+- the steward's closure mining, to group similar closure reasons
+- investigation (later phase)
+
+Model choice is open: an open-weight cross-encoder running in-region.
+
+## 14. Later phases
 Cross-customer analytics with anonymized counts only (question ID, outcome, sector). Investigation agent using an attack-path graph (e.g. MITRE Attack Flow) and a per-incident evidence graph.

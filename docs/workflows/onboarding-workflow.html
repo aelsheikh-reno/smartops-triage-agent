@@ -182,7 +182,7 @@ const GATES={
  A:{when:'End of week 0',pass:'Agent reads notables and writes a test comment; MCP server reaches the customer’s tools read-only; model runs on-prem; data stays in-region.',by:'Customer IT + Reno'},
  B:{when:'End of week 1',pass:'Every enabled rule is mapped (known, technique or none) and classified; capabilities discovered; vendor alerts confirmed normalized for each family; coverage report reviewed.',by:'SOC lead'},
  C:{when:'End of week 2',pass:'Top-ranked facts loaded with owners; custom-rule mappings approved; dry run checked by hand.',by:'SOC lead + Reno'},
- D:{when:'End of month 1',pass:'Shadow results reviewed; list of detections moving to Recommend agreed (e.g. ≥95% agreement over 50+ alerts).',by:'SOC lead'},
+ D:{when:'End of month 1',pass:'Shadow results reviewed; list of detections moving to Recommend agreed (e.g. ≥95% agreement over 50+ alerts); injection classifier enabled and tested on the customer’s alert text.',by:'SOC lead'},
  E:{when:'End of month 3, or when ready',pass:'Auto list approved detection by detection; crown jewels excluded; audit sampling switched on; steward proposals reviewed weekly; no unapproved reduce-scrutiny change.',by:'SOC lead (and CISO where required)'}
 };
 
@@ -210,15 +210,16 @@ const NODES=[
  [20,'bank',0,4,['Rank missing facts','→ onboarding form'],'Rank the missing context facts by how many detections each one unblocks. The top of the list becomes the customer’s form.'],
  [21,'it',0,4,['Fill the','onboarding form'],'Crown jewels, VPN and egress ranges, service accounts, sanctioned admin tools, and change windows with who implements each change (a change without implementers cannot close an alert). Partial answers are fine.'],
  [22,'stw',0,4,['Steward chases fact','owners for answers'],'For each missing answer on the form, the steward finds the right owner through the identity data and asks them directly, with reminders, until the fact is answered or marked not applicable.'],
- [23,'soc',0,4,['Approve custom-rule','mappings'],'A senior analyst confirms each custom rule’s mapping once. Unmapped rules get no verdict, only a context pack.'],
- [24,'ctx',0,5,['Load facts with','owner and expiry'],'Every fact gets an owner and a date to re-check it, because IP ranges and roles change.'],
- [25,'reno',0,5,['Tuning tickets for','noisy rules'],'Rules firing hundreds of times on one entity get throttling or risk-based alerting. That is a detection problem, not a triage problem.'],
- [26,'agent',0,5,['Dry run on','sample notables'],'Run the agent on recent notables and check its answers by hand before it sees live traffic.'],
- [27,'ctl',0,6,['All detections','start in Shadow'],'The agent triages every alert, but analysts don’t see its verdicts, so their decisions stay unbiased.'],
- [28,'reno',0,7,['Month-1 review','with customer'],'Review agreement per detection, the questions that came back unknown (and why: no capability, tool down, or no data), and the facts still missing.'],
- [29,'ctl',0,8,['Promote eligible','to Recommend'],'Detections that passed gate D now show their verdict to analysts.'],
- [30,'ctl',0,10,['Promote eligible','to Auto'],'Detections that kept their agreement rate in Recommend move to Auto, never on crown-jewel assets.'],
- [31,'es',0,10,['Allow agent to','close notables'],'The Splunk account gets permission to close notables, used only for detections in Auto.']
+ [23,'intent',0,4,['Reranker orders','mappings for review'],'After the vector search returns the closest known detections for each custom rule, an open-weight cross-encoder running in-region reorders them, so the analyst approving the mapping sees the best candidates first. Offline only; never used per alert.'],
+ [24,'soc',0,4,['Approve custom-rule','mappings'],'A senior analyst confirms each custom rule’s mapping once. Unmapped rules get no verdict, only a context pack.'],
+ [25,'ctx',0,5,['Load facts with','owner and expiry'],'Every fact gets an owner and a date to re-check it, because IP ranges and roles change.'],
+ [26,'reno',0,5,['Tuning tickets for','noisy rules'],'Rules firing hundreds of times on one entity get throttling or risk-based alerting. That is a detection problem, not a triage problem.'],
+ [27,'agent',0,5,['Dry run on','sample notables'],'Run the agent on recent notables and check its answers by hand before it sees live traffic.'],
+ [28,'ctl',0,6,['All detections','start in Shadow'],'The agent triages every alert, but analysts don’t see its verdicts, so their decisions stay unbiased.'],
+ [29,'reno',0,7,['Month-1 review','with customer'],'Review agreement per detection, the questions that came back unknown (and why: no capability, tool down, or no data), and the facts still missing.'],
+ [30,'ctl',0,8,['Promote eligible','to Recommend'],'Detections that passed gate D now show their verdict to analysts.'],
+ [31,'ctl',0,10,['Promote eligible','to Auto'],'Detections that kept their agreement rate in Recommend move to Auto, never on crown-jewel assets.'],
+ [32,'es',0,10,['Allow agent to','close notables'],'The Splunk account gets permission to close notables, used only for detections in Auto.']
 ].map(a=>({num:a[0],lane:a[1],row:a[2],col:a[3],lines:a[4],detail:a[5]}));
 
 /* ongoing processes: [id, lane, row, startCol, endCol, label, cadence, owner, why] */

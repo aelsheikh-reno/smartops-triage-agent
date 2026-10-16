@@ -1,5 +1,7 @@
 # SmartOps Triage Agent
 
+Two agents: the Triage agent decides; the Knowledge Steward keeps its knowledge current.
+
 Design, workflows and question bank for the SmartOps triage agent. The question bank is the core: for each detection, the few yes/no questions that rule out its common benign explanations, plus the customer context needed to answer them.
 
 | Path | What it is |

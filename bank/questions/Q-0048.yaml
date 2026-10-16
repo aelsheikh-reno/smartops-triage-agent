@@ -1,5 +1,5 @@
 id: Q-0048
-text: Is the detected file approved security tooling on this host (by hash, or signer plus path), or is the host an approved sandbox or analysis host?
+text: Is the detected file approved security tooling on this host (by hash, or signer plus path while the file is readable), or is the host an approved sandbox or analysis host?
 tests: BE-0031
 capability:
   name: list.lookup
@@ -7,7 +7,7 @@ capability:
     list: CF-0023
     entity:
     - value:file_hash
-    - value:file_path
+    - file:file_path
     host: value:dest_asset_id
 attacker_influence:
   rating: low
@@ -18,8 +18,10 @@ needs:
 source:
 - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
 - second review of batch 1 (fc5fc4f), review/changes/batch-1-vendor-alerts.md
+- round-2 review of batch 1 (review/changes/batch-1-vendor-alerts.md, Round 2 changes)
 license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3
+notes: The file entity lets the Tool Broker resolve the signer. A quarantined or unreadable file with no hash in the alert answers unknown, which flags.

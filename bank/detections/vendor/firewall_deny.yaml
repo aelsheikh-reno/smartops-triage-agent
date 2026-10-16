@@ -34,7 +34,8 @@ fingerprint:
 - rule
 precedent_validity: 24h
 notes: 'Internal sources never close on denied traffic; they flag. The denied check covers every connection from the source, to any destination. An approved scanner closes only while a scan job targeting
-  the destination was running. Allowed connections elsewhere from the source flag rather than escalate: they show the source is not only probing, not that the denied connection got through.'
+  the destination was running; an approved tester only under a covering change or engagement record. Allowed connections elsewhere from the source flag rather than escalate: they show the source is not
+  only probing, not that the denied connection got through.'
 precedent_entity: src
 fingerprint_influence:
   src:
@@ -80,6 +81,14 @@ flow:
     when:
     - 'no'
     then: flag
+    if_entry_type:
+    - scanner
+  - question: Q-0055
+    when:
+    - 'no'
+    then: flag
+    if_entry_type:
+    - tester
 - step: 3
   question: Q-0056
   on_yes: close:benign_true_positive:approved_infrastructure
@@ -106,4 +115,4 @@ source:
   title: Firewall deny or port-scan alert
 license: internal
 status: draft
-version: 2
+version: 3

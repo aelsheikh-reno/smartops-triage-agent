@@ -9,8 +9,8 @@ fields:
 - asset_ids
 - owner
 - expires
-match_rule: 'host scope matched on asset ID (the product''s device or agent ID), never hostname. tool entries: file sha256, or signer plus path, and the host''s asset ID in asset_ids; analysis_host entries:
-  the host''s asset ID in asset_ids (any detection on that host)'
+match_rule: 'host scope matched on asset ID (the product''s device or agent ID), never hostname. tool entries: the file''s sha256, or its signer plus path when the file is still readable, and the host''s
+  asset ID in asset_ids; analysis_host entries: the host''s asset ID in asset_ids. A quarantined or unreadable file with no hash in the alert cannot be matched: unknown.'
 collected_by: customer
 supply_effort: medium
 supply_effort_reason: Needs hashes or signer plus path, and asset IDs.
@@ -20,4 +20,7 @@ example:
   - 0f3c9a7e-5b21-4c1e-9d0a-7a1e2b3c4d5e
   owner: Threat research
   expires: '2027-06-30'
-version: 3
+version: 4
+entry_types:
+- tool
+- analysis_host

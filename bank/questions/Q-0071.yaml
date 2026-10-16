@@ -1,5 +1,5 @@
 id: Q-0071
-text: Is the From domain on the customer's approved-sender list?
+text: Is the From domain on the customer's approved-sender list (customer-controlled or transactional-notification domains only)?
 tests: BE-0035
 capability:
   name: list.lookup
@@ -18,4 +18,4 @@ license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

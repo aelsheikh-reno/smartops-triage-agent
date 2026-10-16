@@ -303,17 +303,24 @@ def run_flow(b, d, n, ctx):
     trail = []
     for st in d["flow"]:
         q = b["questions"][st["question"]]
-        a = answer(q["capability"]["name"], B.step_inputs(q, st), n, ctx)
+        if (q.get("needs") or {}).get("coverage"):
+            a = "unknown"   # clean room: no coverage report, so the question is no_capability
+        else:
+            a = answer(q["capability"]["name"], B.step_inputs(q, st), n, ctx)
         out = st["on_" + a]
         trail.append(f"{st['question']}={a}")
-        if out.startswith("close"):
+        if out != "next":
+            results = []
             for gd in st.get("guards") or []:
+                if not B.guard_applies(gd, out) or (gd.get("if_entry_type") and n.get("_matched_entry_type") not in gd["if_entry_type"]):
+                    continue
                 gq = b["questions"][gd["question"]]
                 ga = answer(gq["capability"]["name"], B.step_inputs(gq, gd), n, ctx)
-                if ga == "unknown" or ga in gd.get("when", ["yes"]):
-                    trail.append(f"guard {gd['question']}={ga}")
-                    out = "flag" if ga == "unknown" else gd["then"]
-                    break
+                results.append((gd, ga))
+            raised = B.raise_outcome(out, results)
+            if raised != out:
+                trail.append("guards " + ",".join(f"{g['question']}={a}" for g, a in results) + f" -> {raised}")
+                out = raised
         if out != "next":
             return out, trail
     return "flag", trail

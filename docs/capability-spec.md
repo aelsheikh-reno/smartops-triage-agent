@@ -29,7 +29,7 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Splunk:** none.
 - **Known-answer tests:** a seeded test case with a known fingerprint returns one match. A closure made by a precedent is not returned. A crown-jewel test entity returns no match.
 - **Unknown when:** case memory is unreachable (unavailable).
-- **Attacker influence:** set per detection from the fingerprint fields (Q0 rating, §9). If every field is attacker-chosen, the precedent only flags.
+- **Attacker influence:** set per detection from the fingerprint fields (Q0 rating, §9). If every field is attacker-chosen, the precedent never closes or flags by itself (the flow proceeds). Where a fingerprint field can fall back (asset ID to hostname), Q0 takes its fallback rating.
 - **Owner:** Tool Broker core (no specialist).
 
 ## list.lookup
@@ -143,7 +143,7 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Template kind:** Sigma, with an aggregation (distinct hosts, distinct weeks).
 - **Splunk (CIM):** Endpoint.Processes (`process`, `process_hash`, `dest`), accelerated.
 - **Known-answer tests:** a common OS process returns roughly the fleet's host count. A unique test command run on one reference host returns 1.
-- **Unknown when:** the data model is not accelerated, the pattern cannot be normalized, or the exclude list is not provided.
+- **Unknown when:** the data model is not accelerated, the pattern cannot be normalized, or the exclude list is not provided. Setting `window` together with `min_weeks`/`of_weeks` is rejected by validate.
 - **Attacker influence:** rated per question. It is high for command lines; as a guard that escalates, low.
 - **Owner:** endpoint specialist.
 
@@ -214,10 +214,11 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 
 ## alert.history
 - **Measures:** the number of earlier alerts that already fired inside the triage window and share the key. The key is the fingerprint, or a source, destination, user or campaign key. With `distinct`, it counts the distinct values of that field among those alerts instead.
-- **Triage rule:** yes if the count is at least the threshold. A yes is used as a guard: it turns a close into a flag, or for DLP user history, an escalation.
+- **Triage rule:** yes if the count is at least the threshold. A yes is used as a guard, which only raises the outcome. Usually it turns a close into a flag. For DLP user history, a block close becomes an escalation, and the unblocked-to-unapproved flag becomes an escalation.
   - `alert_history_min_count`: default 3, min 2, max 20.
   - `ids_history_min_count`: default 5, min 2, max 50.
   - `waf_distinct_signatures_min`: default 5, min 2, max 50.
+  - `proxy_history_min_count`: default 10, min 3, max 50 (proxy alerts repeat more than other families).
   - A lower bound below 2 is rejected, because one earlier alert is not a burst.
 - **Template kind:** lookup (alerts already raised). It reads existing alerts only, never raw logs.
 - **Splunk:** Enterprise Security notables (the notable index or Incident Review), filtered on the key fields and the triage window. This is not a CIM data model.

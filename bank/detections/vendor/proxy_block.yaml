@@ -28,8 +28,8 @@ derived_fields:
     note: source host plus domain, for alert.history
 intent: 'Generic: a web proxy or URL filter blocks a request from a user or host (normalized web alert, any product).'
 fp_quality: generic
-notes: High-risk categories escalate even when blocked. A non-browser or empty user agent flags, and so do three or more blocks from one host to one domain in the window (repeat requests suggest a beacon).
-  Uncategorised sites close only when the host visited them on at least 3 earlier days with a browser.
+notes: High-risk categories escalate even when blocked. A non-browser or empty user agent flags, and so do ten or more blocks from one host to one domain in the window (proxy_history_min_count) (repeat
+  requests suggest a beacon). Uncategorised sites close only when the host visited them on at least 3 earlier days with a browser.
 explanations:
 - BE-0019
 - BE-0027
@@ -67,6 +67,9 @@ flow:
   guards:
   - question: Q-0045
     then: flag
+    bind:
+      min_count:
+        param: proxy_history_min_count
   - question: Q-0057
     then: escalate
   - question: Q-0058
@@ -97,6 +100,8 @@ flow:
     then: flag
     bind:
       key: value:src_dest
+      min_count:
+        param: proxy_history_min_count
   - question: Q-0034
     then: escalate
 - step: 5
@@ -115,6 +120,8 @@ flow:
     then: flag
     bind:
       key: value:src_dest
+      min_count:
+        param: proxy_history_min_count
   - question: Q-0034
     then: escalate
 source:
@@ -123,4 +130,4 @@ source:
   title: Web proxy or URL-filter block
 license: internal
 status: draft
-version: 2
+version: 3

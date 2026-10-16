@@ -32,7 +32,12 @@ def influence(b, item):
 def guard_text(b, st):
     out = []
     for g in st.get("guards") or []:
-        out.append(f"{g['question']} {'/'.join(g.get('when', ['yes']))} → {g['then']}")
+        extra = []
+        if g.get("applies_to", ["close"]) != ["close"]:
+            extra.append("on " + "/".join(g["applies_to"]))
+        if g.get("if_entry_type"):
+            extra.append("if " + "/".join(g["if_entry_type"]))
+        out.append(f"{g['question']} {'/'.join(g.get('when', ['yes']))} → {g['then']}" + (f" ({', '.join(extra)})" if extra else ""))
     return "; ".join(out) or "–"
 
 
@@ -57,7 +62,7 @@ def main():
          f"{len(dets)} detections, {len(used)} distinct questions, {len(caps_used)} capabilities. Everything is `status: draft`.", "",
          "How to read a flow: steps run top to bottom; each answer leads to the next step, a close (with disposition and reason code), "
          "an escalation, or a flag to an analyst with no verdict. An unknown answer never closes. Q-0000 (precedent) runs first everywhere.", "",
-         "Guards run only when a step would close: each names a question and the answers that turn the close into a flag or an escalation "
+         "Guards run when a step reaches a close (or, where marked, a flag): each names a question and the answers that raise the outcome; guards only raise, and the strongest result wins "
          "(an unknown guard answer always flags, so the table lists only the triggering answers). A guard that fires on no means the close needs a yes from it.", "",
          "Attacker influence rates how easily the activity under triage could produce a yes: **none** (records the attacker cannot touch, such as change tickets), "
          "**low** (OS-verified or control-recorded facts), **medium** (control-recorded facts that can be forged in transit, such as alerts forwarded over syslog), "

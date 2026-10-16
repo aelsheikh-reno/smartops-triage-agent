@@ -18,13 +18,15 @@ answer_contract:
 unknown_semantics:
   no_data: follow the step's on_unknown.
   unavailable: never closes. Stop and flag; the detection runs in Recommend until the capability is healthy.
-  no_capability: resolved per customer at onboarding. The question is disabled for that customer, its step follows on_unknown without a call, and it appears in the coverage report.
+  no_capability: resolved per customer at onboarding. The question is disabled for that customer, its step follows on_unknown without a call, and it appears in the coverage report. A question whose needs.coverage item is missing from the customer's coverage report is no_capability too.
 guard_semantics: >
-  A step may carry guards: extra checks that run only when the step's answer would close the alert.
-  Each guard names a question, the answers that trigger it (when, default [yes]) and the result (then: flag or escalate).
-  Guards run in order; the first triggered guard replaces the close. An unknown guard answer always flags.
-  A guard that triggers on no means the close needs a yes from it, so that yes counts as evidence the close rests on.
-  Guards never create a close; they only turn one into a flag or an escalation.
+  A step may carry guards: extra checks that run only when the step reaches a close or flag outcome.
+  Each guard names a question, the answers that trigger it (when, default [yes]), the result (then: flag or escalate),
+  the outcomes it attaches to (applies_to: close and/or flag, default [close]; never escalate) and, for list.lookup steps,
+  optionally the matched entry types it applies to (if_entry_type). Guards only raise: close becomes flag or escalate,
+  flag becomes escalate, never the reverse. All applicable guards run and the strongest result wins (escalate > flag),
+  whatever their order. An unknown guard answer raises to at least flag. A guard that triggers on no means a close needs
+  a yes from it. Guard calls count against the call budget on the path they belong to.
 attacker_influence_scale: >
   none: records the attacker cannot touch (approved change tickets, exception records).
   low: OS-verified or control-recorded facts.
@@ -36,6 +38,11 @@ source_profiles:
   forwarded: alert forwarded over syslog or a relay; fields can be forged in transit
   note: Each vendor family's profile is recorded at onboarding. A question may rate its influence per profile (by_source); a close that lacks a none/low yes under the customer's profile becomes a flag at runtime.
 unverified_seed: A yes whose evidence rests on a seed entry with verified false taints the flow. That step, and any later close reached through it, becomes flag until onboarding verifies the entry.
+
+coverage_items:   # what a customer's coverage report must show before a question may answer (otherwise no_capability)
+  device_control_write_events: The customer's device-control product also reports file-write events. Without them a connect event that records zero files written proves nothing.
+auto_requirements:   # per-customer conditions a detection needs before it may reach Auto; until met it is capped at Recommend for that customer
+  vendor_mapping_verified: Every row of docs/normalization.md for the products this customer runs in the detection's family is verified, as recorded by the onboarding check "Check vendor alerts are normalized".
 
 scope:   # enforced by the MCP server, not by the agent
   entities: only entities named in the alert (and derived fields parsed from it)

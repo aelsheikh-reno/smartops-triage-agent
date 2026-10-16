@@ -1,5 +1,5 @@
 id: Q-0055
-text: Does an approved change name this source address and cover the alert time?
+text: Does an approved change or test-engagement record name this source address and cover the alert time?
 tests: BE-0003
 capability:
   name: change.window
@@ -19,4 +19,5 @@ license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2
+notes: Penetration-test and QA engagements are recorded as approved changes naming the tester's source address.

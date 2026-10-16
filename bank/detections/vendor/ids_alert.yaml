@@ -34,9 +34,9 @@ fingerprint:
 - dest
 - signature_id
 precedent_validity: 24h
-notes: Internal sources never close on blocked or patched (not applicable); tuned-signature and approved-scanner closes still apply to them. The approved scanner closes only while its scan job targets this
-  destination (unknown flags). Exploit, intrusion and malware classes flag when blocked; only reconnaissance and policy classes close on a block. Signatures with no vulnerability mapping answer unknown
-  at the vulnerability step and flag.
+notes: Internal sources never close on blocked or patched (not applicable); tuned-signature and approved-scanner closes still apply to them. An approved scanner closes only while its scan job targets this
+  destination; an approved tester only under a covering change or engagement record (unknown flags). Alert history applies to the blocked and not-applicable closes only. Exploit, intrusion and malware classes
+  flag when blocked; only reconnaissance and policy classes close on a block. Signatures with no vulnerability mapping answer unknown at the vulnerability step and flag.
 precedent_entity: src
 fingerprint_influence:
   src:
@@ -82,13 +82,7 @@ flow:
   on_yes: close:false_positive:tuned_signature
   on_no: next
   on_unknown: next
-  guards:
-  - question: Q-0046
-    then: flag
-    bind:
-      key: value:src
-      min_count:
-        param: ids_history_min_count
+  guards: []
 - step: 3
   question: Q-0031
   on_yes: close:benign_true_positive:approved_scanner_activity
@@ -99,12 +93,14 @@ flow:
     when:
     - 'no'
     then: flag
-  - question: Q-0046
+    if_entry_type:
+    - scanner
+  - question: Q-0055
+    when:
+    - 'no'
     then: flag
-    bind:
-      key: value:src
-      min_count:
-        param: ids_history_min_count
+    if_entry_type:
+    - tester
 - step: 4
   question: Q-0027
   on_yes: close:mitigated_true_positive:blocked_by_control
@@ -145,4 +141,4 @@ source:
   title: IDS or IPS signature alert
 license: internal
 status: draft
-version: 3
+version: 4

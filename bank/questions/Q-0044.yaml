@@ -18,4 +18,8 @@ license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3
+needs:
+  coverage:
+  - device_control_write_events
+notes: Only answers when the customer's coverage report shows write events from the same device-control product; otherwise no_capability, which flags.

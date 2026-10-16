@@ -12,6 +12,10 @@ failure fails the gate. It is checked again under the forwarded profile (alert r
 where questions with by_source ratings may drop to medium: closes that fail there are reported as
 closes that become flags for customers whose alerts arrive forwarded.
 
+It is also checked under the fingerprint_fallback profile: a detection whose fingerprint field can
+fall back (for example asset ID to hostname) rates Q0 at its fallback rating; precedent closes that
+lose their none/low yes are reported as closes that flag when the fallback is used.
+
 Usage: tools/redteam_paths.py [--quiet] [ids...]   exit 1 on any failing path
 """
 import os
@@ -38,7 +42,7 @@ def main():
     only = [a for a in sys.argv[1:] if not a.startswith("--")]
     b = B.load()
     n_paths = n_fail = 0
-    failing, forwarded = {}, {}
+    failing, forwarded, fallback = {}, {}, {}
     for level, d in B.flows(b):
         if only and not any(d["id"].startswith(o) for o in only):
             continue
@@ -50,6 +54,9 @@ def main():
         n_fwd = sum(1 for ok, *_ in check(b, d, "forwarded") if not ok)
         if n_fwd:
             forwarded[d["id"]] = n_fwd
+        n_fb = sum(1 for ok, *_ in check(b, d, "fingerprint_fallback") if not ok)
+        if n_fb:
+            fallback[d["id"]] = n_fb
     for did, items in failing.items():
         print(f"FAIL {did}")
         for path, outcome, yes in items:
@@ -60,9 +67,13 @@ def main():
         print("Closes that become flags when the family's alerts arrive forwarded (no none/low yes left):")
         for did, n in sorted(forwarded.items()):
             print(f"  {did}: {n}")
+    if fallback and not quiet:
+        print("Closes that become flags when the fingerprint falls back (Q0 at its fallback rating):")
+        for did, n in sorted(fallback.items()):
+            print(f"  {did}: {n}")
     if not quiet or failing:
         print(f"\n{n_paths} close paths checked, {n_fail} failing, in {len(failing)} flows; "
-              f"{sum(forwarded.values())} closes flag under the forwarded profile")
+              f"{sum(forwarded.values())} closes flag under the forwarded profile, {sum(fallback.values())} under fingerprint fallback")
     return 1 if n_fail else 0
 
 

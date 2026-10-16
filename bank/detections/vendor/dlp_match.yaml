@@ -23,7 +23,7 @@ required_alert_fields:
 intent: 'Generic: a DLP control reports regulated data leaving through email, web, cloud storage or print (normalized DLP alert, any product).'
 fp_quality: generic
 notes: 'Held, quarantined and pending-release actions answer unknown and flag: a later release would undo them. High severity or a large record count flags even to approved destinations. Three or more DLP
-  alerts for the same user in the window escalate. An unblocked match to an unapproved destination flags for an analyst.'
+  alerts for the same user in the window turn a benign close into a flag and a block into an escalation, and escalate an unblocked match to an unapproved destination (which otherwise flags).'
 explanations:
 - BE-0007
 - BE-0019
@@ -72,7 +72,7 @@ flow:
   - question: Q-0064
     then: flag
   - question: Q-0046
-    then: escalate
+    then: flag
     bind:
       key: value:src_user
 - step: 2
@@ -82,7 +82,7 @@ flow:
   on_unknown: next
   guards:
   - question: Q-0046
-    then: escalate
+    then: flag
     bind:
       key: value:src_user
 - step: 3
@@ -106,7 +106,7 @@ flow:
   - question: Q-0064
     then: flag
   - question: Q-0046
-    then: escalate
+    then: flag
     bind:
       key: value:src_user
 - step: 5
@@ -120,13 +120,19 @@ flow:
   - question: Q-0064
     then: flag
   - question: Q-0046
+    then: flag
+    bind:
+      key: value:src_user
+  - question: Q-0046
     then: escalate
     bind:
       key: value:src_user
+    applies_to:
+    - flag
 source:
   repo: internal
   path: bank/use_cases.yaml#UC-010
   title: DLP policy match
 license: internal
 status: draft
-version: 3
+version: 4

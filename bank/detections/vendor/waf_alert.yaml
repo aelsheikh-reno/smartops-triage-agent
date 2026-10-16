@@ -42,8 +42,8 @@ fingerprint:
 - app
 - signature
 precedent_validity: 24h
-notes: Uses the client address, not the edge address. A block with a success status flags. Internal clients never close on blocked or patched. Generic rules have no vulnerability mapping, so the vulnerability
-  step answers unknown for them and flags. Five or more distinct rules from one client flag.
+notes: 'Uses the client address, not the edge address. A block with a success status flags. Internal clients never close on a block. Five or more distinct rules from one client flag the blocked close. QA
+  and penetration-test sources close under a covering change or engagement record. The vulnerability step was dropped: generic rules have no CVE mapping, so it never closed them; an unblocked request flags.'
 precedent_entity: client_ip
 fingerprint_influence:
   client_ip:
@@ -92,9 +92,7 @@ flow:
   on_yes: close:false_positive:tuned_signature
   on_no: next
   on_unknown: next
-  guards:
-  - question: Q-0047
-    then: flag
+  guards: []
 - step: 3
   question: Q-0031
   bind:
@@ -103,35 +101,39 @@ flow:
   on_no: next
   on_unknown: next
   guards:
+  - question: Q-0052
+    when:
+    - 'no'
+    then: flag
+    if_entry_type:
+    - scanner
+    bind:
+      scanner: value:client_ip
   - question: Q-0055
     when:
     - 'no'
     then: flag
+    if_entry_type:
+    - tester
     bind:
       entities:
       - value:client_ip
-  - question: Q-0047
-    then: flag
 - step: 4
-  question: Q-0027
-  on_yes: close:mitigated_true_positive:blocked_by_control
+  question: Q-0055
+  bind:
+    entities:
+    - value:client_ip
+  on_yes: close:benign_true_positive:authorized_security_test
   on_no: next
   on_unknown: next
+- step: 5
+  question: Q-0027
+  on_yes: close:mitigated_true_positive:blocked_by_control
+  on_no: flag
+  on_unknown: flag
   guards:
   - question: Q-0054
     then: flag
-  - question: Q-0050
-    then: flag
-    bind:
-      field: value:client_ip
-  - question: Q-0047
-    then: flag
-- step: 5
-  question: Q-0033
-  on_yes: close:mitigated_true_positive:signature_not_applicable
-  on_no: escalate
-  on_unknown: flag
-  guards:
   - question: Q-0050
     then: flag
     bind:
@@ -144,4 +146,4 @@ source:
   title: Web application firewall alert
 license: internal
 status: draft
-version: 2
+version: 3

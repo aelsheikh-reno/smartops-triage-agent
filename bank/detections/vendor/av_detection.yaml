@@ -23,7 +23,6 @@ sigma_refs:
   relation: closest
 required_alert_fields:
 - dest
-- dest_asset_id
 - user
 - signature
 - category
@@ -42,8 +41,9 @@ derived_fields:
 intent: 'Generic: an antivirus or EDR product reports a malware detection on a host (normalized malware alert, any product).'
 fp_quality: generic
 notes: High-risk families escalate even when blocked. Only a block before execution can close, and only for low-risk classes; post-execution remediation, pending reboot and partial remediation flag. Test
-  files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail. Approved tooling and analysis hosts match on asset ID, never hostname; the
-  file's hash seen on any other host in the window escalates.
+  files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail. Approved tooling and analysis hosts match on asset ID, never hostname. A
+  sample from an analysis host seen on any other host in the window escalates; an approved tool's hash seen outside its approved hosts flags. A quarantined or unreadable file with no hash flags. The fingerprint
+  uses the asset ID; without one it falls back to the hostname and the precedent is rated medium. Capped at Recommend for each customer whose product rows in the value mapping are unverified.
 explanations:
 - BE-0019
 - BE-0020
@@ -51,32 +51,40 @@ explanations:
 - BE-0031
 - BE-0037
 fingerprint:
-- dest
+- dest_asset_id
 - signature
 - file_hash
 precedent_validity: 24h
-precedent_entity: dest
+precedent_entity: dest_asset_id
 fingerprint_influence:
-  dest:
+  dest_asset_id:
     rating: low
-    reason: Host that reported the event.
+    reason: Device or agent ID assigned by the product; a host rename cannot change it.
+    fallback:
+      field: dest
+      rating: medium
+      reason: Without an asset ID the hostname stands in, and a local administrator can rename a host.
   signature:
     rating: low
     reason: Detection name assigned by the product.
   file_hash:
     rating: low
     reason: Hash of the file already judged; reproducing it reproduces that file.
-max_mode: recommend
-max_mode_reason: The vendor value mapping for this family has unverified rows (docs/normalization.md); it cannot leave Recommend until every row is verified.
+optional_alert_fields:
+- dest_asset_id
+precedent_entity_fallback: dest
+auto_requires:
+- vendor_mapping_verified
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:dest
+    entity: value:dest_asset_id
     current_action: value:action
   attacker_influence:
     rating: low
-    reason: An attacker cannot freely reproduce dest, signature, file_hash in the fingerprint.
+    reason: An attacker cannot freely reproduce the asset ID in the fingerprint.
+    fallback_rating: medium
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
@@ -89,10 +97,16 @@ flow:
   question: Q-0048
   on_yes: close:benign_true_positive:approved_security_tooling
   on_no: next
-  on_unknown: next
+  on_unknown: flag
   guards:
   - question: Q-0073
     then: escalate
+    if_entry_type:
+    - analysis_host
+  - question: Q-0073
+    then: flag
+    if_entry_type:
+    - tool
 - step: 3
   question: Q-0029
   on_yes: escalate
@@ -121,4 +135,4 @@ source:
   title: Antivirus or EDR malware detection
 license: internal
 status: draft
-version: 3
+version: 4

@@ -197,3 +197,6 @@ parameters:
     - deleted
     - dropped
     description: Email gateway actions meaning the message was stopped before delivery (quarantine at the gateway counts; every-mailbox status is checked separately)
+  proxy_history_min_count:
+    default: 10
+    description: Earlier proxy blocks with the same fingerprint, or from one host to one domain, in the triage window that turn a close into a flag (proxy alerts repeat more than other families)

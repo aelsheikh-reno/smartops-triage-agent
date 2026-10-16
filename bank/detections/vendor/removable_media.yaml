@@ -22,7 +22,8 @@ required_alert_fields:
 intent: 'Generic: an endpoint device-control or DLP product reports removable storage connected (any product). File writes have their own detection.'
 fp_quality: generic
 notes: Connection events only; a write event flags here and belongs to vendor:removable_media_write. A non-storage device class flags first (possible keystroke injector). Servers and crown jewels escalate.
-  A missing file count answers unknown and flags. Device serial numbers can be spoofed, so no approved-device list closes.
+  A missing file count answers unknown and flags. Device serial numbers can be spoofed, so no approved-device list closes. The zero-files-written close needs the customer's coverage report to show write
+  events from the same product; otherwise it flags.
 explanations:
 - BE-0019
 - BE-0025
@@ -124,4 +125,4 @@ source:
   title: Removable media (device control) alert
 license: internal
 status: draft
-version: 2
+version: 3

@@ -77,6 +77,13 @@ def main():
         for prof, r in (ai.get("by_source") or {}).items():
             if prof not in profiles or r not in B.RATING_ORDER:
                 err(w, f"attacker_influence.by_source {prof}: {r} needs a known source profile and rating")
+        if cap["name"] == "org.prevalence":
+            allp = dict(cap.get("inputs") or {}); allp.update(cap.get("params") or {})
+            if "window" in allp and ({"min_weeks", "of_weeks"} & set(allp)):
+                err(w, "org.prevalence: window cannot be combined with min_weeks/of_weeks")
+        for item in (q.get("needs") or {}).get("coverage") or []:
+            if item not in (b["capabilities"].get("coverage_items") or {}):
+                err(w, f"needs.coverage {item} is not declared in capabilities.yaml coverage_items")
         if cap["name"] == "alert.field":
             inp, ops = cap.get("inputs") or {}, caps["alert.field"]["ops"]
             if "in" in inp or inp.get("op") not in ops or "values" not in inp or "field" not in inp:
@@ -227,7 +234,7 @@ def main():
         for e in d.get("explanations", []):
             if e not in b["explanations"]:
                 err(w, f"unknown explanation {e}")
-        fields = set(d.get("required_alert_fields") or d.get("assumed_alert_fields") or [])
+        fields = set(d.get("required_alert_fields") or d.get("assumed_alert_fields") or []) | set(d.get("optional_alert_fields") or [])
         avail = fields | set(d.get("derived_fields") or {}) | {"fingerprint"}
         for fp in d.get("fingerprint", []):
             if fp not in avail and fp not in ("writer_hash", "driver_hash", "source_image_hash"):
@@ -241,6 +248,15 @@ def main():
                 err(w, f"fingerprint_influence must rate {fp} (none|low|medium|high, with a reason)")
         if d.get("precedent_entity") not in avail:
             err(w, f"precedent_entity {d.get('precedent_entity')} must be an alert or derived field")
+        for fp, e in fi.items():
+            fb = (e or {}).get("fallback")
+            if fb and (fb.get("field") not in avail or fb.get("rating") not in B.RATING_ORDER):
+                err(w, f"fingerprint_influence {fp}: fallback needs an available field and a rating")
+        if d.get("precedent_entity_fallback") and d["precedent_entity_fallback"] not in avail:
+            err(w, f"precedent_entity_fallback {d['precedent_entity_fallback']} must be an alert or derived field")
+        for req in d.get("auto_requires") or []:
+            if req not in (b["capabilities"].get("auto_requirements") or {}):
+                err(w, f"auto_requires {req} is not declared in capabilities.yaml auto_requirements")
         refs_ok = all(st.get("question") in b["questions"] for st in flow) and all(
             gd.get("question") in b["questions"] for st in flow for gd in st.get("guards") or [])
         if refs_ok:
@@ -261,23 +277,37 @@ def main():
                     err(where, "flow must start with Q-0000")
                 elif got != want or not str((st.get("attacker_influence") or {}).get("reason", "")).strip():
                     err(where, f"Q0 attacker_influence is {got}; the fingerprint fields give {want} (with a reason)")
-                elif st["on_yes"] != ("flag" if want == "high" else "close:inherit:precedent_match"):
-                    err(where, f"Q0 rated {want}: on_yes must be {'flag' if want == 'high' else 'close:inherit:precedent_match'}")
+                elif st["on_yes"] != ("next" if want == "high" else "close:inherit:precedent_match"):
+                    err(where, f"Q0 rated {want}: on_yes must be {'next' if want == 'high' else 'close:inherit:precedent_match'}")
+                fb = B.q0_fallback_rating(d)
+                if fb and fb != want and (st.get("attacker_influence") or {}).get("fallback_rating") != fb:
+                    err(where, f"Q0 needs attacker_influence.fallback_rating {fb} (fingerprint fallback)")
                 if (st.get("bind") or {}).get("entity") != f"value:{d.get('precedent_entity')}":
                     err(where, "Q0 must bind entity to value:<precedent_entity>")
             elif st.get("attacker_influence"):
                 err(where, "step-level attacker_influence is only for Q0")
-            can_close = any(str(st.get(e, "")).startswith("close") for e in ("on_yes", "on_no"))
+            kinds = {B.outcome_kind(st.get(e, "")) for e in ("on_yes", "on_no", "on_unknown")} - {"next"}
             for gd in st.get("guards") or []:
                 gw = f"{where} guard {gd.get('question')}"
                 gq = b["questions"].get(gd.get("question"))
                 if not gq:
                     err(gw, "unknown question")
                     continue
-                if not can_close:
-                    err(gw, "guards belong only on steps that can close")
                 if gd.get("then") not in ("flag", "escalate"):
                     err(gw, "then must be flag or escalate")
+                applies = gd.get("applies_to", ["close"])
+                if not applies or set(applies) - {"close", "flag"}:
+                    err(gw, "applies_to lists close and/or flag; a guard never attaches to an escalate outcome")
+                for k in applies:
+                    if k not in kinds:
+                        err(gw, f"applies to {k}, but the step has no {k} outcome")
+                    elif B.SEVERITY.get(gd.get("then"), -1) <= B.SEVERITY[k]:
+                        err(gw, f"then {gd.get('then')} is not stronger than the {k} outcome it guards (guards only raise)")
+                if gd.get("if_entry_type"):
+                    lf = (q["capability"].get("inputs") or {}).get("list")
+                    types = set((b["facts"].get(lf) or {}).get("entry_types") or []) if isinstance(lf, str) else set()
+                    if q["capability"]["name"] != "list.lookup" or not set(gd["if_entry_type"]) <= types:
+                        err(gw, f"if_entry_type {gd['if_entry_type']} must name entry_types of the step's list ({sorted(types) or 'none'})")
                 when = gd.get("when", ["yes"])
                 if not when or set(when) - {"yes", "no"}:
                     err(gw, "when lists yes and/or no (unknown always flags)")
@@ -409,10 +439,11 @@ def main():
                                 unverified_families.setdefault(fam, []).append(f"{cells[0]}: {cells[1]}")
     for fam, rows in sorted(unverified_families.items()):
         d = b["detections"].get(fam)
-        if d and d.get("max_mode") != "recommend":
-            err(d["_file"], f"family mapping has {len(rows)} unverified rows in docs/normalization.md: set max_mode: recommend until they are verified")
+        if d and "vendor_mapping_verified" not in (d.get("auto_requires") or []):
+            err(d["_file"], f"family mapping has {len(rows)} unverified rows in docs/normalization.md: declare auto_requires: [vendor_mapping_verified] "
+                            "(capped at Recommend for each customer whose product rows are unverified)")
         elif d:
-            info.append(f"{fam}: capped at Recommend until {len(rows)} mapping rows are verified")
+            info.append(f"{fam}: capped at Recommend per customer until that customer's product rows ({len(rows)} unverified overall) are verified")
     for did, d in b["detections"].items():
         if d.get("family") == "vendor" and d.get("max_mode") == "recommend" and did not in unverified_families and not d.get("max_mode_reason"):
             err(d["_file"], "max_mode recommend needs a max_mode_reason")

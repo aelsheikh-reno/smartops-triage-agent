@@ -30,8 +30,8 @@ fingerprint:
 - subject
 - file_hash
 precedent_validity: 24h
-notes: Every fingerprint field is sender-chosen, so a precedent only flags. A block closes only when the message is out of every mailbox and no reputation source marks its URL or attachment. Delivered-then-removed
-  closes only with no recorded click or open.
+notes: Every fingerprint field is sender-chosen, so a precedent never closes or flags by itself; the flow proceeds and the precedent is shown as context. A block closes only when the message is out of every
+  mailbox and no reputation source marks its URL or attachment. Delivered-then-removed closes only with no recorded click or open.
 precedent_entity: recipient
 fingerprint_influence:
   src_user:
@@ -52,7 +52,7 @@ flow:
   attacker_influence:
     rating: high
     reason: Every fingerprint field is attacker-chosen, so a precedent only flags.
-  on_yes: flag
+  on_yes: next
   on_no: next
   on_unknown: next
 - step: 2
@@ -94,4 +94,4 @@ source:
   title: Email gateway threat alert
 license: internal
 status: draft
-version: 2
+version: 3

@@ -5,6 +5,7 @@ answer_source: baseline
 needs:
   baseline: [lsass_access_by_image_on_host_30d]
   alert_fields: [dest, SourceImage, SourceProcessGUID]
+  enrichment: [process_creation_by_guid]
 notes: The ±24h alert window is excluded so an intruder's repeated access during the incident cannot baseline itself.
 source:
   - elastic/detection-rules rules/windows/credential_access_lsass_openprocess_api.toml (first time seen, prior behavior)
@@ -12,4 +13,4 @@ license: [Elastic-2.0]
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

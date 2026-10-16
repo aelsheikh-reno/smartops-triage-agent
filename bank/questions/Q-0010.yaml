@@ -1,14 +1,14 @@
 id: Q-0010
-text: Has this process run on this host on at least 3 distinct days in the 30 days before the alert window?
+text: Has this same binary (same hash, or same signer and path) run on this host on at least 3 distinct days in the 30 days before the alert window?
 tests: BE-0007
 answer_source: baseline
 needs:
-  baseline: [process_on_host_30d]
-  alert_fields: [dest, process_name]
+  baseline: [binary_on_host_30d]
+  alert_fields: [dest, process_hash, process_path]
 source:
   - elastic/detection-rules rules/windows/command_and_control_new_terms_rmm_signer.toml (first appearance vs established)
 license: [Elastic-2.0]
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

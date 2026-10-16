@@ -1,14 +1,15 @@
 id: Q-0005
-text: Is the process that opened LSASS on the customer's sanctioned LSASS accessor list, matched on full path?
+text: Is the process that opened LSASS on the customer's sanctioned LSASS accessor list, matched on hash or on signer plus path?
 tests: BE-0004
 answer_source: context
 needs:
   context: [CF-0004]
-  alert_fields: [SourceImage]
+  alert_fields: [SourceImage, SourceProcessGUID]
+  enrichment: [process_creation_by_guid]
 source:
   - splunk/security_content detections/endpoint/windows_possible_credential_dumping.yml
 license: [Apache-2.0]
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

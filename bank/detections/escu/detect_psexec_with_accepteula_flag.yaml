@@ -3,11 +3,13 @@ escu_uuid: 27c3a83d-cada-47c6-9042-67baf19d2574
 name: Detect PsExec With accepteula Flag
 techniques: [T1021.002]
 data_source: [Sysmon EventID 1, Windows Event Log Security 4688, CrowdStrike ProcessRollup2]
-required_alert_fields: [dest, user, process, process_name, process_path, process_hash, parent_process_name, parent_process_path, _time]
+required_alert_fields: [dest, user, process, process_name, process_path, process_hash, parent_process_name, parent_process_path, parent_process_guid, _time]
 intent: Detects PsExec run with -accepteula (likely first use) on an endpoint from process creation logs.
 fp_quality: good
 explanations: [BE-0002, BE-0001, BE-0007, BE-0003]
-fingerprint: [dest, user, parent_process_name]
+derived_fields:
+  target_host: {from: process, pattern: '\\\\([^\\\s]+)', note: 'first UNC host in the command line; a host list yields "h1,h2"; absent for local use'}
+fingerprint: [dest, user, parent_process_name, process_hash, target_host]
 precedent_validity: 72h
 flow:
   - step: 1
@@ -38,4 +40,4 @@ flow:
 source: splunk/security_content detections/endpoint/detect_psexec_with_accepteula_flag.yml
 license: Apache-2.0
 status: draft
-version: 1
+version: 2

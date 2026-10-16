@@ -1,10 +1,11 @@
 id: Q-0001
-text: Is the parent process a sanctioned software deployment or management tool, matched on process name and path?
+text: Is the parent process a sanctioned software deployment or management tool, matched on hash or on signer plus path?
 tests: BE-0002
 answer_source: context
 needs:
   context: [CF-0001]
-  alert_fields: [parent_process_name, parent_process_path]
+  alert_fields: [parent_process_guid, parent_process_path]
+  enrichment: [process_creation_by_guid]   # parent's hash and signer from its own creation event
 source:
   - splunk/security_content detections/endpoint/windows_service_creation_on_remote_endpoint.yml
   - elastic/detection-rules rules/windows/credential_access_lsass_openprocess_api.toml
@@ -12,4 +13,4 @@ license: [Apache-2.0, Elastic-2.0]
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

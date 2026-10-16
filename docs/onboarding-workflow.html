@@ -1,0 +1,369 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+</head>
+<body>
+<title>Triage Agent Onboarding</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: header, phase picker, swimlane timeline (lanes pinned, time scrolls sideways; boxes = one-time steps, dashed bars = ongoing processes, lettered lines = gates), phase detail + gate criteria, always-running table */
+:root{
+  --bg:#F3F5F8; --surface:#FFFFFF; --ink:#16202A; --muted:#5B6875; --line:#CBD3DC;
+  --lane-people:#FAF6EF; --lane-run:#F8FAFB; --lane-know:#ECEFFB; --lane-learn:#E6F2EC;
+  --node:#FFFFFF; --node-line:#8593A2; --accent:#3B4FD0; --hot:#C76800; --gate:#B4472F;
+  --dot-people:#B7791F; --dot-run:#7D8A98; --dot-know:#5566DD; --dot-learn:#2A9670;
+  --font-sans:'IBM Plex Sans', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono:'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  --bg:#0E1318; --surface:#151C24; --ink:#E5EAEF; --muted:#94A2B0; --line:#2A3541;
+  --lane-people:#1C1913; --lane-run:#121920; --lane-know:#181D33; --lane-learn:#11231C;
+  --node:#1A222B; --node-line:#5F6E7E; --accent:#8E9BFF; --hot:#F2A33A; --gate:#F08A6E;
+  --dot-people:#E0A64B; --dot-run:#8A97A5; --dot-know:#8E9BFF; --dot-learn:#4CC59A; color-scheme:dark }}
+:root[data-theme="dark"]{
+  --bg:#0E1318; --surface:#151C24; --ink:#E5EAEF; --muted:#94A2B0; --line:#2A3541;
+  --lane-people:#1C1913; --lane-run:#121920; --lane-know:#181D33; --lane-learn:#11231C;
+  --node:#1A222B; --node-line:#5F6E7E; --accent:#8E9BFF; --hot:#F2A33A; --gate:#F08A6E;
+  --dot-people:#E0A64B; --dot-run:#8A97A5; --dot-know:#8E9BFF; --dot-learn:#4CC59A; color-scheme:dark }
+body{background:var(--bg);color:var(--ink);font-family:var(--font-sans);font-size:15px;line-height:1.55;
+  padding-block:28px 48px;padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:22px}
+header{display:flex;flex-direction:column;gap:6px;max-width:72ch}
+.eyebrow{font-family:var(--font-mono);font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+h1{font-size:30px;line-height:1.15;margin:0;font-weight:600;text-wrap:balance}
+header p{margin:0;color:var(--muted)}
+header a{color:var(--accent)}
+h2{font-size:18px;margin:0;font-weight:600;text-wrap:balance}
+h3{font-size:14px;margin:0;font-weight:600}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:inherit;font-size:13px;padding:6px 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);cursor:pointer;display:inline-flex;gap:6px;align-items:baseline}
+.chip small{font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+.chip:hover{border-color:var(--node-line)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chip[aria-pressed="true"] small{color:var(--bg);opacity:.75}
+.chip:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.board{display:flex;border:1px solid var(--line);border-radius:10px;background:var(--surface);overflow:hidden}
+.lanes{flex:0 0 auto;border-right:1px solid var(--line);background:var(--surface)}
+.scroll{flex:1 1 auto;min-width:0;overflow-x:auto}
+.scroll svg,.lanes svg{display:block}
+.hint{font-size:12px;color:var(--muted);margin-top:-12px}
+.legend{display:flex;flex-wrap:wrap;gap:8px 20px;font-size:13px;color:var(--muted);align-items:center}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:22px;align-items:start}
+@media (max-width:860px){.cols{grid-template-columns:minmax(0,1fr)}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.panel p{margin:0;color:var(--muted);max-width:68ch}
+.meta{font-family:var(--font-mono);font-size:12px;color:var(--muted)}
+ol.steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:9px}
+ol.steps li{display:grid;grid-template-columns:28px 140px minmax(0,1fr);gap:8px;align-items:baseline;font-size:14px}
+@media (max-width:520px){ol.steps li{grid-template-columns:28px minmax(0,1fr)} ol.steps li .act{grid-column:2}}
+.num{font-family:var(--font-mono);font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums}
+.lane-tag{display:inline-flex;align-items:center;gap:6px;font-family:var(--font-mono);font-size:12px;color:var(--ink)}
+.dot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;display:inline-block}
+.dot.people{background:var(--dot-people)}.dot.run{background:var(--dot-run)}.dot.know{background:var(--dot-know)}.dot.learn{background:var(--dot-learn)}
+.gatebox{border:1px dashed var(--gate);border-radius:8px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.gatebox .g{font-family:var(--font-mono);font-size:12px;color:var(--gate)}
+.tablewrap{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:13px;min-width:560px}
+th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--line)}
+th{font-family:var(--font-mono);font-weight:500;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted)}
+td.k{font-weight:500;white-space:nowrap}
+.gl{font-family:var(--font-mono);color:var(--gate);font-weight:500}
+.n-label{font-family:var(--font-sans);font-size:12px;fill:var(--ink)}
+.b-label{font-family:var(--font-sans);font-size:12px;fill:var(--ink)}
+.b-cad{font-family:var(--font-mono);font-size:10.5px;fill:var(--muted)}
+.l-label{font-family:var(--font-sans);font-size:12.5px;font-weight:500;fill:var(--ink)}
+.p-label{font-family:var(--font-mono);font-size:11px;letter-spacing:.06em;fill:var(--muted)}
+.badge-t{font-family:var(--font-mono);font-size:10px;fill:var(--bg)}
+.gate-t{font-family:var(--font-mono);font-size:11px;font-weight:500;fill:var(--surface)}
+.it{transition:opacity .2s}
+@media (prefers-reduced-motion: reduce){.it{transition:none}}
+.dim{opacity:.18}
+.hot .shape{stroke:var(--hot);stroke-width:2}
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">SOC triage agent · new customer onboarding</div>
+    <h1>Triage Agent Onboarding</h1>
+    <p>From kickoff to production in about three months. Month 1 builds the customer’s context and runs the agent in Shadow, where it triages but nobody sees its verdicts. After that, each detection earns more autonomy on its own track record, so “production” never means every alert is automatic.</p>
+    <p>Numbered boxes are one-time steps. Dashed bars are processes that start in that phase and keep running. Lettered lines are gates: the next phase starts only when the gate passes. For what happens to a single alert, see the <a href="triage-workflow.html">Triage Agent Workflow</a>.</p>
+  </header>
+
+  <div class="chips" id="picker" role="group" aria-label="Phases"></div>
+
+  <div>
+    <div class="board">
+      <div class="lanes" id="lanes"></div>
+      <div class="scroll" id="scroll" tabindex="0" aria-label="Onboarding timeline, scroll sideways"></div>
+    </div>
+  </div>
+  <div class="hint">Scroll the timeline sideways. Rows are who or what does the work; columns run left to right in time.</div>
+
+  <div class="legend" aria-label="Legend">
+    <span><svg width="30" height="18" aria-hidden="true"><rect x="1" y="2" width="28" height="14" rx="3" fill="var(--node)" stroke="var(--node-line)"/></svg>One-time step</span>
+    <span><svg width="38" height="18" aria-hidden="true"><rect x="1" y="2" width="36" height="14" rx="7" fill="var(--node)" stroke="var(--accent)" stroke-dasharray="4 3"/></svg>Keeps running</span>
+    <span><svg width="22" height="18" aria-hidden="true"><line x1="11" y1="0" x2="11" y2="18" stroke="var(--gate)" stroke-dasharray="3 3"/><circle cx="11" cy="9" r="7" fill="var(--gate)"/></svg>Gate</span>
+    <span><i class="dot people"></i>People</span>
+    <span><i class="dot run"></i>Platform</span>
+    <span><i class="dot know"></i>Knowledge</span>
+    <span><i class="dot learn"></i>Learning</span>
+  </div>
+
+  <div class="cols">
+    <section class="panel" aria-live="polite">
+      <h2 id="pTitle"></h2>
+      <div class="meta" id="pWhen"></div>
+      <p id="pGoal"></p>
+      <ol class="steps" id="pSteps"></ol>
+      <div class="gatebox" id="pGate"></div>
+    </section>
+    <section class="panel">
+      <h2>Gates</h2>
+      <p>Each gate is a go/no-go check signed off before the next phase starts. Thresholds are suggested starting points to agree with the customer.</p>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Gate</th><th>When</th><th>Passes when</th><th>Signed by</th></tr></thead>
+          <tbody id="gateRows"></tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <h2>Always running</h2>
+    <p>These start during onboarding and never stop. They are what keeps the agent accurate as the customer’s environment changes.</p>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Process</th><th>Starts</th><th>Cadence</th><th>Owner</th><th>Why it matters</th></tr></thead>
+        <tbody id="barRows"></tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+const NS='http://www.w3.org/2000/svg';
+const LANES=[
+ {id:'reno',name:['Reno delivery','team'],rows:1,g:'people'},
+ {id:'soc',name:['Customer SOC'],rows:1,g:'people'},
+ {id:'it',name:['Customer IT &','data owners'],rows:1,g:'people'},
+ {id:'es',name:['Splunk ES'],rows:1,g:'run'},
+ {id:'intent',name:['Rule intent','service'],rows:1,g:'run'},
+ {id:'bank',name:['Question bank'],rows:1,g:'know'},
+ {id:'ctx',name:['Context store'],rows:1,g:'know'},
+ {id:'base',name:['Baseline engine'],rows:1,g:'know'},
+ {id:'agent',name:['Triage agent'],rows:1,g:'run'},
+ {id:'ctl',name:['Autonomy','controller'],rows:1,g:'run'},
+ {id:'cur',name:['Curation','& audit'],rows:2,g:'learn'}
+];
+const SHORT={reno:'Reno team',soc:'Customer SOC',it:'Customer IT',es:'Splunk ES',intent:'Rule intent',bank:'Question bank',ctx:'Context store',base:'Baseline engine',agent:'Triage agent',ctl:'Autonomy ctl',cur:'Curation & audit'};
+const ROW=62,NH=44,NW=142,COL=178,PX=24,HEAD=62,LW=140,LAST=11;
+let y=HEAD; LANES.forEach(l=>{l.top=y;l.h=l.rows*ROW;y+=l.h;});
+const H=y+8; const L=Object.fromEntries(LANES.map(l=>[l.id,l]));
+const nx=c=>PX+c*COL, cy=(lane,row)=>L[lane].top+row*ROW+ROW/2, gx=c=>nx(c)+NW+(COL-NW)/2;
+const W=nx(LAST)+NW+PX+20;
+
+const PHASES=[
+ {id:'p0',name:'Prepare',when:'Week 0',a:0,b:1,gate:'A',goal:'Agree what success looks like and get the agent running inside the customer’s environment, with no access to anything it doesn’t need.'},
+ {id:'p1',name:'Discover',when:'Week 1',a:2,b:3,gate:'B',goal:'Find out what the customer already has: their rules, their closure history, their runbooks and their asset lists. Ask people only for what can’t be mined.'},
+ {id:'p2',name:'Fill gaps',when:'Week 2',a:4,b:5,gate:'C',goal:'Collect the missing context in priority order, approve how custom rules are mapped, and prove the agent works on real alerts before it sees live traffic.'},
+ {id:'p3',name:'Shadow',when:'Weeks 3–4',a:6,b:7,gate:'D',goal:'The agent triages every alert in the background. Analysts work as usual, and their decisions become the answer key the agent is measured against.'},
+ {id:'p4',name:'Recommend',when:'Months 2–3',a:8,b:9,gate:'E',goal:'Detections that earned trust in Shadow now show their verdict to analysts, who accept or override it with one click.'},
+ {id:'p5',name:'Production',when:'Month 3 onward',a:10,b:11,gate:null,goal:'Detections with a sustained record close or escalate on their own. Everything else stays in Recommend or Shadow until it earns more.'}
+];
+const GATES={
+ A:{when:'End of week 0',pass:'Agent reads notables and writes a test comment; model runs on-prem; data stays in-region.',by:'Customer IT + Reno'},
+ B:{when:'End of week 1',pass:'Every enabled rule is mapped (known, technique or none) and classified; coverage report reviewed.',by:'SOC lead'},
+ C:{when:'End of week 2',pass:'Top-ranked facts loaded with owners; custom-rule mappings approved; dry run checked by hand.',by:'SOC lead + Reno'},
+ D:{when:'End of month 1',pass:'Shadow results reviewed; list of detections moving to Recommend agreed (e.g. ≥95% agreement over 50+ alerts).',by:'SOC lead'},
+ E:{when:'End of month 3, or when ready',pass:'Auto list approved detection by detection; crown jewels excluded; audit sampling switched on.',by:'SOC lead (and CISO where required)'}
+};
+
+/* one-time steps: [num, lane, row, col, label lines, detail] */
+const NODES=[
+ [1,'reno',0,0,['Kickoff: scope and','success metrics'],'Agree which notables are in scope, how success is measured (agreement rate, analyst hours saved) and who owns what on each side.'],
+ [2,'it',0,0,['Approve access and','data residency'],'Approve the service accounts and confirm the data and the model stay on the customer’s infrastructure.'],
+ [3,'reno',0,1,['Deploy agent and','model on-prem'],'Install the triage agent and Cisco Foundation-sec-8B on the customer’s GPU host.'],
+ [4,'es',0,1,['Service account:','read and comment'],'Create a Splunk account that can read notables and add comments, but cannot close them yet.'],
+ [5,'es',0,2,['Export enabled','correlation searches'],'Pull every enabled correlation search with its SPL and its recent alert volume.'],
+ [6,'intent',0,2,['Map each rule: known,','technique or none'],'Match each rule to a known detection, an ATT&CK technique, or nothing. Custom rules are matched by what the SPL is trying to catch.'],
+ [7,'bank',0,2,['Load base bank','(public sources)'],'Load Reno’s base question bank, built from ESCU, Sigma, Elastic, LOLBAS and ATT&CK.'],
+ [8,'ctx',0,2,['Import asset and','identity lists'],'Import the ES asset and identity lookups: priority, owner, business unit, privileged accounts.'],
+ [9,'intent',0,3,['Classify: threat,','policy or noise'],'Only threat rules go to triage. Policy and operational rules are reported to the customer separately.'],
+ [10,'es',0,3,['Export closures and','filter macros'],'Export 6–12 months of notable dispositions and analyst comments, plus each rule’s filter macro (their existing exclusions).'],
+ [11,'soc',0,3,['Share runbooks','and SOPs'],'Hand over any existing triage runbooks, however informal.'],
+ [12,'bank',0,3,['Runbooks into the','customer layer'],'Convert runbook steps into questions in the customer layer of the bank, marked as drafts.'],
+ [13,'cur',1,3,['Mine past closures','into drafts'],'Turn past closure reasons into candidate questions and facts. Treated as evidence, not truth: old closures are often blank or wrong.'],
+ [14,'reno',0,3,['Coverage report'],'Shows how much of the alert volume has rule-level questions, technique-only questions, or none. This sets expectations for month 1.'],
+ [15,'bank',0,4,['Rank missing facts','→ onboarding form'],'Rank the missing context facts by how many detections each one unblocks. The top of the list becomes the customer’s form.'],
+ [16,'it',0,4,['Fill the','onboarding form'],'Crown jewels, VPN and egress ranges, service accounts, sanctioned admin tools, change windows. Partial answers are fine.'],
+ [17,'soc',0,4,['Approve custom-rule','mappings'],'A senior analyst confirms each custom rule’s mapping once. Unmapped rules get no verdict, only a context pack.'],
+ [18,'ctx',0,5,['Load facts with','owner and expiry'],'Every fact gets an owner and a date to re-check it, because IP ranges and roles change.'],
+ [19,'reno',0,5,['Tuning tickets for','noisy rules'],'Rules firing hundreds of times on one entity get throttling or risk-based alerting. That is a detection problem, not a triage problem.'],
+ [20,'agent',0,5,['Dry run on','sample notables'],'Run the agent on recent notables and check its answers by hand before it sees live traffic.'],
+ [21,'ctl',0,6,['All detections','start in Shadow'],'The agent triages every alert, but analysts don’t see its verdicts, so their decisions stay unbiased.'],
+ [22,'reno',0,7,['Month-1 review','with customer'],'Review agreement per detection, the questions that came back unknown, and the facts still missing.'],
+ [23,'ctl',0,8,['Promote eligible','to Recommend'],'Detections that passed gate D now show their verdict to analysts.'],
+ [24,'ctl',0,10,['Promote eligible','to Auto'],'Detections that kept their agreement rate in Recommend move to Auto, never on crown-jewel assets.'],
+ [25,'es',0,10,['Allow agent to','close notables'],'The Splunk account gets permission to close notables, used only for detections in Auto.']
+].map(a=>({num:a[0],lane:a[1],row:a[2],col:a[3],lines:a[4],detail:a[5]}));
+
+/* ongoing processes: [id, lane, row, startCol, endCol, label, cadence, owner, why] */
+const BARS=[
+ ['b1','base',0,2,LAST,'Backfill baselines, then refresh','daily','Platform','Keeps “is this normal for this entity?” answers current.'],
+ ['b2','agent',0,6,LAST,'Triage every notable','every alert','Platform','Verdicts are hidden in Shadow, shown in Recommend, acted on in Auto.'],
+ ['b3','soc',0,6,7,'Triage as usual; close with a reason','every alert','Customer SOC','The analyst’s reason is the answer key for measuring the agent.'],
+ ['b4','soc',0,8,LAST,'Accept or override; handle escalations','every alert','Customer SOC','Overrides are the main way the agent learns.'],
+ ['b5','cur',0,6,LAST,'Disagreement review','weekly','Senior analyst + Reno','Each disagreement becomes a missing fact or a new question.'],
+ ['b6','intent',0,6,LAST,'Re-map new or changed rules','on change','Platform + senior analyst','A new or edited rule always restarts in Shadow.'],
+ ['b7','it',0,8,LAST,'Re-check facts before they expire','per fact','Fact owners','Stale facts cause confident wrong answers.'],
+ ['b8','bank',0,8,LAST,'Base bank releases + customer layer','monthly','Reno','New public detections and improved questions reach every customer.'],
+ ['b9','reno',0,8,LAST,'Report: coverage, agreement, hours saved','monthly','Reno','Shows the customer the value and where gaps remain.'],
+ ['b10','cur',1,10,LAST,'Audit 5–10% of auto-closures','weekly','Senior analyst','Catches silent errors in Auto mode.'],
+ ['b11','ctl',0,11,LAST,'Promote / demote','weekly','Platform','A failed audit sample sends a detection back to Recommend.']
+].map(a=>({id:a[0],lane:a[1],row:a[2],a:a[3],b:a[4],label:a[5],cad:a[6],owner:a[7],why:a[8]}));
+
+function el(tag,attrs,parent){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(parent)parent.appendChild(e);return e;}
+function txt(parent,x,yc,lines,cls,anchor){
+  const t=el('text',{x,y:yc-(lines.length-1)*7.5,class:cls,'text-anchor':anchor||'middle','dominant-baseline':'central'},parent);
+  lines.forEach((ln,i)=>{const s=el('tspan',{x,dy:i?15:0},t);s.textContent=ln;});
+  return t;
+}
+const laneFill=g=>`var(--lane-${g})`;
+
+/* lane labels */
+const ls=el('svg',{width:LW,height:H,viewBox:`0 0 ${LW} ${H}`,'aria-hidden':'true'});
+txt(ls,14,HEAD/2,['WHO / WHAT'],'p-label','start');
+LANES.forEach(l=>{
+  el('rect',{x:0,y:l.top,width:LW,height:l.h,fill:laneFill(l.g)},ls);
+  el('line',{x1:0,x2:LW,y1:l.top,y2:l.top,stroke:'var(--line)','stroke-width':1},ls);
+  el('circle',{cx:16,cy:l.top+l.h/2,r:4,fill:`var(--dot-${l.g})`},ls);
+  txt(ls,28,l.top+l.h/2,l.name,'l-label','start');
+});
+document.getElementById('lanes').appendChild(ls);
+
+/* timeline */
+const s=el('svg',{width:W,height:H,viewBox:`0 0 ${W} ${H}`,role:'img'});
+el('title',{},s).textContent='Customer onboarding timeline for the triage agent';
+LANES.forEach(l=>{
+  el('rect',{x:0,y:l.top,width:W,height:l.h,fill:laneFill(l.g)},s);
+  el('line',{x1:0,x2:W,y1:l.top,y2:l.top,stroke:'var(--line)','stroke-width':1},s);
+});
+PHASES.forEach(p=>{
+  const x1=nx(p.a)-12;
+  txt(s,x1,16,[`${p.when.toUpperCase()} · ${p.name.toUpperCase()}`],'p-label','start');
+  el('line',{x1,x2:nx(p.b)+NW+12,y1:28,y2:28,stroke:'var(--node-line)','stroke-width':1},s);
+  if(p.gate){
+    const gxv=gx(p.b);
+    el('line',{x1:gxv,x2:gxv,y1:36,y2:H,stroke:'var(--gate)','stroke-width':1.2,'stroke-dasharray':'4 4'},s);
+    el('circle',{cx:gxv,cy:46,r:9,fill:'var(--gate)'},s);
+    txt(s,gxv,46,[p.gate],'gate-t');
+  }
+});
+
+const items=[];
+BARS.forEach(b=>{
+  const x1=nx(b.a), x2=b.b===LAST?W-8:nx(b.b)+NW, yc=cy(b.lane,b.row), h=40;
+  const g=el('g',{class:'it'},s);
+  el('rect',{class:'shape',x:x1,y:yc-h/2,width:x2-x1,height:h,rx:h/2,fill:'var(--node)',stroke:'var(--accent)','stroke-width':1.2,'stroke-dasharray':'5 4'},g);
+  if(b.b===LAST) el('path',{d:`M${x2-16} ${yc-5} L${x2-10} ${yc} L${x2-16} ${yc+5}`,fill:'none',stroke:'var(--accent)','stroke-width':1.5},g);
+  const t=el('text',{x:x1+14,y:yc-7,class:'b-label','dominant-baseline':'central'},g); t.textContent='↻ '+b.label;
+  const c=el('text',{x:x1+28,y:yc+9,class:'b-cad','dominant-baseline':'central'},g); c.textContent=b.cad;
+  items.push({kind:'bar',ref:b,g});
+});
+NODES.forEach(n=>{
+  const x=nx(n.col), yc=cy(n.lane,n.row), y0=yc-NH/2;
+  const g=el('g',{class:'it'},s);
+  el('rect',{class:'shape',x,y:y0,width:NW,height:NH,rx:6,fill:'var(--node)',stroke:'var(--node-line)','stroke-width':1},g);
+  txt(g,x+NW/2+6,yc,n.lines,'n-label');
+  el('circle',{cx:x+2,cy:y0+2,r:9,fill:'var(--ink)'},g);
+  txt(g,x+2,y0+2,[String(n.num)],'badge-t');
+  items.push({kind:'node',ref:n,g});
+});
+document.getElementById('scroll').appendChild(s);
+
+/* tables */
+const gr=document.getElementById('gateRows');
+Object.entries(GATES).forEach(([k,v])=>{
+  const tr=document.createElement('tr');
+  [[`Gate ${k}`,'k gl'],[v.when,'k'],[v.pass,''],[v.by,'']].forEach(([t,c])=>{const td=document.createElement('td');if(c)td.className=c;td.textContent=t;tr.appendChild(td);});
+  gr.appendChild(tr);
+});
+const phaseOf=c=>PHASES.find(p=>c>=p.a&&c<=p.b);
+const br=document.getElementById('barRows');
+BARS.forEach(b=>{
+  const tr=document.createElement('tr');
+  const p=phaseOf(b.a);
+  [[b.label,'k'],[`${p.name} (${p.when})`,''],[b.cad,''],[b.owner,''],[b.why,'']].forEach(([t,c])=>{const td=document.createElement('td');if(c)td.className=c;td.textContent=t;tr.appendChild(td);});
+  br.appendChild(tr);
+});
+
+/* picker */
+const VIEWS=[{id:'all',lab:'Whole timeline'},...PHASES.map(p=>({id:p.id,lab:p.name,sub:p.when})),{id:'run',lab:'Always running'}];
+const picker=document.getElementById('picker'), btns=[];
+VIEWS.forEach(v=>{
+  const b=document.createElement('button');b.type='button';b.className='chip';b.id='v-'+v.id;b.setAttribute('aria-pressed','false');
+  b.appendChild(document.createTextNode(v.lab));
+  if(v.sub){const sm=document.createElement('small');sm.textContent=v.sub;b.appendChild(sm);}
+  b.addEventListener('click',()=>select(v.id));picker.appendChild(b);btns.push(b);
+});
+
+function laneTag(lane){
+  const tag=document.createElement('span');tag.className='lane-tag';
+  const d=document.createElement('i');d.className='dot '+L[lane].g;tag.appendChild(d);
+  tag.appendChild(document.createTextNode(SHORT[lane]));return tag;
+}
+function stepLi(numText,lane,text){
+  const li=document.createElement('li');
+  const n=document.createElement('span');n.className='num';n.textContent=numText;
+  const a=document.createElement('span');a.className='act';a.textContent=text;
+  li.appendChild(n);li.appendChild(laneTag(lane));li.appendChild(a);return li;
+}
+function select(id){
+  btns.forEach(b=>b.setAttribute('aria-pressed',String(b.id==='v-'+id)));
+  const ol=document.getElementById('pSteps'); ol.innerHTML='';
+  const gb=document.getElementById('pGate'); gb.innerHTML=''; gb.hidden=true;
+  const title=document.getElementById('pTitle'), when=document.getElementById('pWhen'), goal=document.getElementById('pGoal');
+  if(id==='all'){
+    items.forEach(it=>{it.g.classList.remove('dim','hot');});
+    title.textContent='Whole timeline'; when.textContent='About 3 months to production, then ongoing';
+    goal.textContent='Pick a phase to see its steps and its exit gate, or pick Always running to see what never stops.';
+    PHASES.forEach((p,i)=>{
+      const li=document.createElement('li');
+      const n=document.createElement('span');n.className='num';n.textContent=String(i+1);
+      const t=document.createElement('span');t.className='lane-tag';t.textContent=`${p.name} · ${p.when}`;
+      const a=document.createElement('span');a.className='act';a.textContent=p.goal+(p.gate?` Exit: gate ${p.gate}.`:'');
+      li.append(n,t,a);ol.appendChild(li);
+    });
+    return;
+  }
+  if(id==='run'){
+    items.forEach(it=>{const on=it.kind==='bar';it.g.classList.toggle('dim',!on);it.g.classList.toggle('hot',on);});
+    title.textContent='Always running'; when.textContent='Starts during onboarding, never stops';
+    goal.textContent='These keep the agent accurate after go-live. The table below gives cadence and owner for each.';
+    BARS.forEach(b=>ol.appendChild(stepLi('↻',b.lane,`${b.label} (${b.cad}). ${b.why}`)));
+    return;
+  }
+  const p=PHASES.find(x=>x.id===id);
+  items.forEach(it=>{
+    const on=it.kind==='node'?(it.ref.col>=p.a&&it.ref.col<=p.b):(it.ref.a<=p.b&&it.ref.b>=p.a);
+    it.g.classList.toggle('dim',!on); it.g.classList.toggle('hot',on&&it.kind==='node');
+  });
+  title.textContent=p.name; when.textContent=p.when; goal.textContent=p.goal;
+  NODES.filter(n=>n.col>=p.a&&n.col<=p.b).sort((x,z)=>x.num-z.num).forEach(n=>ol.appendChild(stepLi(String(n.num),n.lane,n.detail)));
+  BARS.filter(b=>b.a>=p.a&&b.a<=p.b).forEach(b=>ol.appendChild(stepLi('↻',b.lane,`Starts: ${b.label} (${b.cad}).`)));
+  if(p.gate){const g=GATES[p.gate];gb.hidden=false;
+    const h=document.createElement('div');h.className='g';h.textContent=`Exit gate ${p.gate} · ${g.when} · signed by ${g.by}`;
+    const t=document.createElement('div');t.textContent=g.pass;gb.appendChild(h);gb.appendChild(t);}
+}
+select('p1');
+})();
+</script>
+
+</body>
+</html>

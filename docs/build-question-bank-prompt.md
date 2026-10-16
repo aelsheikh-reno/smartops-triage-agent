@@ -2,7 +2,7 @@
 
 Read CLAUDE.md and docs/design-decisions.md first. Create branch feat/triage-question-bank and work only there.
 
-Sources: shallow-clone splunk/security_content, elastic/detection-rules, SigmaHQ/sigma, LOLBAS-Project/LOLBAS, GTFOBins/GTFOBins.github.io, magicsword-io/LOLDrivers, mitre-attack/attack-stix-data into sources/. Validate technique IDs against ATT&CK v20.0 (enterprise-attack-20.0.json); no revoked or deprecated IDs.
+Sources: shallow-clone Azure/Azure-Sentinel (sparse: Solutions/*/Analytic Rules, SolutionMetadata.json), splunk/security_content, elastic/detection-rules, SigmaHQ/sigma, LOLBAS-Project/LOLBAS, GTFOBins/GTFOBins.github.io, magicsword-io/LOLDrivers, mitre-attack/attack-stix-data into sources/. Validate technique IDs against ATT&CK v20.0 (enterprise-attack-20.0.json); no revoked or deprecated IDs.
 
 Layout:
 - bank/questions/Q-*.yaml, bank/detections/ (metadata + flow), bank/techniques/T*.yaml, bank/explanations/BE-*.yaml, bank/facts/CF-*.yaml, bank/reason_codes.yaml, bank/overlays/customer/ (empty slot)

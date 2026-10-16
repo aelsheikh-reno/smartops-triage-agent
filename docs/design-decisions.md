@@ -72,6 +72,7 @@ Per detection: Shadow (verdict hidden) → Recommend (analyst accepts or overrid
 - elastic/detection-rules, Elastic License 2.0: "Triage and analysis", "False positive analysis"
 - SigmaHQ/sigma, Detection Rule License (attribution): falsepositives
 - LOLBAS, GTFOBins, LOLDrivers: legitimate uses of binaries and drivers
+- Azure/Azure-Sentinel, MIT: primary source for the identity and cloud domain (Entra ID, M365, Azure). It has no false-positive field; benign hints live in query comments and descriptions. Its `entityMappings` are the model for which entities a detection's alert exposes.
 - MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data): techniques, detection strategies. v19 (April 2026) revoked T1562.001 → T1685 and T1070.001 → T1685.005; use current IDs.
 Record source and license on every question; non-Apache text needs legal review before commercial use.
 

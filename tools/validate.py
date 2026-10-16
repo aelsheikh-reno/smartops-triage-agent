@@ -96,7 +96,7 @@ def main():
             with open(path) as fh:
                 for line in fh:
                     if line.startswith("id: "):
-                        sigma_ids[line[4:].strip()] = path
+                        sigma_ids[line[4:].split("#")[0].strip()] = path
                         break
     else:
         warnings.append("SigmaHQ repo not found under sources/; sigma_logsource and sigma_refs not checked")
@@ -205,6 +205,64 @@ def main():
         if not any(B.OUTCOME.match(st.get(e, "")) and st.get(e, "").startswith("close") for st in flow[1:] for e in ("on_yes", "on_no")):
             info.append(f"{d['id']}: no close outside Q0 (escalate/flag only)")
 
+    # use-case catalog
+    ucs = b["use_cases"]
+    if ucs:
+        ids = [u["id"] for u in ucs]
+        if len(set(ids)) != len(ids):
+            err("bank/use_cases.yaml", "duplicate use-case ids")
+        if sorted(u["rank"] for u in ucs) != list(range(1, len(ucs) + 1)):
+            err("bank/use_cases.yaml", "ranks must be 1..n with no gaps")
+        src_ids = None
+        if sigma_ids is not None:
+            src_ids = {"sigma": {f"sigma:{i}" for i in sigma_ids}}
+            sent_dir = os.path.join(B.ROOT, "sources/Azure-Sentinel/Solutions")
+            if os.path.isdir(sent_dir):
+                src_ids["sentinel"] = set()
+                for path in glob.glob(os.path.join(sent_dir, "*/Analytic Rules/**/*.yaml"), recursive=True):
+                    with open(path, encoding="utf-8-sig") as fh:
+                        for line in fh:
+                            if line.startswith("id:"):
+                                src_ids["sentinel"].add("sentinel:" + line[3:].split("#")[0].strip().strip("'\""))
+                                break
+            escu_dir = os.path.join(B.ROOT, "sources/security_content/detections")
+            if os.path.isdir(escu_dir):
+                src_ids["escu"] = {"escu:" + os.path.basename(p)[:-4] for p in glob.glob(os.path.join(escu_dir, "*/*.yml")) if "/deprecated/" not in p}
+        for u in ucs:
+            w = f"bank/use_cases.yaml {u['id']}"
+            for k in ("name", "domain", "family", "rank", "volume_reason", "techniques", "linked", "coverage", "covered_detections", "linked_detections"):
+                if k not in u:
+                    err(w, f"missing {k}")
+            if u.get("family") == "vendor" and not u.get("triage_hints"):
+                err(w, "vendor-alert family needs triage_hints")
+            for t in u.get("techniques", []):
+                if attack_ids is not None and t not in attack_ids:
+                    err(w, f"technique {t} not active in ATT&CK v20.0")
+            for src, block in (u.get("linked") or {}).items():
+                for x in block.get("shown", []):
+                    if src_ids and src in src_ids and x["id"] not in src_ids[src]:
+                        err(w, f"linked {x['id']} not found in cloned {src} sources")
+            covered = u.get("covered_by", [])
+            shown = {x["id"] for blk in u["linked"].values() for x in blk.get("shown", [])}
+            for d in covered:
+                if d not in b["detections"]:
+                    err(w, f"covered_by {d} has no bank flow")
+                if d not in shown:
+                    err(w, f"covered_by {d} is not among the shown linked detections")
+            for d in sorted(shown & set(b["detections"]) - set(covered)):
+                err(w, f"{d} has a bank flow but is missing from covered_by")
+            n_linked = sum(blk.get("total", 0) for blk in u["linked"].values())
+            if u.get("linked_detections") != n_linked:
+                err(w, f"linked_detections {u.get('linked_detections')} != sum of linked totals {n_linked}")
+            if u.get("covered_detections") != len(covered):
+                err(w, f"covered_detections {u.get('covered_detections')} != len(covered_by) {len(covered)}")
+            fallbacks = [t for t in u.get("techniques", []) if t in b["techniques"]]
+            if sorted(u.get("technique_fallbacks", [])) != sorted(fallbacks):
+                err(w, f"technique_fallbacks should be {sorted(fallbacks)}")
+            want = (("rule-level-full" if len(covered) == n_linked else "rule-level-partial") if covered
+                    else "technique-only" if fallbacks else "none")
+            if u.get("coverage") != want:
+                err(w, f"coverage is {u.get('coverage')}, bank says {want}")
     for x in b["pilot"]["detections"]:
         if x["id"] not in b["detections"]:
             err("bank/pilot.yaml", f"{x['id']} has no detection file")

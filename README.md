@@ -9,7 +9,7 @@ Design, workflows and question bank for the SmartOps triage agent. The question 
 | `bank/` | The question bank (YAML, built from the brief) |
 | `tools/` | Validation, SQL loader and context-fact ranking |
 
-Workflow pages (private, Claude account):
+Workflow pages: `docs/workflows/triage-workflow.html` (alert-level) and `docs/workflows/onboarding-workflow.html` (customer onboarding). The repo files are the source of truth. Earlier published copies on claude.ai may be out of date:
 - Alert-level workflow: https://claude.ai/artifact/1MtZNSiYtydwf6SQd4JKWo
 - Customer onboarding: https://claude.ai/artifact/WTXaT6y6N7ot174GVRGaBX
 

@@ -25,6 +25,7 @@ Answer contract: `answer` (yes | no | unknown), `unknown_reason` (no_capability 
 - no_capability: resolved per customer at onboarding. The question is disabled, its step follows `on_unknown` without a call, and it is listed in the coverage report.
 - A yes that rests on seed data with `verified: false` taints the rest of the flow: that step and any later close reached through it become a flag until onboarding verifies the entry.
 - Reputation and anomaly capabilities are escalate_only: a hit escalates, a miss is never benign evidence.
+- `change.window` answers yes only when an approved change covers the host and time and lists the alert's user (or one of their groups) as implementer; no when nothing covers it, or every covering change lists implementers without the user; unknown (no_data) when a covering change has no implementer data.
 
 The MCP server enforces scope: entities named in the alert only; fixed windows (±24h for event lookups; baselines and prevalence use their declared lookbacks and return counts, not raw events); read-only; a per-call timeout (timeout = unavailable); at most 6 calls per alert including Q0. Resolving a file's hash or signer inside a lookup is the server's job and does not count against the budget.
 
@@ -57,6 +58,8 @@ Runs once per rule, at onboarding and on rule change, never per alert:
 4. Strong match → inherit questions as drafts, start in Shadow. Technique only → capped at Recommend. Neither → context pack.
 5. Drop inherited questions needing alert fields the rule doesn't produce.
 6. A senior analyst approves the mapping once; stored in SQL. No vector search at runtime.
+
+Each known detection carries `sigma_logsource` ({product, category} or {product, service}, from Sigma's own taxonomy) and `sigma_refs` (equivalent or closest SigmaHQ rules). These are offline metadata that let this service match custom rules to known detections across SIEMs; they are never used at runtime. The bank holds no OCSF. If a customer's data is in OCSF, the mapping lives in the MCP server's per-customer adapter.
 
 ## 9. Model split
 Offline: a frontier model drafts questions from public sources; a senior analyst approves. Runtime: Cisco Foundation-sec-8B only selects and answers approved questions; anything new it proposes goes to curation as a draft.

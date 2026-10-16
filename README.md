@@ -1,6 +1,12 @@
 # SmartOps Triage Agent
 
-Two agents: the Triage agent decides; the Knowledge Steward keeps its knowledge current.
+Agents (see `docs/design-decisions.md` §4):
+- **Triage agent** (every alert): runs the fixed flow and applies thresholds; a local model writes the explanation and reviews closes (raise-only).
+- **Tool Broker** (every question): routes each question to a domain specialist and returns a measurement plus evidence.
+- **Domain specialists** (under the Tool Broker): endpoint, network, identity, email, threat intel and Splunk; build recipes at onboarding and in Shadow, run them per question.
+- **Detection Engineer** (onboarding and rule change): works out what each detection is for; read-only for now.
+- **Use Case Manager** (continuously): keeps facts, lists, questions, runbooks and recipes current; proposes threshold changes.
+- **Tier-2 analyst** (later phase): agentic investigation; a human reads the result.
 
 Design, workflows and question bank for the SmartOps triage agent. The question bank is the core: for each detection, the few yes/no questions that rule out its common benign explanations, plus the customer context needed to answer them.
 

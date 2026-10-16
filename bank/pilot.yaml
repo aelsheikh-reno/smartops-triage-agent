@@ -31,7 +31,7 @@ detections:
     name: Process Execution via WMI
     technique: [T1047]
     fp_quality: vague
-    reason: SCCM/RMM agents spawn via WmiPrvSE constantly; tests sanctioned-management-tool context.
+    reason: Deployment and RMM agents spawn via WmiPrvSE constantly; tests sanctioned-management-tool context.
   - id: escu:remote_process_instantiation_via_winrm_and_powershell
     escu_uuid: ba24cda8-4716-11ec-8009-3e22fbd008af
     name: Remote Process Instantiation via WinRM and PowerShell
@@ -116,9 +116,9 @@ detections:
     technique: [T1490]
     fp_quality: good
     reason: Contrast case; benign deletion is rare, so the flow should escalate fast rather than invent a benign cause.
-  - id: escu:add_or_set_windows_defender_exclusion
+  - id: escu:add_or_set_antivirus_exclusion
     escu_uuid: 773b66fe-4dd9-11ec-8289-acde48001122
-    name: Add or Set Windows Defender Exclusion
+    name: Add or Set Antivirus Exclusion via MpPreference
     technique: [T1685]
     fp_quality: vague
     reason: IT and app installers add exclusions; uses ATT&CK v18 T1685 (replaces revoked T1562.001).

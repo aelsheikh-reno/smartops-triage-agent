@@ -61,7 +61,7 @@ capabilities:
   - name: file.reputation
     kind: reputation
     inputs: [entity, sources]
-    yes_means: A reputation source (including bank seed lists such as LOLDrivers) marks the file's hash as known vulnerable or malicious.
+    yes_means: A reputation source (including bank seed lists such as known-bad driver samples) marks the file's hash as known vulnerable or malicious.
     no_means: No source marks it. Not benign evidence.
     escalate_only: true
 

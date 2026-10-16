@@ -27,19 +27,39 @@ def _by_id(pattern):
 
 def load():
     caps = _load(os.path.join(BANK, "capabilities.yaml"))
+    facts = _by_id("facts/CF-*.yaml")
+    seeds = {}
+    for path in sorted(glob.glob(os.path.join(BANK, "seeds", "*.yaml"))):
+        doc = _load(path)
+        doc["_file"] = os.path.relpath(path, ROOT)
+        seeds[doc["fact"]] = doc
+        if doc["fact"] in facts:
+            facts[doc["fact"]]["seed"] = doc.get("entries", doc.get("data"))
     return {
+        "seeds": seeds,
         "capabilities": caps,
         "capability_by_name": {c["name"]: c for c in caps["capabilities"]},
         "parameters": _load(os.path.join(BANK, "parameters.yaml"))["parameters"],
         "reason_codes": {r["code"]: r for r in _load(os.path.join(BANK, "reason_codes.yaml"))["reason_codes"]},
         "questions": _by_id("questions/Q-*.yaml"),
         "explanations": _by_id("explanations/BE-*.yaml"),
-        "facts": _by_id("facts/CF-*.yaml"),
+        "facts": facts,
         "detections": _by_id("detections/*/*.yaml"),
         "techniques": _by_id("techniques/T*.yaml"),
         "pilot": _load(os.path.join(BANK, "pilot.yaml")),
         "use_cases": (_load(os.path.join(BANK, "use_cases.yaml")) or {}).get("use_cases", []) if os.path.exists(os.path.join(BANK, "use_cases.yaml")) else [],
     }
+
+
+def source_ids(b):
+    """Map each rule-level detection's source-library id (e.g. escu:<file stem>) to its bank id."""
+    out = {}
+    for did, d in b["detections"].items():
+        src = d.get("source")
+        if isinstance(src, dict) and src.get("path"):
+            stem = os.path.splitext(os.path.basename(src["path"]))[0]
+            out[did.split(":", 1)[0] + ":" + stem] = did
+    return out
 
 
 def flows(b):

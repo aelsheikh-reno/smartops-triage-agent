@@ -54,7 +54,10 @@ flow:
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/windows_schtasks_create_run_as_system.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/windows_schtasks_create_run_as_system.yml
+  title: Windows Schtasks Create Run As System
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

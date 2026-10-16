@@ -56,7 +56,10 @@ flow:
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/windows_remote_services_rdp_enable.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/windows_remote_services_rdp_enable.yml
+  title: Windows Remote Services Rdp Enable
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

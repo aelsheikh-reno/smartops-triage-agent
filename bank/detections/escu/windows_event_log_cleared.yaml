@@ -49,7 +49,10 @@ flow:
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/windows_event_log_cleared.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/windows_event_log_cleared.yml
+  title: Windows Event Log Cleared
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

@@ -6,40 +6,5 @@ fields:
 - excluded_binaries
 match_rule: valid signature AND signer on the list AND binary not in excluded_binaries. The exclusion list may match on name because it only blocks closure.
 collected_by: customer
-seed:
-  signers:
-  - signer: Microsoft Windows
-    verified: false
-  - signer: Microsoft Corporation
-    verified: false
-  excluded_binaries:
-  - adplus.exe
-  - bitsadmin.exe
-  - certutil.exe
-  - cmd.exe
-  - createdump.exe
-  - cscript.exe
-  - dump64.exe
-  - dumpminitool.exe
-  - installutil.exe
-  - msbuild.exe
-  - mshta.exe
-  - msiexec.exe
-  - powershell.exe
-  - procdump.exe
-  - procdump64.exe
-  - pwsh.exe
-  - rdrleakdiag.exe
-  - reg.exe
-  - regasm.exe
-  - regsvcs.exe
-  - regsvr32.exe
-  - rundll32.exe
-  - sqldumper.exe
-  - tttracer.exe
-  - wmic.exe
-  - wscript.exe
-source:
-- LOLBAS-Project/LOLBAS yml (Category Dump; commonly abused Execute/Download binaries)
-license: GPL-3.0
-version: 3
+version: 4
+seed_file: seeds/CF-0008.yaml

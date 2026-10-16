@@ -19,7 +19,7 @@ required_alert_fields:
 - ImagePath
 - _time
 - dest
-intent: Detects a kernel driver service install (7045) whose file name matches LOLDrivers, from Windows System logs.
+intent: Detects a kernel driver service install (7045) whose file name matches a vulnerable-driver catalogue, from Windows System logs.
 fp_quality: good
 explanations:
 - BE-0015
@@ -52,9 +52,12 @@ flow:
   on_unknown: flag
   bind:
     entity: file:ImagePath
-source: splunk/security_content detections/endpoint/windows_vulnerable_driver_installed.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/windows_vulnerable_driver_installed.yml
+  title: Windows Vulnerable Driver Installed
 license: Apache-2.0
 status: draft
-version: 4
-notes: ESCU matches LOLDrivers on driver file name only. A hash miss in LOLDrivers plus a trusted signer is not enough to call it a name collision (vulnerable drivers are trusted-signed and LOLDrivers is
-  incomplete), so that case flags.
+version: 5
+notes: The source rule matches the driver catalogue on file name only. A hash miss in the driver catalogue plus a trusted signer is not enough to call it a name collision (vulnerable drivers are trusted-signed
+  and the catalogue is incomplete), so that case flags.

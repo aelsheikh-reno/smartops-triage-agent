@@ -1,0 +1,8 @@
+# Seed data: loaded into the customer's context store at onboarding, never part of the runtime bundle.
+# Entries stay verified: false until onboarding confirms them against the customer's real binaries.
+fact: CF-0016
+load: SHA256 of every KnownVulnerableSamples entry, refreshed from the source repository at onboarding and on update
+source:
+- magicsword-io/LOLDrivers yaml/*.yaml KnownVulnerableSamples[].SHA256 (loaded by tools, not copied into the bank)
+- magicsword-io/LOLDrivers
+license: Apache-2.0

@@ -53,7 +53,10 @@ flow:
   on_yes: close:benign_true_positive:prevalent_in_org
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/malicious_powershell_process___execution_policy_bypass.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/malicious_powershell_process___execution_policy_bypass.yml
+  title: Malicious PowerShell Process - Execution Policy Bypass
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

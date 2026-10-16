@@ -65,7 +65,10 @@ flow:
   on_yes: close:benign_true_positive:prevalent_in_org
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/detect_mshta_url_in_command_line.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/detect_mshta_url_in_command_line.yml
+  title: Detect MSHTA Url in Command Line
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

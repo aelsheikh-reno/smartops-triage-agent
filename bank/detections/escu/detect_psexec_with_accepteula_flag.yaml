@@ -74,7 +74,10 @@ flow:
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/detect_psexec_with_accepteula_flag.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/detect_psexec_with_accepteula_flag.yml
+  title: Detect PsExec With accepteula Flag
 license: Apache-2.0
 status: draft
-version: 5
+version: 6

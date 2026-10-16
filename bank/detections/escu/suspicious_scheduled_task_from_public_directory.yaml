@@ -60,7 +60,10 @@ flow:
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/suspicious_scheduled_task_from_public_directory.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/suspicious_scheduled_task_from_public_directory.yml
+  title: Suspicious Scheduled Task from Public Directory
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

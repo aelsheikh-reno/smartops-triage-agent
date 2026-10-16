@@ -23,8 +23,8 @@ required_alert_fields:
 - user
 intent: Detects regsvr32.exe registering a non-DLL file from AppData, ProgramData or Windows\Temp from process creation logs.
 fp_quality: none
-notes: 'fp_quality none: ESCU gives no benign cause. The tested cause (signed per-user installers) comes from analyst practice and needs review. The registered file is resolved as module:process_guid; without
-  module identity from the server the gate answers unknown and the alert flags.'
+notes: 'fp_quality none: The source rule gives no benign cause. The tested cause (signed per-user installers) comes from analyst practice and needs review. The registered file is resolved as module:process_guid;
+  without module identity from the server the gate answers unknown and the alert flags.'
 explanations:
 - BE-0018
 - BE-0008
@@ -56,7 +56,10 @@ flow:
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/suspicious_regsvr32_register_suspicious_path.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/suspicious_regsvr32_register_suspicious_path.yml
+  title: Suspicious Regsvr32 Register Suspicious Path
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

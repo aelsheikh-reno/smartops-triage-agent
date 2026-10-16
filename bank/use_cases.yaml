@@ -273,8 +273,6 @@ use_cases:
   - T1110.001
   - T1110.003
   planned_batch: 2-identity-cloud
-  escu_stories:
-  - Active Directory Password Spraying
   linked:
     escu:
       total: 39
@@ -295,6 +293,8 @@ use_cases:
         name: Detect Password Spray Attack Behavior From Source
       - id: escu:detect_password_spray_attack_behavior_on_user
         name: Detect Password Spray Attack Behavior On User
+      stories:
+      - Active Directory Password Spraying
     sentinel:
       total: 39
       shown:
@@ -439,8 +439,6 @@ use_cases:
   - Was it delivered and was a link clicked or attachment opened?
   - Are the sender, URL or attachment known bad (reputation)?
   - Did other recipients get the same message?
-  escu_stories:
-  - Spearphishing Attachments
   linked:
     escu:
       total: 33
@@ -461,6 +459,8 @@ use_cases:
         name: O365 Email Reported By User Found Malicious
       - id: escu:o365_safe_links_detection
         name: O365 Safe Links Detection
+      stories:
+      - Spearphishing Attachments
     sentinel:
       total: 25
       shown:
@@ -703,8 +703,6 @@ use_cases:
   - T1059.001
   - T1059.005
   planned_batch: pilot
-  escu_stories:
-  - Malicious PowerShell
   linked:
     escu:
       total: 141
@@ -725,6 +723,8 @@ use_cases:
         name: Detect Certify With PowerShell Script Block Logging
       - id: escu:detect_empire_with_powershell_script_block_logging
         name: Detect Empire with PowerShell Script Block Logging
+      stories:
+      - Malicious PowerShell
     sentinel:
       total: 9
       shown:
@@ -876,8 +876,6 @@ use_cases:
   techniques:
   - T1621
   planned_batch: 2-identity-cloud
-  escu_stories:
-  - Okta MFA Exhaustion
   linked:
     escu:
       total: 30
@@ -898,6 +896,8 @@ use_cases:
         name: AWS Multiple Failed MFA Requests For User
       - id: escu:aws_new_mfa_method_registered_for_user
         name: AWS New MFA Method Registered For User
+      stories:
+      - Okta MFA Exhaustion
     sentinel:
       total: 24
       shown:
@@ -1007,8 +1007,6 @@ use_cases:
   - T1105
   - T1140
   planned_batch: pilot
-  escu_stories:
-  - Living Off The Land
   linked:
     escu:
       total: 121
@@ -1029,6 +1027,8 @@ use_cases:
         name: BITS Job Persistence
       - id: escu:certutil_with_decode_argument
         name: CertUtil With Decode Argument
+      stories:
+      - Living Off The Land
     sentinel:
       total: 6
       shown:
@@ -1092,9 +1092,6 @@ use_cases:
   - T1543.003
   - T1547.001
   planned_batch: pilot
-  escu_stories:
-  - Windows Persistence Techniques
-  - Scheduled Tasks
   linked:
     escu:
       total: 90
@@ -1115,6 +1112,9 @@ use_cases:
         name: Detect Path Interception By Creation Of program exe
       - id: escu:etw_registry_disabled
         name: ETW Registry Disabled
+      stories:
+      - Windows Persistence Techniques
+      - Scheduled Tasks
     sentinel:
       total: 8
       shown:
@@ -1185,8 +1185,6 @@ use_cases:
   - T1047
   - T1569.002
   planned_batch: pilot
-  escu_stories:
-  - Active Directory Lateral Movement
   linked:
     escu:
       total: 92
@@ -1207,6 +1205,8 @@ use_cases:
         name: Elevated Group Discovery With Wmic
       - id: escu:executable_file_written_in_administrative_smb_share
         name: Executable File Written in Administrative SMB Share
+      stories:
+      - Active Directory Lateral Movement
     sentinel:
       total: 8
       shown:
@@ -1304,10 +1304,6 @@ use_cases:
   - T1071.004
   - T1568.002
   planned_batch: 3-network-email
-  escu_stories:
-  - Suspicious DNS Traffic
-  - Dynamic DNS
-  - DNS Hijacking
   linked:
     escu:
       total: 19
@@ -1328,6 +1324,10 @@ use_cases:
         name: Suspicious Process DNS Query Known Abuse Web Services
       - id: escu:suspicious_process_with_discord_dns_query
         name: Suspicious Process With Discord DNS Query
+      stories:
+      - Suspicious DNS Traffic
+      - Dynamic DNS
+      - DNS Hijacking
     sentinel:
       total: 40
       shown:
@@ -1387,8 +1387,6 @@ use_cases:
   - T1046
   - T1018
   planned_batch: 3-network-email
-  escu_stories:
-  - Network Discovery
   linked:
     escu:
       total: 16
@@ -1409,6 +1407,8 @@ use_cases:
         name: Internal Horizontal Port Scan NMAP Top 20
       - id: escu:internal_vertical_port_scan
         name: Internal Vertical Port Scan
+      stories:
+      - Network Discovery
     sentinel:
       total: 12
       shown:
@@ -1463,12 +1463,10 @@ use_cases:
   domain: endpoint_windows
   family: correlation
   rank: 23
-  volume_reason: Outsourced IT and vendor support in the region rely on AnyDesk- and TeamViewer-style tools; attackers use the same tools.
+  volume_reason: Outsourced IT and vendor support in the region rely on commercial remote-support tools; attackers use the same tools.
   techniques:
   - T1219
   planned_batch: pilot
-  escu_stories:
-  - Remote Monitoring and Management Software
   linked:
     escu:
       total: 22
@@ -1489,6 +1487,8 @@ use_cases:
         name: Detect Remote Access Software Usage File
       - id: escu:detect_remote_access_software_usage_fileinfo
         name: Detect Remote Access Software Usage FileInfo
+      stories:
+      - Remote Monitoring and Management Software
     sentinel:
       total: 2
       shown:
@@ -1529,7 +1529,7 @@ use_cases:
   domain: network
   family: correlation
   rank: 24
-  volume_reason: Internet-facing VPN, Citrix, Exchange and file-transfer appliances are prime targets, and scanner traffic inflates volume.
+  volume_reason: Internet-facing VPN, remote-access gateways, mail servers and file-transfer appliances are prime targets, and scanner traffic inflates volume.
   techniques:
   - T1190
   planned_batch: 3-network-email
@@ -1612,8 +1612,6 @@ use_cases:
   - T1530
   - T1567.002
   planned_batch: 2-identity-cloud
-  escu_stories:
-  - Office 365 Collection Techniques
   linked:
     escu:
       total: 29
@@ -1634,6 +1632,8 @@ use_cases:
         name: O365 Email Password and Payroll Compromise Behavior
       - id: escu:o365_email_receive_and_hard_delete_takeover_behavior
         name: O365 Email Receive and Hard Delete Takeover Behavior
+      stories:
+      - Office 365 Collection Techniques
     sentinel:
       total: 8
       shown:
@@ -1684,8 +1684,6 @@ use_cases:
   - T1041
   - T1567
   planned_batch: 3-network-email
-  escu_stories:
-  - Data Exfiltration
   linked:
     escu:
       total: 42
@@ -1706,6 +1704,8 @@ use_cases:
         name: AWS Exfiltration via Batch Service
       - id: escu:aws_exfiltration_via_bucket_replication
         name: AWS Exfiltration via Bucket Replication
+      stories:
+      - Data Exfiltration
     sentinel:
       total: 18
       shown:
@@ -1756,7 +1756,7 @@ use_cases:
   covered_detections: 0
   linked_detections: 74
 - id: UC-027
-  name: Cloud provider security alerts (GuardDuty, Defender for Cloud, Security Hub)
+  name: Cloud provider security alerts
   domain: vendor_alert
   family: vendor
   rank: 27
@@ -1769,14 +1769,14 @@ use_cases:
   - Is the actor a sanctioned automation or deployment identity?
   - Does an approved change cover the resource?
   - Is the finding a repeat of an accepted risk?
-  escu_stories:
-  - AWS Security Hub Alerts
   linked:
     escu:
       total: 1
       shown:
       - id: escu:detect_spike_in_aws_security_hub_alerts_for_ec2_instance
         name: Detect Spike in AWS Security Hub Alerts for EC2 Instance
+      stories:
+      - AWS Security Hub Alerts
     sentinel:
       total: 10
       shown:
@@ -2025,8 +2025,6 @@ use_cases:
   - T1071.001
   - T1573
   planned_batch: 3-network-email
-  escu_stories:
-  - Command And Control
   linked:
     escu:
       total: 38
@@ -2047,6 +2045,8 @@ use_cases:
         name: Detect Remote Access Software Usage File
       - id: escu:detect_remote_access_software_usage_fileinfo
         name: Detect Remote Access Software Usage FileInfo
+      stories:
+      - Command And Control
     sentinel:
       total: 12
       shown:
@@ -2104,8 +2104,6 @@ use_cases:
   - T1558.003
   - T1558.004
   planned_batch: 2-identity-cloud
-  escu_stories:
-  - Active Directory Kerberos Attacks
   linked:
     escu:
       total: 41
@@ -2126,6 +2124,8 @@ use_cases:
         name: Kerberos Service Ticket Request Using RC4 Encryption
       - id: escu:kerberos_tgt_request_using_rc4_encryption
         name: Kerberos TGT Request Using RC4 Encryption
+      stories:
+      - Active Directory Kerberos Attacks
     sentinel:
       total: 9
       shown:
@@ -2186,8 +2186,6 @@ use_cases:
   - T1069.002
   - T1482
   planned_batch: pilot
-  escu_stories:
-  - Active Directory Discovery
   linked:
     escu:
       total: 95
@@ -2208,6 +2206,8 @@ use_cases:
         name: Domain Account Discovery with Wmic
       - id: escu:domain_controller_discovery_with_nltest
         name: Domain Controller Discovery with Nltest
+      stories:
+      - Active Directory Discovery
     sentinel:
       total: 109
       shown:
@@ -2273,8 +2273,6 @@ use_cases:
   - T1566.001
   - T1204.002
   planned_batch: pilot
-  escu_stories:
-  - Spearphishing Attachments
   linked:
     escu:
       total: 34
@@ -2295,6 +2293,8 @@ use_cases:
         name: O365 Email Reported By User Found Malicious
       - id: escu:o365_safe_links_detection
         name: O365 Safe Links Detection
+      stories:
+      - Spearphishing Attachments
     sentinel:
       total: 19
       shown:
@@ -2358,8 +2358,6 @@ use_cases:
   - T1548.003
   - T1068
   planned_batch: 4-linux
-  escu_stories:
-  - Linux Privilege Escalation
   linked:
     escu:
       total: 131
@@ -2380,6 +2378,8 @@ use_cases:
         name: Linux Auditd Add User Account
       - id: escu:linux_auditd_add_user_account_type
         name: Linux Auditd Add User Account Type
+      stories:
+      - Linux Privilege Escalation
     sentinel:
       total: 0
       shown: []
@@ -2762,8 +2762,6 @@ use_cases:
   - T1543.002
   - T1098.004
   planned_batch: 4-linux
-  escu_stories:
-  - Linux Persistence Techniques
   linked:
     escu:
       total: 100
@@ -2784,6 +2782,8 @@ use_cases:
         name: Linux Auditd Auditd Service Stop
       - id: escu:linux_auditd_base64_decode_files
         name: Linux Auditd Base64 Decode Files
+      stories:
+      - Linux Persistence Techniques
     sentinel:
       total: 4
       shown:
@@ -2831,8 +2831,6 @@ use_cases:
   - T1098
   - T1098.007
   planned_batch: 2-identity-cloud
-  escu_stories:
-  - Active Directory Privilege Escalation
   linked:
     escu:
       total: 30
@@ -2853,6 +2851,8 @@ use_cases:
         name: Windows AD Privileged Group Modification
       - id: escu:windows_ad_add_self_to_group
         name: Windows AD add Self to Group
+      stories:
+      - Active Directory Privilege Escalation
     sentinel:
       total: 31
       shown:
@@ -2912,8 +2912,6 @@ use_cases:
   - T1685
   - T1685.005
   planned_batch: pilot
-  escu_stories:
-  - Disabling Security Tools
   linked:
     escu:
       total: 75
@@ -2934,6 +2932,8 @@ use_cases:
         name: Cisco IOS XE VTY Access Class Tampering
       - id: escu:disable_defender_antivirus_registry
         name: Disable Defender AntiVirus Registry
+      stories:
+      - Disabling Security Tools
     sentinel:
       total: 13
       shown:
@@ -3000,8 +3000,6 @@ use_cases:
   - T1003.003
   - T1003.006
   planned_batch: pilot
-  escu_stories:
-  - Credential Dumping
   linked:
     escu:
       total: 35
@@ -3022,6 +3020,8 @@ use_cases:
         name: Credential Dumping via Copy Command from Shadow Copy
       - id: escu:credential_dumping_via_symlink_to_shadow_copy
         name: Credential Dumping via Symlink to Shadow Copy
+      stories:
+      - Credential Dumping
     sentinel:
       total: 13
       shown:
@@ -3087,8 +3087,6 @@ use_cases:
   - T1078
   - T1213
   planned_batch: 2-identity-cloud
-  escu_stories:
-  - Insider Threat
   linked:
     escu:
       total: 16
@@ -3109,6 +3107,8 @@ use_cases:
         name: Detect Remote Access Software Usage Traffic
       - id: escu:detect_remote_access_software_usage_url
         name: Detect Remote Access Software Usage URL
+      stories:
+      - Insider Threat
     sentinel:
       total: 9
       shown:
@@ -3154,9 +3154,6 @@ use_cases:
   - T1098.003
   - T1556.009
   planned_batch: 2-identity-cloud
-  escu_stories:
-  - Azure Active Directory Privilege Escalation
-  - Azure Active Directory Persistence
   linked:
     escu:
       total: 45
@@ -3177,6 +3174,9 @@ use_cases:
         name: Azure AD Multiple Service Principals Created by SP
       - id: escu:azure_ad_multiple_service_principals_created_by_user
         name: Azure AD Multiple Service Principals Created by User
+      stories:
+      - Azure Active Directory Privilege Escalation
+      - Azure Active Directory Persistence
     sentinel:
       total: 23
       shown:
@@ -3228,8 +3228,6 @@ use_cases:
   - T1068
   - T1543.003
   planned_batch: pilot
-  escu_stories:
-  - Windows Drivers
   linked:
     escu:
       total: 16
@@ -3250,6 +3248,8 @@ use_cases:
         name: Windows MsMpEng Writing to System32
       - id: escu:windows_registry_certificate_added
         name: Windows Registry Certificate Added
+      stories:
+      - Windows Drivers
     sentinel:
       total: 1
       shown:
@@ -3292,10 +3292,6 @@ use_cases:
   - T1078.004
   - T1098
   planned_batch: 5-aws
-  escu_stories:
-  - AWS IAM Privilege Escalation
-  - AWS User Monitoring
-  - AWS Identity and Access Management Account Takeover
   linked:
     escu:
       total: 44
@@ -3316,6 +3312,10 @@ use_cases:
         name: ASL AWS IAM Assume Role Policy Brute Force
       - id: escu:asl_aws_iam_failure_group_deletion
         name: ASL AWS IAM Failure Group Deletion
+      stories:
+      - AWS IAM Privilege Escalation
+      - AWS User Monitoring
+      - AWS Identity and Access Management Account Takeover
     sentinel:
       total: 22
       shown:
@@ -3368,8 +3368,6 @@ use_cases:
   techniques:
   - T1530
   planned_batch: 5-aws
-  escu_stories:
-  - AWS S3 Bucket Security Monitoring
   linked:
     escu:
       total: 9
@@ -3390,6 +3388,8 @@ use_cases:
         name: ASL AWS Defense Evasion PutBucketLifecycle
       - id: escu:aws_defense_evasion_putbucketlifecycle
         name: AWS Defense Evasion PutBucketLifecycle
+      stories:
+      - AWS S3 Bucket Security Monitoring
     sentinel:
       total: 14
       shown:
@@ -3448,8 +3448,6 @@ use_cases:
   techniques:
   - T1496
   planned_batch: 5-aws
-  escu_stories:
-  - Cloud Cryptomining
   linked:
     escu:
       total: 5
@@ -3464,6 +3462,8 @@ use_cases:
         name: Cloud Compute Instance Created With Previously Unseen Instance Type
       - id: escu:zscaler_cryptominer_downloaded_threat_blocked
         name: Zscaler CryptoMiner Downloaded Threat Blocked
+      stories:
+      - Cloud Cryptomining
     sentinel:
       total: 2
       shown:
@@ -3500,8 +3500,6 @@ use_cases:
   techniques:
   - T1505.003
   planned_batch: 3-network-email
-  escu_stories:
-  - Web Shells
   linked:
     escu:
       total: 3
@@ -3512,6 +3510,8 @@ use_cases:
         name: Windows Potential Web Shell Creation For VMware Workspace ONE
       - id: escu:windows_sharepoint_spinstall0_webshell_file_creation
         name: Windows SharePoint Spinstall0 Webshell File Creation
+      stories:
+      - Web Shells
     sentinel:
       total: 6
       shown:
@@ -3565,8 +3565,6 @@ use_cases:
   - T1490
   - T1486
   planned_batch: pilot
-  escu_stories:
-  - Ransomware
   linked:
     escu:
       total: 91
@@ -3587,6 +3585,8 @@ use_cases:
         name: Windows Event Log Cleared
       - id: escu:allow_file_and_printing_sharing_in_firewall
         name: Allow File And Printing Sharing In Firewall
+      stories:
+      - Ransomware
     sentinel:
       total: 17
       shown:

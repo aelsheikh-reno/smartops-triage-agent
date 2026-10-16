@@ -62,7 +62,10 @@ flow:
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/process_execution_via_wmi.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/process_execution_via_wmi.yml
+  title: Process Execution via WMI
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

@@ -1,6 +1,6 @@
 id: CF-0012
 name: approved_av_exclusions
-description: Defender exclusions IT has approved (paths, processes, extensions, ASR-only exclusions).
+description: Antivirus exclusions IT has approved (paths, processes, extensions, ASR-only exclusions).
 fields:
 - exclusion_type
 - value
@@ -14,4 +14,4 @@ example:
   scope_hosts:
   - sql-*
   ticket: CHG0038812
-version: 1
+version: 2

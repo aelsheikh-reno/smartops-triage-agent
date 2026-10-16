@@ -1,0 +1,35 @@
+# Seed data: loaded into the customer's context store at onboarding, never part of the runtime bundle.
+# Entries stay verified: false until onboarding confirms them against the customer's real binaries.
+fact: CF-0005
+entries:
+- tool_name: Sysinternals Process Explorer
+  process_path_pattern: '*\procexp64.exe'
+  signer: Microsoft Corporation
+  verified: false
+- tool_name: Sysinternals Handle
+  process_path_pattern: '*\handle64.exe'
+  signer: Microsoft Corporation
+  verified: false
+- tool_name: Visual Studio Code
+  process_path_pattern: '*\AppData\Local\Programs\Microsoft VS Code\Code.exe'
+  signer: Microsoft Corporation
+  verified: false
+- tool_name: VMware Tools
+  process_path_pattern: C:\Program Files\VMware\VMware Tools\vmtoolsd.exe
+  signer: VMware, Inc.
+  verified: false
+- tool_name: Cisco Webex
+  process_path_pattern: '*\AppData\Local\WebEx\*'
+  signer: Cisco WebEx LLC
+  verified: false
+- tool_name: Malwarebytes
+  process_path_pattern: C:\Program Files\Malwarebytes\Anti-Malware\*
+  signer: Malwarebytes Inc
+  verified: false
+- tool_name: Steam
+  process_path_pattern: '*\Steam\steamapps\*'
+  signer: Valve Corp.
+  verified: false
+source:
+- SigmaHQ/sigma rules/windows/process_access/proc_access_win_lsass_susp_access_flag.yml (filter_optional_* entries; paths only, signers added by us)
+license: DRL-1.1

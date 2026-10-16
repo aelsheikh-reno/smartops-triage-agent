@@ -25,7 +25,7 @@ required_alert_fields:
 - user
 intent: Detects vssadmin or wmic creating a volume shadow copy from process creation logs.
 fp_quality: vague
-notes: 'ESCU maps this to T1003.003 (NTDS): shadow copies are used to copy ntds.dit. On domain controllers the crown-jewel guardrail blocks auto-close.'
+notes: 'The source rule maps this to T1003.003 (NTDS): shadow copies are used to copy ntds.dit. On domain controllers the crown-jewel guardrail blocks auto-close.'
 explanations:
 - BE-0011
 - BE-0007
@@ -62,7 +62,10 @@ flow:
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/creation_of_shadow_copy.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/creation_of_shadow_copy.yml
+  title: Creation of Shadow Copy
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

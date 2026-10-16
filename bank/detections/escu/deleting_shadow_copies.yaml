@@ -49,7 +49,10 @@ flow:
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: escalate
-source: splunk/security_content detections/endpoint/deleting_shadow_copies.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/deleting_shadow_copies.yml
+  title: Deleting Shadow Copies
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

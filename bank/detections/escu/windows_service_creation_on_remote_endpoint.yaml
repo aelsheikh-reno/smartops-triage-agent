@@ -66,7 +66,10 @@ flow:
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/windows_service_creation_on_remote_endpoint.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/windows_service_creation_on_remote_endpoint.yml
+  title: Windows Service Creation on Remote Endpoint
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

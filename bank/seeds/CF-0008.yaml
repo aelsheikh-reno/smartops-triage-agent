@@ -1,0 +1,39 @@
+# Seed data: loaded into the customer's context store at onboarding, never part of the runtime bundle.
+# Entries stay verified: false until onboarding confirms them against the customer's real binaries.
+fact: CF-0008
+data:
+  signers:
+  - signer: Microsoft Windows
+    verified: false
+  - signer: Microsoft Corporation
+    verified: false
+  excluded_binaries:
+  - adplus.exe
+  - bitsadmin.exe
+  - certutil.exe
+  - cmd.exe
+  - createdump.exe
+  - cscript.exe
+  - dump64.exe
+  - dumpminitool.exe
+  - installutil.exe
+  - msbuild.exe
+  - mshta.exe
+  - msiexec.exe
+  - powershell.exe
+  - procdump.exe
+  - procdump64.exe
+  - pwsh.exe
+  - rdrleakdiag.exe
+  - reg.exe
+  - regasm.exe
+  - regsvcs.exe
+  - regsvr32.exe
+  - rundll32.exe
+  - sqldumper.exe
+  - tttracer.exe
+  - wmic.exe
+  - wscript.exe
+source:
+- LOLBAS-Project/LOLBAS yml (Category Dump; commonly abused Execute/Download binaries)
+license: GPL-3.0

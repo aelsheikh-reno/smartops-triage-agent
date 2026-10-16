@@ -1,11 +1,11 @@
 id: Q-0022
-text: Is every exclusion value in the command line on the customer's approved Defender exclusion list for this host?
+text: Is every exclusion value in the command line on the customer's approved antivirus exclusion list for this host?
 tests: BE-0012
 capability:
   name: list.lookup
   inputs:
     list: CF-0012
-    entity: value:defender_exclusions
+    entity: value:av_exclusions
     host: value:dest
 needs:
   context:
@@ -17,4 +17,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

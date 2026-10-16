@@ -77,7 +77,10 @@ flow:
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/windows_file_download_via_powershell.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/windows_file_download_via_powershell.yml
+  title: Windows File Download Via PowerShell
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

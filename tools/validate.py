@@ -16,25 +16,32 @@ REQUIRED = {
     "rule": ["id", "name", "techniques", "data_source", "sigma_logsource", "sigma_refs", "required_alert_fields", "intent", "fp_quality", "fingerprint", "precedent_validity", "flow", "source", "license", "status", "version"],
     "technique": ["id", "name", "attack_version", "max_mode", "assumed_alert_fields", "fingerprint", "precedent_validity", "flow", "source", "license", "status", "version"],
 }
-# Integration names and query syntax that must not appear outside source/data_source/license fields.
-FORBIDDEN = re.compile(r"\b(splunk|servicenow|jira|crowdstrike|sentinelone|qradar|carbon black|tstats|sourcetype|index\s*=|inputlookup|\|\s*stats)\b", re.I)
-EXEMPT_KEYS = {"source", "data_source", "license", "_file", "seed_from"}
+import export_bundle  # noqa: E402
+import vendors  # noqa: E402
+
+# Query syntax that must never appear in the bank.
+QUERY_SYNTAX = re.compile(r"\b(tstats|sourcetype|inputlookup|index\s*=)|\|\s*stats\b", re.I)
+# The only fields that may name vendors or products: offline provenance and matching metadata.
+EXEMPT_KEYS = {"data_source", "sigma_logsource", "sigma_refs", "source", "license"}
 SIGMA = os.path.join(B.ROOT, "sources/sigma")
 ATTACK = os.path.join(B.ROOT, "sources/attack-stix-data/enterprise-attack/enterprise-attack-20.0.json")
 
 
-def scan_text(obj, path=""):
+def scan_text(obj, path="", exempt=EXEMPT_KEYS):
     if isinstance(obj, dict):
         for k, v in obj.items():
-            if k not in EXEMPT_KEYS:
-                yield from scan_text(v, f"{path}.{k}")
+            if k not in exempt and not k.startswith("_"):
+                yield from scan_text(v, f"{path}.{k}", exempt)
     elif isinstance(obj, list):
         for i, v in enumerate(obj):
-            yield from scan_text(v, f"{path}[{i}]")
+            yield from scan_text(v, f"{path}[{i}]", exempt)
     elif isinstance(obj, str):
-        m = FORBIDDEN.search(obj)
-        if m:
-            yield path, m.group(0)
+        hit = vendors.find(obj)
+        if not hit:
+            m = QUERY_SYNTAX.search(obj)
+            hit = m.group(0) if m else None
+        if hit:
+            yield path, hit
 
 
 def main():
@@ -50,8 +57,8 @@ def main():
                 if k not in doc:
                     err(doc["_file"], f"missing {k}")
     for fid, f in b["facts"].items():
-        if f.get("collected_by") == "bank_seed" and not f.get("license"):
-            err(f["_file"], "bank_seed fact needs license")
+        if f.get("collected_by") == "bank_seed" and not f.get("seed_file"):
+            err(f["_file"], "bank_seed fact needs a seed_file (with source and license)")
 
     for qid, q in b["questions"].items():
         w = q["_file"]
@@ -81,11 +88,48 @@ def main():
         if any(B.has_unverified_seed(b["facts"][l]) for l in B.list_refs(q) if l in b["facts"]):
             info.append(f"{qid}: reads unverified seed data; its closes flag until onboarding verifies the entries")
 
-    for what, coll in (("capabilities", [b["capabilities"]]), ("questions", b["questions"].values()), ("facts", b["facts"].values()),
-                       ("detections", b["detections"].values()), ("techniques", b["techniques"].values())):
-        for doc in coll:
-            for path, hit in scan_text(doc):
-                err(doc.get("_file", "bank/capabilities.yaml"), f"tool name or query syntax '{hit}' at {path}")
+    # Vendor-name guard: every bank file except seed data (onboarding-only, never in the bundle).
+    named = [("bank/capabilities.yaml", b["capabilities"]), ("bank/parameters.yaml", b["parameters"]),
+             ("bank/reason_codes.yaml", list(b["reason_codes"].values())), ("bank/pilot.yaml", b["pilot"])]
+    for coll in ("questions", "explanations", "facts", "detections", "techniques"):
+        named += [(d["_file"], {k: v for k, v in d.items() if k != "seed"}) for d in b[coll].values()]
+    for where, doc in named:
+        for path, hit in scan_text(doc):
+            err(where, f"vendor/product name or query syntax '{hit}' at {path}")
+    for u in b["use_cases"]:   # catalog: 'linked' holds source references, like sigma_refs
+        for path, hit in scan_text(u, exempt=EXEMPT_KEYS | {"linked", "covered_by"}):
+            err(f"bank/use_cases.yaml {u['id']}", f"vendor/product name '{hit}' at {path}")
+    for qid, q in b["questions"].items():
+        hit = vendors.where_phrase(q["text"])
+        if hit:
+            err(q["_file"], f"question text says where or with which tool ('{hit}'); describe only what to check")
+    for fid, s in b["seeds"].items():
+        if fid not in b["facts"]:
+            err(s["_file"], f"seed for unknown fact {fid}")
+        elif b["facts"][fid].get("seed_file") != os.path.relpath(s["_file"], "bank"):
+            err(s["_file"], f"{fid} does not point at this seed file")
+        if not s.get("source") or not s.get("license"):
+            err(s["_file"], "seed needs source and license")
+    for fid, f in b["facts"].items():
+        if f.get("seed_file") and fid not in b["seeds"]:
+            err(f["_file"], f"seed_file {f['seed_file']} missing")
+    # Runtime bundle: no offline metadata keys, no vendor names anywhere.
+    bundle = export_bundle.build(b)
+    def walk(o, path="bundle"):
+        if isinstance(o, dict):
+            for k, v in o.items():
+                if k in export_bundle.OFFLINE_KEYS:
+                    err("runtime bundle", f"offline key {k} at {path}")
+                yield from walk(v, f"{path}.{k}")
+        elif isinstance(o, list):
+            for i, v in enumerate(o):
+                yield from walk(v, f"{path}[{i}]")
+        elif isinstance(o, str):
+            hit = vendors.find(o)
+            if hit:
+                yield path, hit
+    for path, hit in walk(bundle):
+        err("runtime bundle", f"vendor/product name '{hit}' at {path}")
 
     sigma_tax, sigma_ids = None, None
     if os.path.isdir(SIGMA):
@@ -207,6 +251,7 @@ def main():
 
     # use-case catalog
     ucs = b["use_cases"]
+    src_to_bank = B.source_ids(b)
     if ucs:
         ids = [u["id"] for u in ucs]
         if len(set(ids)) != len(ids):
@@ -245,12 +290,12 @@ def main():
             covered = u.get("covered_by", [])
             shown = {x["id"] for blk in u["linked"].values() for x in blk.get("shown", [])}
             for d in covered:
-                if d not in b["detections"]:
+                if d not in src_to_bank:
                     err(w, f"covered_by {d} has no bank flow")
                 if d not in shown:
                     err(w, f"covered_by {d} is not among the shown linked detections")
-            for d in sorted(shown & set(b["detections"]) - set(covered)):
-                err(w, f"{d} has a bank flow but is missing from covered_by")
+            for d in sorted(shown & set(src_to_bank) - set(covered)):
+                err(w, f"{d} has a bank flow ({src_to_bank[d]}) but is missing from covered_by")
             n_linked = sum(blk.get("total", 0) for blk in u["linked"].values())
             if u.get("linked_detections") != n_linked:
                 err(w, f"linked_detections {u.get('linked_detections')} != sum of linked totals {n_linked}")

@@ -1,5 +1,5 @@
 id: Q-0024
-text: Does the driver's SHA256 match a LOLDrivers known vulnerable or malicious sample?
+text: Does the driver's SHA256 match a known vulnerable or malicious driver sample?
 tests: BE-0014
 capability:
   name: file.reputation
@@ -19,4 +19,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

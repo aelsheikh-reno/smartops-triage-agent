@@ -64,7 +64,10 @@ flow:
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
-source: splunk/security_content detections/endpoint/remote_process_instantiation_via_winrm_and_powershell.yml
+source:
+  repo: splunk/security_content
+  path: detections/endpoint/remote_process_instantiation_via_winrm_and_powershell.yml
+  title: Remote Process Instantiation via WinRM and PowerShell
 license: Apache-2.0
 status: draft
-version: 4
+version: 5

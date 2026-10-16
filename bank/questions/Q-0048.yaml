@@ -8,17 +8,18 @@ capability:
     entity:
     - value:file_hash
     - value:file_path
-    host: value:dest
+    host: value:dest_asset_id
 attacker_influence:
   rating: low
-  reason: Matched on hash or signer plus path and host-scoped; analysis hosts are a deliberate, listed exception.
+  reason: Matched on hash or signer plus path and scoped by asset ID, which a host rename cannot change; analysis hosts are a deliberate, listed exception.
 needs:
   context:
   - CF-0023
 source:
 - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+- second review of batch 1 (fc5fc4f), review/changes/batch-1-vendor-alerts.md
 license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

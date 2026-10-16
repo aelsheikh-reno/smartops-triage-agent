@@ -6,5 +6,7 @@ fields:
 - excluded_binaries
 match_rule: valid signature AND signer on the list AND binary not in excluded_binaries. The exclusion list may match on name because it only blocks closure.
 collected_by: customer
-version: 4
+supply_effort: low
+supply_effort_reason: Short list of trusted publishers.
+version: 5
 seed_file: seeds/CF-0008.yaml

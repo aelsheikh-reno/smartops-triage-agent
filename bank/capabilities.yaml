@@ -39,7 +39,7 @@ unverified_seed: A yes whose evidence rests on a seed entry with verified false 
 
 scope:   # enforced by the MCP server, not by the agent
   entities: only entities named in the alert (and derived fields parsed from it)
-  windows: event lookups use the fixed ±24h alert window; baseline and prevalence capabilities use their declared lookbacks, always ending before the alert window, and return counts, not raw events
+  windows: event lookups use the fixed ±24h alert window; baseline and prevalence capabilities use their declared lookbacks, always ending before the alert window (or, for org.prevalence with window alert_window, the alert window itself), and return counts, not raw events
   access: read-only, except list.propose_update, which only creates a proposal
   timeout_seconds: 10            # a timeout is unknown_reason unavailable
   max_calls_per_alert: 6         # includes Q0; alert.field and internal hash or signer resolution do not count; exceeding it flags the alert
@@ -112,10 +112,11 @@ capabilities:
 
   - name: org.prevalence
     kind: baseline
-    inputs: [pattern, min_hosts, min_weeks, of_weeks]
-    yes_means: The pattern occurred on at least min_hosts distinct hosts, and in at least min_weeks of the of_weeks weeks before the alert window.
+    inputs: [pattern, min_hosts, min_weeks, of_weeks, window (optional), exclude_list (optional)]
+    yes_means: The pattern occurred on at least min_hosts distinct hosts, and in at least min_weeks of the of_weeks weeks before the alert window. With window alert_window, it counts hosts inside the alert window instead (min_weeks and of_weeks unused). Hosts in exclude_list (a context list's host scopes, by asset ID) are not counted.
     no_means: It did not.
     escalate_only: false
+    notes: window and exclude_list were added so one question can ask whether a file seen on approved analysis hosts also appeared anywhere else, without a new capability.
 
   - name: change.window
     kind: lookup

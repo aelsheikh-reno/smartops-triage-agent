@@ -7,8 +7,10 @@ fields:
 - owner
 match_rule: content sha256 equal
 collected_by: customer
+supply_effort: low
+supply_effort_reason: Hashes of a few test files.
 example:
   sha256: <hash>
   description: DLP policy test file with synthetic card numbers
   owner: Data protection
-version: 1
+version: 2

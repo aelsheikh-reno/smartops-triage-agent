@@ -58,6 +58,8 @@ def main():
                 if k not in doc:
                     err(doc["_file"], f"missing {k}")
     for fid, f in b["facts"].items():
+        if f.get("supply_effort") not in ("low", "medium", "high") or not str(f.get("supply_effort_reason", "")).strip():
+            err(f["_file"], "supply_effort must be low|medium|high, with a supply_effort_reason")
         if f.get("collected_by") == "bank_seed" and not f.get("seed_file"):
             err(f["_file"], "bank_seed fact needs a seed_file (with source and license)")
 
@@ -377,6 +379,43 @@ def main():
                     else "technique-only" if fallbacks else "none")
             if u.get("coverage") != want:
                 err(w, f"coverage is {u.get('coverage')}, bank says {want}")
+    # Vendor value mapping: a family with any unverified row is capped at Recommend.
+    norm = os.path.join(B.ROOT, "docs", "normalization.md")
+    unverified_families = {}
+    if os.path.exists(norm):
+        families, cols = [], None
+        with open(norm) as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith("## "):
+                    families, cols = [], None
+                elif line.startswith("Families:"):
+                    families = re.findall(r"`([^`]+)`", line)
+                    for fam in families:
+                        if fam not in b["detections"]:
+                            err("docs/normalization.md", f"Families names unknown detection {fam}")
+                elif line.startswith("|") and families:
+                    cells = [c.strip() for c in line.strip("|").split("|")]
+                    if cols is None:
+                        cols = [c.lower() for c in cells]
+                        if "verified" not in cols:
+                            err("docs/normalization.md", f"mapping table for {families} has no Verified column")
+                    elif not set(line) <= set("|-: ") and "verified" in cols:
+                        v = cells[cols.index("verified")].lower()
+                        if v not in ("true", "false"):
+                            err("docs/normalization.md", f"row '{cells[0]} / {cells[1]}' must be verified true or false")
+                        elif v == "false":
+                            for fam in families:
+                                unverified_families.setdefault(fam, []).append(f"{cells[0]}: {cells[1]}")
+    for fam, rows in sorted(unverified_families.items()):
+        d = b["detections"].get(fam)
+        if d and d.get("max_mode") != "recommend":
+            err(d["_file"], f"family mapping has {len(rows)} unverified rows in docs/normalization.md: set max_mode: recommend until they are verified")
+        elif d:
+            info.append(f"{fam}: capped at Recommend until {len(rows)} mapping rows are verified")
+    for did, d in b["detections"].items():
+        if d.get("family") == "vendor" and d.get("max_mode") == "recommend" and did not in unverified_families and not d.get("max_mode_reason"):
+            err(d["_file"], "max_mode recommend needs a max_mode_reason")
     for x in b["pilot"]["detections"]:
         if x["id"] not in b["detections"]:
             err("bank/pilot.yaml", f"{x['id']} has no detection file")

@@ -27,9 +27,9 @@ def main():
         db.execute("INSERT INTO capabilities VALUES (?,?,?,?,?,?)",
                    (c["name"], c["kind"], int(c["escalate_only"]), c["yes_means"], c["no_means"], c.get("flow_use")))
     for f in b["facts"].values():
-        db.execute("INSERT INTO context_facts VALUES (?,?,?,?,?,?,?,?)",
+        db.execute("INSERT INTO context_facts VALUES (?,?,?,?,?,?,?,?,?)",
                    (f["id"], f["name"], f["description"], f["collected_by"], f.get("match_rule"), J(f["fields"]),
-                    int(B.has_unverified_seed(f)), f["version"]))
+                    int(B.has_unverified_seed(f)), f["version"], f["supply_effort"]))
     for e in b["explanations"].values():
         db.execute("INSERT INTO explanations VALUES (?,?,?)", (e["id"], e["name"], e["description"]))
     for r in b["reason_codes"].values():

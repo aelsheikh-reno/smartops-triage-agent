@@ -9,10 +9,12 @@ fields:
 - expires
 match_rule: source address within address_or_range, and at_time inside schedule when one is given
 collected_by: customer
+supply_effort: low
+supply_effort_reason: Static scanner addresses and schedule.
 example:
   address_or_range: 10.20.30.0/28
   owner: Vulnerability management
   purpose: authenticated scanning
   schedule: Sat 22:00-Sun 06:00
   expires: '2027-06-30'
-version: 1
+version: 2

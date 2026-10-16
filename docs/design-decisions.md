@@ -10,7 +10,7 @@ Vendor alerts (AV/EDR, IDS/IPS, WAF, email gateway, DLP, proxy, firewall, device
 
 Mitigated true positive never applies to high-risk families: hack tools, credential dumpers, ransomware, web shells, exploit frameworks, remote access trojans and remote-admin tools, miners, proxyware and cracks. Those escalate even when blocked. Antivirus test files (EICAR and similar) flag; they never close as low risk. Only a block before execution counts: post-execution quarantine or cleaning, a pending reboot and partial remediation answer unknown and flag. Each vendor's action values map to the bank's normalized values in `docs/normalization.md`.
 
-Internal sources: for firewall, IDS and WAF alerts, a source inside the customer's internal networks (a per-customer parameter) never closes on denied, blocked or patched; it flags or escalates. IDS alerts from internal sources flag whatever the answer.
+Internal sources: for firewall, IDS and WAF alerts, a source inside the customer's internal networks (a per-customer parameter) never closes on denied, blocked or patched; it flags or escalates. Tuned-signature and approved-scanner closes still apply to internal sources. In IDS and firewall flows an approved scanner closes only while its scan job targets the alert's destination (unknown flags); in WAF flows it needs a change ticket naming the source.
 
 ## 3. Boundary
 Only entities named in the alert, only alerts that already fired, a fixed ±24h window. Pivoting to other entities or building raw-log timelines is investigation, out of scope.
@@ -42,6 +42,8 @@ The MCP server enforces scope: entities named in the alert only; fixed windows (
 Write-back goes only through `list.propose_update`. Reduce-scrutiny changes (allowlist additions) need human approval with an owner and an expiry. Increase-scrutiny changes (watchlists, removing an allowlist entry) may be automatic; removing an allowlist entry must notify the fact's owner. Enforcement blocks need approval.
 
 Vendor neutrality: the bank holds no vendor or product names. Only offline metadata (`data_source`, `sigma_logsource`, `sigma_refs`, `source`, `license`) may name them, plus seed data under `bank/seeds/`, which is loaded into the customer's context store at onboarding and never reaches the agent. Question text describes what to check about an entity, never where or with which tool. The agent receives a runtime bundle (`tools/export_bundle.py`) built without the offline metadata; the validator fails if the bundle contains an offline key or a vendor name.
+
+Vendor value mappings (`docs/normalization.md`) mark each row verified or not. A detection whose family mapping has any unverified row is capped at Recommend and cannot reach Auto until every row is verified; `validate` enforces this.
 
 Allowlist and "known tool" lookups match on file hash, or code-signing signer plus path, never on name or path alone. Names and paths are attacker-controlled. Where the alert lacks hash or signer, fetch them from the same process's creation event by process GUID; if still unavailable, the answer is unknown.
 

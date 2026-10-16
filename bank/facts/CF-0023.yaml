@@ -6,15 +6,18 @@ fields:
 - sha256
 - signer
 - process_path
-- hosts
+- asset_ids
 - owner
 - expires
-match_rule: 'tool entries: file sha256, or signer plus path, and dest in hosts; analysis_host entries: dest in hosts (any detection on that host)'
+match_rule: 'host scope matched on asset ID (the product''s device or agent ID), never hostname. tool entries: file sha256, or signer plus path, and the host''s asset ID in asset_ids; analysis_host entries:
+  the host''s asset ID in asset_ids (any detection on that host)'
 collected_by: customer
+supply_effort: medium
+supply_effort_reason: Needs hashes or signer plus path, and asset IDs.
 example:
   entry_type: analysis_host
-  hosts:
-  - sandbox-01
+  asset_ids:
+  - 0f3c9a7e-5b21-4c1e-9d0a-7a1e2b3c4d5e
   owner: Threat research
   expires: '2027-06-30'
-version: 1
+version: 3

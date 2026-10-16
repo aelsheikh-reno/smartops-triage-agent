@@ -90,6 +90,14 @@ def main():
     for qid in sorted(used):
         q = b["questions"][qid]
         L.append(f"| {qid} | {q['text']} | `{q['capability']['name']}` | {influence(b, {'question': qid})} | {q['attacker_influence']['reason']} |")
+    facts_used = sorted({l for qid in used for l in B.list_refs(b["questions"][qid])})
+    L += ["", "## Context facts used", "",
+          "Supply effort is how hard a low-maturity customer finds it to provide the fact. These ratings are a draft judgement by the bank author, "
+          "not measured; first onboardings should correct them.", "",
+          "| Fact | Name | Supply effort (draft) | Why |", "|---|---|---|---|"]
+    for fid in facts_used:
+        f = b["facts"][fid]
+        L.append(f"| {fid} | {f['name']} | {f.get('supply_effort', '?')} | {f.get('supply_effort_reason', '')} |")
     L += ["", "## Capabilities used", "", "| Capability | Yes means | Escalate only |", "|---|---|---|"]
     for c in caps_used:
         cap = b["capability_by_name"][c]

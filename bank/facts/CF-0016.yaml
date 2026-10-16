@@ -8,5 +8,7 @@ fields:
 - loldrivers_id
 match_rule: sha256 exact
 collected_by: bank_seed
-version: 2
+supply_effort: low
+supply_effort_reason: Supplied by the bank.
+version: 3
 seed_file: seeds/CF-0016.yaml

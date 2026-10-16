@@ -8,8 +8,10 @@ fields:
 - owner
 match_rule: From domain equals sender_domain (and address when given); only counts with an aligned DMARC pass
 collected_by: customer
+supply_effort: low
+supply_effort_reason: Short list of sender domains.
 example:
   sender_domain: notices.example-payroll.com
   purpose: Monthly payslip notices
   owner: HR
-version: 1
+version: 2

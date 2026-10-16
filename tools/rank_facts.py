@@ -84,6 +84,18 @@ def main():
     print("Top 15 overall:")
     for i, (r, s, t, cap, ref) in enumerate(flat[:15], 1):
         print(f"  {i:>2}. {cap:<16} {ref:<8} {names.get(ref, '')}  rules {r}, sole {s}, tech {t}")
+    effort = dict(db.execute("SELECT id, supply_effort FROM context_facts"))
+    per_fact = collections.defaultdict(lambda: {"rule": set(), "sole": set(), "technique": set(), "caps": set()})
+    for (cap, ref), st in stat.items():
+        if ref in names:
+            pf = per_fact[ref]
+            pf["rule"] |= st["rule"]; pf["sole"] |= st["sole"]; pf["technique"] |= st["technique"]; pf["caps"].add(cap)
+    quick = sorted(((len(v["rule"]), len(v["sole"]), len(v["technique"]), ref) for ref, v in per_fact.items()
+                    if effort.get(ref) == "low" and (v["rule"] or v["technique"])), key=lambda x: (-x[0], -x[1], -x[2], x[3]))
+    print("\nQuick wins first (supply_effort low, by rule-level detections they unblock; onboarding form order for first customers):")
+    print(f"  {'#':>2}  {'fact':<8} {'name':<34} {'rules':>5} {'sole':>4} {'tech':>4}  capability")
+    for i, (r, s, t, ref) in enumerate(quick, 1):
+        print(f"  {i:>2}  {ref:<8} {names[ref]:<34} {r:>5} {s:>4} {t:>4}  {', '.join(sorted(per_fact[ref]['caps']))}")
     print("\nCloses that flag until onboarding verifies seed data (taint propagates through gates):")
     for _, d in B.flows(b):
         t = B.tainted_closes(b, d["flow"])

@@ -8,6 +8,8 @@ fields:
 - start
 - end
 collected_by: customer
+supply_effort: medium
+supply_effort_reason: Per-engagement scope and window, kept current.
 example:
   engagement_id: PT-2026-Q4
   tester_accounts:
@@ -16,4 +18,4 @@ example:
   - pt-laptop-01
   start: 2026-10-12T00:00Z
   end: 2026-10-23T23:59Z
-version: 1
+version: 2

@@ -22,8 +22,8 @@ required_alert_fields:
 - _time
 intent: 'Generic: a DLP control reports regulated data leaving through email, web, cloud storage or print (normalized DLP alert, any product).'
 fp_quality: generic
-notes: 'Held, quarantined and pending-release actions answer unknown and flag: a later release would undo them. High severity or a large record count flags even to approved destinations. The user-to-destination
-  baseline (Q-0040) was removed to stay within five steps.'
+notes: 'Held, quarantined and pending-release actions answer unknown and flag: a later release would undo them. High severity or a large record count flags even to approved destinations. Three or more DLP
+  alerts for the same user in the window escalate. An unblocked match to an unapproved destination flags for an analyst.'
 explanations:
 - BE-0007
 - BE-0019
@@ -71,11 +71,20 @@ flow:
     then: flag
   - question: Q-0064
     then: flag
+  - question: Q-0046
+    then: escalate
+    bind:
+      key: value:src_user
 - step: 2
   question: Q-0061
   on_yes: close:false_positive:known_test_data
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0046
+    then: escalate
+    bind:
+      key: value:src_user
 - step: 3
   question: Q-0062
   on_yes: close:mitigated_true_positive:blocked_by_control
@@ -83,7 +92,7 @@ flow:
   on_unknown: flag
   guards:
   - question: Q-0046
-    then: flag
+    then: escalate
     bind:
       key: value:src_user
 - step: 4
@@ -96,20 +105,28 @@ flow:
     then: flag
   - question: Q-0064
     then: flag
+  - question: Q-0046
+    then: escalate
+    bind:
+      key: value:src_user
 - step: 5
   question: Q-0039
   on_yes: close:benign_true_positive:approved_recipient
-  on_no: escalate
+  on_no: flag
   on_unknown: flag
   guards:
   - question: Q-0063
     then: flag
   - question: Q-0064
     then: flag
+  - question: Q-0046
+    then: escalate
+    bind:
+      key: value:src_user
 source:
   repo: internal
   path: bank/use_cases.yaml#UC-010
   title: DLP policy match
 license: internal
 status: draft
-version: 2
+version: 3

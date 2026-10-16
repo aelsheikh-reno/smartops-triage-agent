@@ -9,6 +9,8 @@ fields:
 - expires
 match_rule: user in users_or_groups, policy matches, destination listed, not expired
 collected_by: customer
+supply_effort: medium
+supply_effort_reason: Needs approval records with owner and expiry.
 example:
   users_or_groups:
   - CORP\TradeFinance
@@ -17,4 +19,4 @@ example:
   - partnerbank.example
   ticket: RISK-0123
   expires: '2027-01-31'
-version: 1
+version: 2

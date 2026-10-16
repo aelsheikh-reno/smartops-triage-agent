@@ -23,6 +23,7 @@ sigma_refs:
   relation: closest
 required_alert_fields:
 - dest
+- dest_asset_id
 - user
 - signature
 - category
@@ -41,7 +42,8 @@ derived_fields:
 intent: 'Generic: an antivirus or EDR product reports a malware detection on a host (normalized malware alert, any product).'
 fp_quality: generic
 notes: High-risk families escalate even when blocked. Only a block before execution can close, and only for low-risk classes; post-execution remediation, pending reboot and partial remediation flag. Test
-  files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail.
+  files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail. Approved tooling and analysis hosts match on asset ID, never hostname; the
+  file's hash seen on any other host in the window escalates.
 explanations:
 - BE-0019
 - BE-0020
@@ -64,6 +66,8 @@ fingerprint_influence:
   file_hash:
     rating: low
     reason: Hash of the file already judged; reproducing it reproduces that file.
+max_mode: recommend
+max_mode_reason: The vendor value mapping for this family has unverified rows (docs/normalization.md); it cannot leave Recommend until every row is verified.
 flow:
 - step: 1
   question: Q-0000
@@ -86,6 +90,9 @@ flow:
   on_yes: close:benign_true_positive:approved_security_tooling
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0073
+    then: escalate
 - step: 3
   question: Q-0029
   on_yes: escalate
@@ -114,4 +121,4 @@ source:
   title: Antivirus or EDR malware detection
 license: internal
 status: draft
-version: 2
+version: 3

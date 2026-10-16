@@ -10,6 +10,8 @@ fields:
 - expires
 match_rule: src within src, dest within dest_scope, port listed
 collected_by: customer
+supply_effort: low
+supply_effort_reason: Static source addresses with destinations and ports.
 example:
   src: 10.40.0.10
   purpose: health check
@@ -19,4 +21,4 @@ example:
   - 8443
   owner: Network operations
   expires: '2027-06-30'
-version: 1
+version: 2

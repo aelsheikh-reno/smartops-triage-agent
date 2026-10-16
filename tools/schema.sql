@@ -15,7 +15,8 @@ CREATE TABLE context_facts (
     match_rule          TEXT,
     fields_json         TEXT NOT NULL,
     has_unverified_seed INTEGER NOT NULL,
-    version             INTEGER NOT NULL
+    version             INTEGER NOT NULL,
+    supply_effort       TEXT NOT NULL      -- low | medium | high: how hard a low-maturity customer finds it to provide
 );
 CREATE TABLE explanations (
     id          TEXT PRIMARY KEY,

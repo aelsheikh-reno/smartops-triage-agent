@@ -34,8 +34,9 @@ fingerprint:
 - dest
 - signature_id
 precedent_validity: 24h
-notes: Internal sources flag whatever the answer. Exploit, intrusion and malware classes flag when blocked; only reconnaissance and policy classes close on a block. Signatures with no vulnerability mapping
-  answer unknown at the vulnerability step and flag.
+notes: Internal sources never close on blocked or patched (not applicable); tuned-signature and approved-scanner closes still apply to them. The approved scanner closes only while its scan job targets this
+  destination (unknown flags). Exploit, intrusion and malware classes flag when blocked; only reconnaissance and policy classes close on a block. Signatures with no vulnerability mapping answer unknown
+  at the vulnerability step and flag.
 precedent_entity: src
 fingerprint_influence:
   src:
@@ -82,8 +83,6 @@ flow:
   on_no: next
   on_unknown: next
   guards:
-  - question: Q-0050
-    then: flag
   - question: Q-0046
     then: flag
     bind:
@@ -99,8 +98,6 @@ flow:
   - question: Q-0052
     when:
     - 'no'
-    then: flag
-  - question: Q-0050
     then: flag
   - question: Q-0046
     then: flag
@@ -148,4 +145,4 @@ source:
   title: IDS or IPS signature alert
 license: internal
 status: draft
-version: 2
+version: 3

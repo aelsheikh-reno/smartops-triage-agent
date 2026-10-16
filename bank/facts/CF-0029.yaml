@@ -6,7 +6,9 @@ fields:
 - role
 match_rule: host listed
 collected_by: customer
+supply_effort: low
+supply_effort_reason: Server list from the asset inventory.
 example:
   host: srv-app-01
   role: application server
-version: 1
+version: 2

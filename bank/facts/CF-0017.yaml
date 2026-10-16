@@ -9,6 +9,8 @@ fields:
 - expires
 match_rule: sha256 exact plus host
 collected_by: customer
+supply_effort: medium
+supply_effort_reason: Needs a hash and host per accepted driver.
 example:
   sha256: <hash>
   hosts:
@@ -16,4 +18,4 @@ example:
   reason: Vendor hardware utility, no patched version
   ticket: RISK-0091
   expires: '2027-03-31'
-version: 1
+version: 2

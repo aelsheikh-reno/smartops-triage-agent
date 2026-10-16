@@ -28,3 +28,11 @@ Applied from the decisions and the external review (first review of draft PR #6)
 - "Regular-interval" repeats for proxy: alert.history counts repeats but does not test periodicity.
 - The DLP user-to-destination baseline (Q-0040) was dropped to make room. An unapproved, unblocked destination now escalates.
 - History on the AV host is not applied to the approved-analysis-host close: sandboxes are expected to produce bursts.
+
+**Second review (of fc5fc4f)**
+- IDS: "internal source → flag" now applies only to the blocked and patched (not applicable) closes and to the precedent close, which rests on a block. Tuned-signature and approved-scanner closes apply to internal sources again. The scanner close still needs scan.job_active = yes for this source and destination at alert time; unknown flags.
+- DLP: an unblocked match to an unapproved destination now flags (was escalate). Three or more DLP alerts for the same user in the window now escalate, on every close (the earlier user-history guard flagged on the block close only).
+- **Q-0040 deleted.** The DLP user-to-destination baseline was never approved and no flow used it.
+- AV: approved tooling and analysis hosts now match on asset ID (`dest_asset_id`), never hostname. A new guard, Q-0073 (`org.prevalence`), escalates if the file's hash was seen in the alert window on any host outside CF-0023's approved hosts. A missing hash answers unknown and flags. `org.prevalence` gained `window` and `exclude_list` inputs for this; no new capability.
+- Vendor value mapping: each row in docs/normalization.md is marked verified true or false; only the Defender rows are true. A detection whose family mapping has unverified rows is capped at Recommend (§4, enforced by validate), so vendor:av_detection has `max_mode: recommend` until the CrowdStrike rows are verified.
+- Every context fact now has `supply_effort` (low, medium or high), a draft judgement listed under "Context facts used". rank_facts prints a "Quick wins first" table of low-effort facts, which is the onboarding form order for first customers.

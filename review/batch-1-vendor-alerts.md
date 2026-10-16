@@ -1,6 +1,6 @@
 # Review packet: batch-1-vendor-alerts
 
-10 detections, 46 distinct questions, 15 capabilities. Everything is `status: draft`.
+10 detections, 47 distinct questions, 16 capabilities. Everything is `status: draft`.
 
 How to read a flow: steps run top to bottom; each answer leads to the next step, a close (with disposition and reason code), an escalation, or a flag to an analyst with no verdict. An unknown answer never closes. Q-0000 (precedent) runs first everywhere.
 
@@ -41,9 +41,17 @@ Applied from the decisions and the external review (first review of draft PR #6)
 - The DLP user-to-destination baseline (Q-0040) was dropped to make room. An unapproved, unblocked destination now escalates.
 - History on the AV host is not applied to the approved-analysis-host close: sandboxes are expected to produce bursts.
 
+**Second review (of fc5fc4f)**
+- IDS: "internal source → flag" now applies only to the blocked and patched (not applicable) closes and to the precedent close, which rests on a block. Tuned-signature and approved-scanner closes apply to internal sources again. The scanner close still needs scan.job_active = yes for this source and destination at alert time; unknown flags.
+- DLP: an unblocked match to an unapproved destination now flags (was escalate). Three or more DLP alerts for the same user in the window now escalate, on every close (the earlier user-history guard flagged on the block close only).
+- **Q-0040 deleted.** The DLP user-to-destination baseline was never approved and no flow used it.
+- AV: approved tooling and analysis hosts now match on asset ID (`dest_asset_id`), never hostname. A new guard, Q-0073 (`org.prevalence`), escalates if the file's hash was seen in the alert window on any host outside CF-0023's approved hosts. A missing hash answers unknown and flags. `org.prevalence` gained `window` and `exclude_list` inputs for this; no new capability.
+- Vendor value mapping: each row in docs/normalization.md is marked verified true or false; only the Defender rows are true. A detection whose family mapping has unverified rows is capped at Recommend (§4, enforced by validate), so vendor:av_detection has `max_mode: recommend` until the CrowdStrike rows are verified.
+- Every context fact now has `supply_effort` (low, medium or high), a draft judgement listed under "Context facts used". rank_facts prints a "Quick wins first" table of low-effort facts, which is the onboarding form order for first customers.
+
 ## Gate results
 
-- validate: PASS (35 detections, 26 technique fallbacks, 73 questions, 29 context facts, 21 capabilities: 0 errors, 1 warnings)
+- validate: PASS (35 detections, 26 technique fallbacks, 73 questions, 29 context facts, 21 capabilities: 0 errors, 0 warnings)
 - attacker influence: PASS (781 close paths checked, 0 failing, in 0 flows; 42 closes flag under the forwarded profile)
 - replay: PASS (replay: 533 TP events in 3 detections; 0 benign/FP closes, 0 mitigated closes -> PASS)
 
@@ -53,14 +61,14 @@ Applied from the decisions and the external review (first review of draft PR #6)
 
 Generic: an antivirus or EDR product reports a malware detection on a host (normalized malware alert, any product).
 
-Note: High-risk families escalate even when blocked. Only a block before execution can close, and only for low-risk classes; post-execution remediation, pending reboot and partial remediation flag. Test files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail.
+Note: High-risk families escalate even when blocked. Only a block before execution can close, and only for low-risk classes; post-execution remediation, pending reboot and partial remediation flag. Test files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail. Approved tooling and analysis hosts match on asset ID, never hostname; the file's hash seen on any other host in the window escalates.
 
-Alert fields: dest, user, signature, category, action, file_hash, file_name, file_path, _time. Fingerprint: dest (low), signature (low), file_hash (low). Precedent entity: dest. Precedent valid for 24h.
+Alert fields: dest, dest_asset_id, user, signature, category, action, file_hash, file_name, file_path, _time. Fingerprint: dest (low), signature (low), file_hash (low). Precedent entity: dest. Precedent valid for 24h.
 
 | Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
 |---|---|---|---|---|---|---|---|
 | 1 | Q-0000: Was an alert with the same fingerprint closed by an original decision (an analyst or a non-precedent flow step) with a recorded reason within the validity window, with the precedent entity not a crown jewel and no other alert on it in the window (a mitigated precedent only when this alert was also blocked)? | `case.precedent` | low | close (inherit: precedent_match) | next step | next step | Q-0045 yes → flag; Q-0029 yes → escalate |
-| 2 | Q-0048: Is the detected file approved security tooling on this host (by hash, or signer plus path), or is the host an approved sandbox or analysis host? | `list.lookup` | low | close (benign true positive: approved_security_tooling) | next step | next step | – |
+| 2 | Q-0048: Is the detected file approved security tooling on this host (by hash, or signer plus path), or is the host an approved sandbox or analysis host? | `list.lookup` | low | close (benign true positive: approved_security_tooling) | next step | next step | Q-0073 yes → escalate |
 | 3 | Q-0029: Is the detection in a high-risk family (hack tool, credential dumper, ransomware, web shell, exploit framework, remote access trojan or remote-admin tool, miner, proxyware, crack)? | `alert.field` | low, forwarded medium | **escalate** | next step | next step | – |
 | 4 | Q-0049: Was the file blocked before it executed? | `alert.field` | low, forwarded medium | next step | **escalate** | flag to analyst | – |
 | 5 | Q-0028: Is the detection in a low-risk class (potentially unwanted software, adware, grayware), and not a test file? | `alert.field` | low, forwarded medium | close (mitigated true positive: blocked_low_risk_detection) | flag to analyst | flag to analyst | Q-0046 yes → flag; Q-0030 yes → escalate |
@@ -69,17 +77,17 @@ Alert fields: dest, user, signature, category, action, file_hash, file_name, fil
 
 Generic: a DLP control reports regulated data leaving through email, web, cloud storage or print (normalized DLP alert, any product).
 
-Note: Held, quarantined and pending-release actions answer unknown and flag: a later release would undo them. High severity or a large record count flags even to approved destinations. The user-to-destination baseline (Q-0040) was removed to stay within five steps.
+Note: Held, quarantined and pending-release actions answer unknown and flag: a later release would undo them. High severity or a large record count flags even to approved destinations. Three or more DLP alerts for the same user in the window escalate. An unblocked match to an unapproved destination flags for an analyst.
 
 Alert fields: src_user, dest, signature, object, action, severity, record_count, object_hash, _time. Fingerprint: src_user (low), signature (low), recipient_domain (high). Precedent entity: src_user. Precedent valid for 24h.
 
 | Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
 |---|---|---|---|---|---|---|---|
-| 1 | Q-0000: Was an alert with the same fingerprint closed by an original decision (an analyst or a non-precedent flow step) with a recorded reason within the validity window, with the precedent entity not a crown jewel and no other alert on it in the window (a mitigated precedent only when this alert was also blocked)? | `case.precedent` | low | close (inherit: precedent_match) | next step | next step | Q-0045 yes → flag; Q-0063 yes → flag; Q-0064 yes → flag |
-| 2 | Q-0061: Is the flagged content a known DLP test file or template, by content hash? | `list.lookup` | low | close (false positive: known_test_data) | next step | next step | – |
-| 3 | Q-0062: Is the DLP action final (blocked or deleted), rather than held, quarantined or pending release? | `alert.field` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | next step | flag to analyst | Q-0046 yes → flag |
-| 4 | Q-0038: Does an approved, unexpired DLP exception cover this user, policy and destination? | `list.lookup` | none | close (benign true positive: approved_business_exception) | next step | next step | Q-0063 yes → flag; Q-0064 yes → flag |
-| 5 | Q-0039: Is the destination an internal or tenant domain, or an approved partner domain for this data class? | `list.lookup` | low | close (benign true positive: approved_recipient) | **escalate** | flag to analyst | Q-0063 yes → flag; Q-0064 yes → flag |
+| 1 | Q-0000: Was an alert with the same fingerprint closed by an original decision (an analyst or a non-precedent flow step) with a recorded reason within the validity window, with the precedent entity not a crown jewel and no other alert on it in the window (a mitigated precedent only when this alert was also blocked)? | `case.precedent` | low | close (inherit: precedent_match) | next step | next step | Q-0045 yes → flag; Q-0063 yes → flag; Q-0064 yes → flag; Q-0046 yes → escalate |
+| 2 | Q-0061: Is the flagged content a known DLP test file or template, by content hash? | `list.lookup` | low | close (false positive: known_test_data) | next step | next step | Q-0046 yes → escalate |
+| 3 | Q-0062: Is the DLP action final (blocked or deleted), rather than held, quarantined or pending release? | `alert.field` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | next step | flag to analyst | Q-0046 yes → escalate |
+| 4 | Q-0038: Does an approved, unexpired DLP exception cover this user, policy and destination? | `list.lookup` | none | close (benign true positive: approved_business_exception) | next step | next step | Q-0063 yes → flag; Q-0064 yes → flag; Q-0046 yes → escalate |
+| 5 | Q-0039: Is the destination an internal or tenant domain, or an approved partner domain for this data class? | `list.lookup` | low | close (benign true positive: approved_recipient) | flag to analyst | flag to analyst | Q-0063 yes → flag; Q-0064 yes → flag; Q-0046 yes → escalate |
 
 ### Email gateway threat alert (`vendor:email_gateway`)
 
@@ -117,15 +125,15 @@ Alert fields: src, dest, dest_port, transport, action, rule, _time. Fingerprint:
 
 Generic: a network IDS or IPS reports a signature match between a source and a target (normalized intrusion alert, any product).
 
-Note: Internal sources flag whatever the answer. Exploit, intrusion and malware classes flag when blocked; only reconnaissance and policy classes close on a block. Signatures with no vulnerability mapping answer unknown at the vulnerability step and flag.
+Note: Internal sources never close on blocked or patched (not applicable); tuned-signature and approved-scanner closes still apply to them. The approved scanner closes only while its scan job targets this destination (unknown flags). Exploit, intrusion and malware classes flag when blocked; only reconnaissance and policy classes close on a block. Signatures with no vulnerability mapping answer unknown at the vulnerability step and flag.
 
 Alert fields: src, dest, dest_port, signature, signature_id, category, severity, action, _time. Fingerprint: src (medium), dest (high), signature_id (high). Precedent entity: src. Precedent valid for 24h.
 
 | Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
 |---|---|---|---|---|---|---|---|
 | 1 | Q-0000: Was an alert with the same fingerprint closed by an original decision (an analyst or a non-precedent flow step) with a recorded reason within the validity window, with the precedent entity not a crown jewel and no other alert on it in the window (a mitigated precedent only when this alert was also blocked)? | `case.precedent` | medium | close (inherit: precedent_match) | next step | next step | Q-0045 yes → flag; Q-0050 yes → flag; Q-0046 yes → flag; Q-0053 yes → flag; Q-0027 no → flag |
-| 2 | Q-0051: Is this signature or rule on the customer's tuned list for this source and destination (or application)? | `list.lookup` | none | close (false positive: tuned_signature) | next step | next step | Q-0050 yes → flag; Q-0046 yes → flag |
-| 3 | Q-0031: Is the source address an approved scanner or authorised tester, inside its scheduled window? | `list.lookup` | low | close (benign true positive: approved_scanner_activity) | next step | next step | Q-0052 no → flag; Q-0050 yes → flag; Q-0046 yes → flag |
+| 2 | Q-0051: Is this signature or rule on the customer's tuned list for this source and destination (or application)? | `list.lookup` | none | close (false positive: tuned_signature) | next step | next step | Q-0046 yes → flag |
+| 3 | Q-0031: Is the source address an approved scanner or authorised tester, inside its scheduled window? | `list.lookup` | low | close (benign true positive: approved_scanner_activity) | next step | next step | Q-0052 no → flag; Q-0046 yes → flag |
 | 4 | Q-0027: Did the control that raised the alert stop the item (the file, connection, request or message) before it took effect? | `alert.field` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | next step | next step | Q-0053 yes → flag; Q-0050 yes → flag; Q-0046 yes → flag; Q-0032 yes → escalate |
 | 5 | Q-0033: Does recent vulnerability data show the target is not affected by the vulnerability this signature targets? | `vuln.not_applicable` | low | close (mitigated true positive: signature_not_applicable) | **escalate** | flag to analyst | Q-0050 yes → flag; Q-0046 yes → flag; Q-0032 yes → escalate |
 
@@ -233,7 +241,7 @@ Alert fields: src, forwarded_for, dest, app, url, http_method, status, signature
 | Q-0045 | Have at least the customer's threshold (default 3) of earlier alerts with this fingerprint already fired in the triage window? | `alert.history` | none | Counts alerts already raised; the activity cannot remove them. |
 | Q-0046 | Have at least the customer's threshold of earlier alerts with the same key already fired in the triage window? | `alert.history` | none | Counts alerts already raised; the activity cannot remove them. |
 | Q-0047 | Has this client hit at least the customer's threshold (default 5) of distinct rules in the triage window? | `alert.history` | none | Counts alerts already raised. |
-| Q-0048 | Is the detected file approved security tooling on this host (by hash, or signer plus path), or is the host an approved sandbox or analysis host? | `list.lookup` | low | Matched on hash or signer plus path and host-scoped; analysis hosts are a deliberate, listed exception. |
+| Q-0048 | Is the detected file approved security tooling on this host (by hash, or signer plus path), or is the host an approved sandbox or analysis host? | `list.lookup` | low | Matched on hash or signer plus path and scoped by asset ID, which a host rename cannot change; analysis hosts are a deliberate, listed exception. |
 | Q-0049 | Was the file blocked before it executed? | `alert.field` | low, forwarded medium | Recorded by the endpoint product. |
 | Q-0050 | Is the source address inside the customer's internal networks? | `alert.field` | none | Compared with the customer's own address plan. |
 | Q-0051 | Is this signature or rule on the customer's tuned list for this source and destination (or application)? | `list.lookup` | none | Approved tuning record with reason and expiry; never matched on signature alone. |
@@ -258,6 +266,28 @@ Alert fields: src, forwarded_for, dest, app, url, http_method, status, signature
 | Q-0070 | Did the message pass DMARC with an aligned SPF or DKIM pass for its From domain? | `email.auth` | low | Authentication is checked by the receiving mail system; a compromised legitimate sender still passes. |
 | Q-0071 | Is the From domain on the customer's approved-sender list? | `list.lookup` | high | The From domain is chosen by the sender; only the authentication guard makes it trustworthy. |
 | Q-0072 | Does the message contain no URL and no attachment? | `alert.field` | low | Counted from the message as delivered. |
+| Q-0073 | Was the file's hash seen in the alert window on any host outside the approved security-tooling and analysis hosts? | `org.prevalence` | low | Hash sightings across the fleet come from sensors; used only as a guard that escalates. |
+
+## Context facts used
+
+Supply effort is how hard a low-maturity customer finds it to provide the fact. These ratings are a draft judgement by the bank author, not measured; first onboardings should correct them.
+
+| Fact | Name | Supply effort (draft) | Why |
+|---|---|---|---|
+| CF-0003 | change_windows | high | Needs change records that name the hosts and the implementer; many customers have none. |
+| CF-0007 | crown_jewel_assets | low | Static list of hosts and accounts. |
+| CF-0018 | approved_scanners | low | Static scanner addresses and schedule. |
+| CF-0019 | phishing_simulations | medium | Needs sending address, campaign marker and window per campaign. |
+| CF-0020 | dlp_exceptions | medium | Needs approval records with owner and expiry. |
+| CF-0021 | approved_partner_domains | low | Static domain list. |
+| CF-0022 | removable_media_exceptions | medium | Needs approval records with device class and expiry. |
+| CF-0023 | approved_security_tooling | medium | Needs hashes or signer plus path, and asset IDs. |
+| CF-0024 | tuned_signatures | medium | Built up from tuning decisions; starts empty. |
+| CF-0025 | approved_infrastructure_sources | low | Static source addresses with destinations and ports. |
+| CF-0026 | approved_senders | low | Short list of sender domains. |
+| CF-0027 | dlp_test_data | low | Hashes of a few test files. |
+| CF-0028 | internal_domains | low | Static domain list. |
+| CF-0029 | server_assets | low | Server list from the asset inventory. |
 
 ## Capabilities used
 
@@ -274,6 +304,7 @@ Alert fields: src, forwarded_for, dest, app, url, http_method, status, signature
 | `file.reputation` | A reputation source (including bank seed lists such as known-bad driver samples) marks the file's hash as known vulnerable or malicious. | yes |
 | `ip.reputation` | A reputation source marks the IP as malicious. | yes |
 | `list.lookup` | The entity matches an entry of the named context list under that list's match_rule (file entities match on sha256, or signer plus path), the entry's host scope includes host when given, and the entry is in force at at_time when the list is time-bound. | no |
+| `org.prevalence` | The pattern occurred on at least min_hosts distinct hosts, and in at least min_weeks of the of_weeks weeks before the alert window. With window alert_window, it counts hosts inside the alert window instead (min_weeks and of_weeks unused). Hosts in exclude_list (a context list's host scopes, by asset ID) are not counted. | no |
 | `scan.job_active` | An approved scan job from this scanner address that targets this address was running at at_time. | no |
 | `traffic.denied_only` | Every connection from src (to dest, when given) in the alert window was denied; none was allowed or established. | no |
 | `url.reputation` | A reputation source marks a URL or domain in the entity as malicious. | yes |

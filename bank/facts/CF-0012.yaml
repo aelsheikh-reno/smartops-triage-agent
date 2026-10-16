@@ -8,10 +8,12 @@ fields:
 - ticket
 match_rule: exact value match after environment-variable expansion; wildcards only where the approved value itself contains them
 collected_by: customer
+supply_effort: medium
+supply_effort_reason: Exclusions are exported from the console, but approvals are often undocumented.
 example:
   exclusion_type: path
   value: D:\SQLData\*.mdf
   scope_hosts:
   - sql-*
   ticket: CHG0038812
-version: 2
+version: 3

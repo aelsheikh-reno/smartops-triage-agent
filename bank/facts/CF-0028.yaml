@@ -6,7 +6,9 @@ fields:
 - tenant
 match_rule: recipient domain equals or is a subdomain of a listed domain
 collected_by: customer
+supply_effort: low
+supply_effort_reason: Static domain list.
 example:
   domain: corp.example
   tenant: primary
-version: 1
+version: 2

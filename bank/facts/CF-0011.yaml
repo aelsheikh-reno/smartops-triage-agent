@@ -8,9 +8,11 @@ fields:
 - sha256
 match_rule: sha256, or signer plus process_path. Never name or path alone.
 collected_by: customer
+supply_effort: medium
+supply_effort_reason: Needs signer plus path for each backup tool.
 example:
   tool_name: Example backup agent
   process_path: C:\Program Files\ExampleBackup\backup-service.exe
   signer: Example Backup Ltd
   sha256: null
-version: 2
+version: 3

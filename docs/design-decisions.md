@@ -1,0 +1,60 @@
+# SmartOps Triage Agent: Design Decisions
+
+## 1. What triage is
+A fast, time-boxed first pass on an alert: is it worth investigating, and how urgently? It does not prove malice; that is investigation. Two separate calls: verdict (malicious or benign) and priority (how fast). Asset criticality changes priority and autonomy, never the verdict.
+
+## 2. Method
+For each detection, list its 2–3 most common benign explanations and test only those, as yes/no questions. One holds → close as false positive or benign true positive, with a reason code. None holds → escalate. Missing answer → unknown → analyst decides.
+
+## 3. Boundary
+Only entities named in the alert, only alerts that already fired, a fixed ±24h window. Pivoting to other entities or building raw-log timelines is investigation, out of scope.
+
+## 4. Questions are portable, answers are local
+Every question is answerable by one lookup against:
+- Context store: assets, identities, allowlists, VPN ranges, sanctioned tools, change windows (customer-provided or mined from Splunk)
+- Baseline engine: "is this normal for this entity?" yes/no, from the customer's logs
+- Case memory: precedents (past closures with reasons)
+- Alert field: values in the notable itself
+
+## 5. Bank structure
+- Two levels: rule-level flows per known detection (ESCU, Sigma, Elastic) and technique-level fallback flows per ATT&CK technique.
+- Technique-only rules are capped at Recommend mode.
+- No questions (usually a custom rule): no verdict; the agent sends a context pack, the analyst triages, curation drafts questions from the analyst's reasoning, and the rule starts in Shadow.
+- Flows: at most 5 steps, early exit; each step has on_yes / on_no / on_unknown → next | close:<disposition>:<reason_code> | escalate | flag.
+- Q0 precedent check first in every flow: same fingerprint (rule + entity + key attributes) closed with a recorded reason within the validity window (e.g. 24h–7d), not a crown jewel, no other alert on the entity in the window → close citing the precedent. In Shadow and Recommend the precedent is shown to the analyst instead.
+- Two layers: public base bank plus a customer layer (runbooks, mined closures) that overrides base entries by ID. Mined closures are evidence, not truth, and go through curation.
+
+## 6. Repeat alerts
+An alert matching an open case's fingerprint is attached to it without new triage; re-triage only if the count spikes or a new attribute value appears. A rule firing hundreds of times on one entity becomes a tuning ticket (throttling or risk-based alerting).
+
+## 7. Storage
+- Question bank: YAML in git, loaded into SQL tables. Exact, repeatable, auditable, reviewed through PRs.
+- Custom-rule matching: pgvector in the same Postgres, offline only.
+- Investigation (later): graph database. The YAML already has typed nodes, typed edges and stable IDs, so it loads into a graph DB unchanged.
+- Runtime is a loop: load the detection's steps, answer each with one lookup, follow yes/no/unknown, stop at the first close or escalate.
+
+## 8. Rule intent service (custom rules)
+Runs once per rule, at onboarding and on rule change, never per alert:
+1. Parse the SPL (data source, fields, filters, thresholds, entity); write intent as "Detects <behavior> on <entity> from <data source>".
+2. Classify: threat, policy/compliance, or operational noise. Only threat rules go to triage.
+3. LLM proposes ATT&CK techniques; vector search returns the 3 closest known detections; trust where both agree.
+4. Strong match → inherit questions as drafts, start in Shadow. Technique only → capped at Recommend. Neither → context pack.
+5. Drop inherited questions needing alert fields the rule doesn't produce.
+6. A senior analyst approves the mapping once; stored in SQL. No vector search at runtime.
+
+## 9. Model split
+Offline: a frontier model drafts questions from public sources; a senior analyst approves. Runtime: Cisco Foundation-sec-8B only selects and answers approved questions; anything new it proposes goes to curation as a draft.
+
+## 10. Modes and guardrails
+Per detection: Shadow (verdict hidden) → Recommend (analyst accepts or overrides) → Auto (close benign, escalate suspicious). Suggested promotion threshold: ≥95% agreement over 50+ alerts. Permanent: no auto-close on crown jewels; audit 5–10% of auto-closures; escalation is never suppressed.
+
+## 11. Sources and licenses
+- splunk/security_content (ESCU), Apache-2.0: known_false_positives, ATT&CK mapping, data source
+- elastic/detection-rules, Elastic License 2.0: "Triage and analysis", "False positive analysis"
+- SigmaHQ/sigma, Detection Rule License (attribution): falsepositives
+- LOLBAS, GTFOBins, LOLDrivers: legitimate uses of binaries and drivers
+- MITRE ATT&CK v18 (mitre-attack/attack-stix-data): techniques, detection strategies
+Record source and license on every question; non-Apache text needs legal review before commercial use.
+
+## 12. Later phases
+Cross-customer analytics with anonymized counts only (question ID, outcome, sector). Investigation agent using an attack-path graph (e.g. MITRE Attack Flow) and a per-incident evidence graph.

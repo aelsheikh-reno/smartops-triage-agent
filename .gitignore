@@ -1,0 +1,5 @@
+sources/
+*.sqlite
+*.db
+__pycache__/
+.venv/

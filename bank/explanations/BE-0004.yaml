@@ -1,0 +1,8 @@
+id: BE-0004
+name: Sanctioned tool reads LSASS
+description: A customer-approved security, backup or monitoring tool opens LSASS in user context as part of its normal function.
+source:
+  - splunk/security_content detections/endpoint/windows_possible_credential_dumping.yml (known_false_positives)
+  - SigmaHQ/sigma rules/windows/process_access/proc_access_win_lsass_susp_access_flag.yml (falsepositives)
+license: [Apache-2.0, DRL-1.1]
+version: 1

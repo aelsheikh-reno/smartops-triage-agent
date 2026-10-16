@@ -1,0 +1,8 @@
+id: BE-0007
+name: Established behavior
+description: The same entity has done the same thing routinely before the alert window, so the activity is part of the host's or user's normal pattern.
+source:
+  - elastic/detection-rules rules/windows/execution_psexec_lateral_movement_command.toml (false_positives: baseline your environment)
+  - splunk/security_content detections/endpoint/remote_process_instantiation_via_winrm_and_powershell.yml (known_false_positives: limited set of hosts or users)
+license: [Elastic-2.0, Apache-2.0]
+version: 1

@@ -1,0 +1,7 @@
+id: CF-0001
+name: sanctioned_deployment_tools
+description: Software deployment and endpoint management tools the customer uses to run commands remotely (e.g. SCCM/MECM, PDQ Deploy, Intune, Tanium, Ansible).
+fields: [tool_name, process_name, process_path, signer]
+collected_by: customer   # onboarding questionnaire; can be seeded from Splunk process data
+example: {tool_name: PDQ Deploy, process_name: PDQDeployRunner-1.exe, process_path: 'C:\Windows\AdminArsenal\PDQDeployRunner\*', signer: PDQ.com Corporation}
+version: 1

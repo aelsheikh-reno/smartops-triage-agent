@@ -1,0 +1,9 @@
+id: BE-0006
+name: Sanctioned remote access tool
+description: IT support uses an approved remote access or RMM product, installed and launched the normal way.
+source:
+  - splunk/security_content detections/endpoint/detect_remote_access_software_usage_process.yml (known_false_positives)
+  - elastic/detection-rules rules/windows/command_and_control_new_terms_rmm_signer.toml (False positive analysis)
+  - SigmaHQ/sigma rules/windows/process_creation/proc_creation_win_remote_access_tools_*.yml (falsepositives)
+license: [Apache-2.0, Elastic-2.0, DRL-1.1]
+version: 1

@@ -1,0 +1,14 @@
+id: Q-0000
+text: Was an alert with the same fingerprint closed with a recorded reason within the validity window, on an entity that is not a crown jewel, with no other alert on the entity in the window?
+tests: BE-0000
+answer_source: case_memory
+needs:
+  context: [CF-0007]
+  alert_fields: [fingerprint]
+notes: In Shadow and Recommend the precedent is shown to the analyst instead of closing. Validity window is set per detection (default 72h).
+source: [design-decisions.md §5]
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

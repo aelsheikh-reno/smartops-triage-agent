@@ -1,0 +1,7 @@
+id: CF-0002
+name: it_admin_accounts
+description: Accounts (or AD groups) belonging to IT and server administrators who are expected to use remote administration tools.
+fields: [account_or_group, type, owner_team]
+collected_by: customer   # can be mined from AD group membership (Domain Admins, Server Admins, helpdesk groups)
+example: {account_or_group: 'CORP\IT-ServerAdmins', type: group, owner_team: Infrastructure}
+version: 1

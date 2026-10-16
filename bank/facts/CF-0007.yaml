@@ -1,0 +1,7 @@
+id: CF-0007
+name: crown_jewel_assets
+description: Hosts and accounts the customer marks as most critical (domain controllers, PKI, payment systems, executives). Used by Q0 and by the runtime guardrail that blocks auto-close.
+fields: [entity, entity_type, reason]
+collected_by: customer   # can be seeded from Splunk ES asset and identity priority = critical
+example: {entity: dc01.corp.local, entity_type: host, reason: Domain controller}
+version: 1

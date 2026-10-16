@@ -1,0 +1,17 @@
+id: CF-0005
+name: known_benign_lsass_accessors
+description: Publicly documented benign binaries that open LSASS in user context, with their expected install paths. Seeded by the bank; the customer can extend it.
+fields: [tool_name, process_path_pattern]
+collected_by: bank_seed
+seed:
+  - {tool_name: Sysinternals Process Explorer, process_path_pattern: '*\procexp64.exe'}
+  - {tool_name: Sysinternals Handle, process_path_pattern: '*\handle64.exe'}
+  - {tool_name: Visual Studio Code, process_path_pattern: '*\AppData\Local\Programs\Microsoft VS Code\Code.exe'}
+  - {tool_name: VMware Tools, process_path_pattern: 'C:\Program Files\VMware\VMware Tools\vmtoolsd.exe'}
+  - {tool_name: Cisco Webex, process_path_pattern: '*\AppData\Local\WebEx\*'}
+  - {tool_name: Malwarebytes, process_path_pattern: 'C:\Program Files\Malwarebytes\Anti-Malware\*'}
+  - {tool_name: Steam, process_path_pattern: '*\Steam\steamapps\*'}
+source:
+  - SigmaHQ/sigma rules/windows/process_access/proc_access_win_lsass_susp_access_flag.yml (filter_optional_* entries)
+license: DRL-1.1   # facts derived from Sigma filters; attribution required
+version: 1

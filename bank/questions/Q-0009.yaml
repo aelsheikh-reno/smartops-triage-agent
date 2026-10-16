@@ -1,0 +1,14 @@
+id: Q-0009
+text: Was the remote access tool launched by one of its expected parents (its own service or a sanctioned deployment tool) rather than a browser, mail client, archive tool or script host?
+tests: BE-0006
+answer_source: context
+needs:
+  context: [CF-0006, CF-0001]
+  alert_fields: [parent_process_name, parent_process_path]
+source:
+  - elastic/detection-rules rules/windows/command_and_control_new_terms_rmm_signer.toml (parent and session context)
+license: [Elastic-2.0]
+text_origin: original
+legal_review: false
+status: draft
+version: 1

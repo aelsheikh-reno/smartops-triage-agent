@@ -1,0 +1,7 @@
+id: CF-0006
+name: sanctioned_remote_access_tools
+description: Remote access and RMM tools the customer has approved, with expected install path, signer, and the parent processes that normally launch them.
+fields: [tool_name, process_name, process_path, signer, expected_parents]
+collected_by: customer   # can be seeded from ESCU remote_access_software lookup matches seen in the customer's data
+example: {tool_name: ScreenConnect, process_name: ScreenConnect.ClientService.exe, process_path: 'C:\Program Files (x86)\ScreenConnect Client (*)\*', signer: ConnectWise LLC, expected_parents: [services.exe]}
+version: 1

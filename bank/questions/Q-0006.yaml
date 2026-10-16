@@ -1,0 +1,14 @@
+id: Q-0006
+text: Does the process that opened LSASS match a known benign LSASS accessor at its expected install path?
+tests: BE-0005
+answer_source: context
+needs:
+  context: [CF-0005]
+  alert_fields: [SourceImage]
+source:
+  - SigmaHQ/sigma rules/windows/process_access/proc_access_win_lsass_susp_access_flag.yml
+license: [DRL-1.1]
+text_origin: original
+legal_review: false
+status: draft
+version: 1

@@ -1,12 +1,12 @@
 id: Q-0004
-text: Does an approved change ticket or maintenance window cover this host or user at the alert time?
+text: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer?
 tests: BE-0003
 capability:
   name: change.window
   inputs:
     entities:
     - value:dest
-    - value:user
+    user: value:user
     at_time: value:_time
 needs:
   context:
@@ -20,4 +20,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

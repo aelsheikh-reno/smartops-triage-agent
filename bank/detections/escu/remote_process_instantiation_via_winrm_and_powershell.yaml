@@ -7,6 +7,8 @@ data_source:
 - Sysmon EventID 1
 - Windows Event Log Security 4688
 - CrowdStrike ProcessRollup2
+telemetry_class:
+- process_creation
 required_alert_fields:
 - _time
 - dest
@@ -60,4 +62,4 @@ flow:
 source: splunk/security_content detections/endpoint/remote_process_instantiation_via_winrm_and_powershell.yml
 license: Apache-2.0
 status: draft
-version: 2
+version: 3

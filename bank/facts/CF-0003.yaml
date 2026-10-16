@@ -1,7 +1,23 @@
 id: CF-0003
 name: change_windows
-description: Approved change tickets and maintenance windows, with the hosts and accounts they cover and their start and end times.
-fields: [ticket_id, hosts, accounts, start, end, summary]
-collected_by: customer   # change-management system via the MCP server, or a scheduled export
-example: {ticket_id: CHG0041123, hosts: [srv-app-01], accounts: ['CORP\jsmith-adm'], start: '2026-10-16T20:00Z', end: '2026-10-16T23:00Z', summary: App patching}
-version: 1
+description: Approved change tickets and maintenance windows, with the hosts they cover, the accounts or groups that implement them, and their start and end times.
+fields:
+- ticket_id
+- hosts
+- implementers
+- start
+- end
+- summary
+match_rule: host in hosts, at_time within start..end, and user listed in implementers directly or through group membership
+collected_by: customer
+example:
+  ticket_id: CHG0041123
+  hosts:
+  - srv-app-01
+  implementers:
+  - CORP\jsmith-adm
+  - CORP\IT-AppPatching
+  start: 2026-10-16T20:00Z
+  end: 2026-10-16T23:00Z
+  summary: App patching
+version: 2

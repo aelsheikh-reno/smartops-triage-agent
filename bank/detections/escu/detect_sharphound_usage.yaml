@@ -11,6 +11,8 @@ data_source:
 - Sysmon EventID 1
 - Windows Event Log Security 4688
 - CrowdStrike ProcessRollup2
+telemetry_class:
+- process_creation
 required_alert_fields:
 - _time
 - dest
@@ -39,4 +41,4 @@ flow:
 source: splunk/security_content detections/endpoint/detect_sharphound_usage.yml
 license: Apache-2.0
 status: draft
-version: 2
+version: 3

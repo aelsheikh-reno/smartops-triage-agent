@@ -6,6 +6,8 @@ techniques:
 data_source:
 - Windows Event Log Security 4732
 - Windows Event Log Security 4720
+telemetry_class:
+- account_management
 required_alert_fields:
 - _time
 - dest
@@ -46,10 +48,8 @@ flow:
   on_no: escalate
   on_unknown: flag
   bind:
-    entities:
-    - value:dest
-    - value:src_user
+    user: value:src_user
 source: splunk/security_content detections/endpoint/detect_new_local_admin_account.yml
 license: Apache-2.0
 status: draft
-version: 2
+version: 3

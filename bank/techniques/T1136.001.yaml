@@ -37,10 +37,8 @@ flow:
   on_no: escalate
   on_unknown: flag
   bind:
-    entities:
-    - value:dest
-    - value:src_user
+    user: value:src_user
 source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
 license: MITRE ATT&CK Terms of Use
 status: draft
-version: 2
+version: 3

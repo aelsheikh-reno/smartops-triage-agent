@@ -75,6 +75,13 @@ def main():
     print("Top 15 overall:")
     for i, (r, s, t, cap, ref) in enumerate(flat[:15], 1):
         print(f"  {i:>2}. {cap:<16} {ref:<8} {names.get(ref, '')}  rules {r}, sole {s}, tech {t}")
+    b = B.load()
+    print("\nCloses that flag until onboarding verifies seed data (taint propagates through gates):")
+    for _, d in B.flows(b):
+        t = B.tainted_closes(b, d["flow"])
+        if t:
+            total_closes = len(B.close_paths(b, d["flow"]))
+            print(f"  {d['id']}: {len(t)} of {total_closes} closes, via step(s) {sorted({s for _, _, bad in t for s in bad})}")
     if no_close:
         print("\nRule-level detections with no close outside Q0:", ", ".join(no_close))
 

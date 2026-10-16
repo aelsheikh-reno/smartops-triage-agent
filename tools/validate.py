@@ -12,12 +12,14 @@ REQUIRED = {
     "question": ["id", "text", "tests", "capability", "source", "license", "text_origin", "legal_review", "status", "version"],
     "explanation": ["id", "name", "description", "source", "license", "version"],
     "fact": ["id", "name", "description", "fields", "collected_by", "version"],
-    "rule": ["id", "name", "techniques", "data_source", "required_alert_fields", "intent", "fp_quality", "fingerprint", "precedent_validity", "flow", "source", "license", "status", "version"],
+    "rule": ["id", "name", "techniques", "data_source", "telemetry_class", "required_alert_fields", "intent", "fp_quality", "fingerprint", "precedent_validity", "flow", "source", "license", "status", "version"],
     "technique": ["id", "name", "attack_version", "max_mode", "assumed_alert_fields", "fingerprint", "precedent_validity", "flow", "source", "license", "status", "version"],
 }
 # Integration names and query syntax that must not appear outside source/data_source/license fields.
 FORBIDDEN = re.compile(r"\b(splunk|servicenow|jira|crowdstrike|sentinelone|qradar|carbon black|tstats|sourcetype|index\s*=|inputlookup|\|\s*stats)\b", re.I)
 EXEMPT_KEYS = {"source", "data_source", "license", "_file", "seed_from"}
+TELEMETRY = {"process_creation", "process_access", "registry", "image_load", "driver_load", "file", "network", "dns",
+             "authentication", "account_management", "log_management", "service_install"}
 ATTACK = os.path.join(B.ROOT, "sources/attack-stix-data/enterprise-attack/enterprise-attack-20.0.json")
 
 
@@ -108,6 +110,11 @@ def main():
                 err(w, f"technique {t} not active in ATT&CK v20.0")
             if kind == "rule" and t not in b["techniques"]:
                 warnings.append(f"{d['id']}: no technique fallback for {t}")
+        for tc in d.get("telemetry_class", []):
+            if tc not in TELEMETRY:
+                err(w, f"unknown telemetry_class {tc}")
+        for step, edge, bad in B.tainted_closes(b, d.get("flow", [])):
+            info.append(f"{d['id']}: close at step {step} ({edge}) flags until onboarding verifies seed data used at step(s) {bad}")
         for e in d.get("explanations", []):
             if e not in b["explanations"]:
                 err(w, f"unknown explanation {e}")

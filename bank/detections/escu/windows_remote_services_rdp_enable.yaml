@@ -5,6 +5,8 @@ techniques:
 - T1021.001
 data_source:
 - Sysmon EventID 13
+telemetry_class:
+- registry
 required_alert_fields:
 - _time
 - dest
@@ -52,4 +54,4 @@ flow:
 source: splunk/security_content detections/endpoint/windows_remote_services_rdp_enable.yml
 license: Apache-2.0
 status: draft
-version: 2
+version: 3

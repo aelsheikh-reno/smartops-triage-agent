@@ -9,6 +9,9 @@ data_source:
 - Windows Event Log Security 4688
 - CrowdStrike ProcessRollup2
 - Cisco Network Visibility Module Flow Data
+telemetry_class:
+- process_creation
+- network
 required_alert_fields:
 - _time
 - dest
@@ -68,4 +71,4 @@ flow:
 source: splunk/security_content detections/endpoint/windows_file_download_via_powershell.yml
 license: Apache-2.0
 status: draft
-version: 2
+version: 3

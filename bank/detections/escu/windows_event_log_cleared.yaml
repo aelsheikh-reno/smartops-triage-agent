@@ -6,6 +6,8 @@ techniques:
 data_source:
 - Windows Event Log Security 1102
 - Windows Event Log System 104
+telemetry_class:
+- log_management
 required_alert_fields:
 - EventCode
 - _time
@@ -40,4 +42,4 @@ flow:
 source: splunk/security_content detections/endpoint/windows_event_log_cleared.yml
 license: Apache-2.0
 status: draft
-version: 2
+version: 3

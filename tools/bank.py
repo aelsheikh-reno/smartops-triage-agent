@@ -81,6 +81,36 @@ def list_refs(question):
     return ids
 
 
+def close_paths(b, flow):
+    """For each non-precedent close: (step, edge, steps whose answer it rests on).
+
+    A close at step k rests on step k and on every earlier gate step (yes goes on;
+    no and unknown both stop the flow), since only a yes gets past a gate.
+    """
+    paths, gates = [], []
+    for st in flow[1:]:
+        for edge in ("on_yes", "on_no"):
+            if st[edge].startswith("close"):
+                paths.append((st["step"], edge, gates + [st["step"]]))
+        if st["on_yes"] == "next" and st["on_no"] != "next" and st["on_unknown"] != "next":
+            gates.append(st["step"])
+    return paths
+
+
+def tainted_closes(b, flow):
+    """Closes that flag until onboarding: reached through a yes that reads unverified seed data."""
+    unverified = {fid for fid, f in b["facts"].items() if has_unverified_seed(f)}
+    by_step = {st["step"]: st for st in flow}
+    out = []
+    for step, edge, rests_on in close_paths(b, flow):
+        bad = [s for s in rests_on
+               if (s != step or edge == "on_yes")
+               and set(list_refs(b["questions"][by_step[s]["question"]])) & unverified]
+        if bad:
+            out.append((step, edge, bad))
+    return out
+
+
 def has_unverified_seed(fact):
     def scan(o):
         if isinstance(o, dict):

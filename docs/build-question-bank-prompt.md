@@ -25,3 +25,5 @@ Expansion batches (after the pilot), chosen from `bank/use_cases.yaml` by rank, 
 3. Network and email.
 4. Linux.
 5. Cloud workloads (AWS).
+
+From batch 2, the replay gate also runs against a synthetic, fully onboarded customer (plausible allowlists, baselines, change windows and precedents), not only the clean-room customer, so it tests what an attacker can make the populated lists say.

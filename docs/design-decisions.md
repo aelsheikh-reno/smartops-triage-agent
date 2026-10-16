@@ -16,6 +16,20 @@ Every question is answerable by one lookup against:
 - Case memory: precedents (past closures with reasons)
 - Alert field: values in the notable itself
 
+### Capabilities and the MCP layer
+The agent never knows which tools a customer has. Each question declares exactly one capability (`bank/capabilities.yaml`, e.g. `list.lookup`, `entity.baseline`, `org.prevalence`, `change.window`, `file.signer`, `file.reputation`). The agent calls an MCP server, which routes the capability to whatever tools exist for that customer; any of them may be disconnected. The bank holds no tool names or SPL.
+
+Answer contract: `answer` (yes | no | unknown), `unknown_reason` (no_capability | unavailable | no_data), `evidence`, `source_tool`, `observed_at`.
+- no_data: follow the step's `on_unknown`.
+- unavailable (tool down, timeout): never closes; the alert is flagged and the detection runs in Recommend until the capability is healthy again.
+- no_capability: resolved per customer at onboarding. The question is disabled, its step follows `on_unknown` without a call, and it is listed in the coverage report.
+- A yes that rests on seed data with `verified: false` cannot close; the close becomes a flag until onboarding verifies the entry.
+- Reputation and anomaly capabilities are escalate_only: a hit escalates, a miss is never benign evidence.
+
+The MCP server enforces scope: entities named in the alert only; fixed windows (±24h for event lookups; baselines and prevalence use their declared lookbacks and return counts, not raw events); read-only; a per-call timeout (timeout = unavailable); at most 6 calls per alert including Q0. Resolving a file's hash or signer inside a lookup is the server's job and does not count against the budget.
+
+Write-back goes only through `list.propose_update`. Reduce-scrutiny changes (allowlist additions) need human approval with an owner and an expiry. Increase-scrutiny changes (watchlists, removing an allowlist entry) may be automatic. Enforcement blocks need approval.
+
 Allowlist and "known tool" lookups match on file hash, or code-signing signer plus path, never on name or path alone. Names and paths are attacker-controlled. Where the alert lacks hash or signer, fetch them from the same process's creation event by process GUID; if still unavailable, the answer is unknown.
 
 ## 5. Bank structure
@@ -48,7 +62,7 @@ Runs once per rule, at onboarding and on rule change, never per alert:
 Offline: a frontier model drafts questions from public sources; a senior analyst approves. Runtime: Cisco Foundation-sec-8B only selects and answers approved questions; anything new it proposes goes to curation as a draft.
 
 ## 10. Modes and guardrails
-Per detection: Shadow (verdict hidden) → Recommend (analyst accepts or overrides) → Auto (close benign, escalate suspicious). Suggested promotion threshold: ≥95% agreement over 50+ alerts. Permanent: no auto-close on crown jewels; audit 5–10% of auto-closures; escalation is never suppressed.
+Per detection: Shadow (verdict hidden) → Recommend (analyst accepts or overrides) → Auto (close benign, escalate suspicious). Suggested promotion threshold: ≥95% agreement over 50+ alerts. Auto mode requires process telemetry with hashes (Sysmon or EDR); customers on Security 4688 only stay in Recommend. Permanent: no auto-close on crown jewels; audit 5–10% of auto-closures; escalation is never suppressed.
 
 ## 11. Sources and licenses
 - splunk/security_content (ESCU), Apache-2.0: known_false_positives, ATT&CK mapping, data source

@@ -6,9 +6,10 @@ Sources: shallow-clone splunk/security_content, elastic/detection-rules, SigmaHQ
 
 Layout:
 - bank/questions/Q-*.yaml, bank/detections/ (metadata + flow), bank/techniques/T*.yaml, bank/explanations/BE-*.yaml, bank/facts/CF-*.yaml, bank/reason_codes.yaml, bank/overlays/customer/ (empty slot)
-- tools/validate (refs exist, ≤5 steps, valid outcomes, required fields, license), tools/load_sql (YAML → SQLite, Postgres-compatible: detections, questions, flow_steps, question_needs, context_facts), tools/rank_facts (facts ranked by detections unblocked)
+- bank/capabilities.yaml (capabilities, answer contract, MCP scope, write-back policy)
+- tools/validate (refs exist, ≤5 steps, valid outcomes, required fields, license, capability rules), tools/load_sql (YAML → SQLite, Postgres-compatible: detections, questions, flow_steps, question_needs, context_facts), tools/rank_facts (facts ranked by detections unblocked)
 
-Question fields: id, text, tests, answer_source, needs, source, license, status, version.
+Question fields: id, text, tests, capability (exactly one, from bank/capabilities.yaml), needs, source, license, status, version.
 Detection fields: id (escu:/sigma:/elastic:), name, techniques, data_source, required_alert_fields, intent, fp_quality (good|vague|none), flow. Every flow starts with Q0.
 
 Steps (stop after each):

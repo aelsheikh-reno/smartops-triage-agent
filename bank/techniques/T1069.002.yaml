@@ -46,4 +46,4 @@ flow:
 source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
 license: MITRE ATT&CK Terms of Use
 status: draft
-version: 1
+version: 2

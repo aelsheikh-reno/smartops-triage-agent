@@ -13,10 +13,8 @@ required_alert_fields:
 - registry_value_data
 - registry_value_name
 - user
-intent: Detects writes to Run/RunOnce and other autostart registry keys on an endpoint from Sysmon registry events.
+intent: Detects writes to Run/RunOnce and other autostart registry keys on an endpoint from registry events.
 fp_quality: good
-enrichment:
-  note: Writer hash and signer come from the writing process's creation event, joined on process_guid (Sysmon EID 13 carries neither).
 explanations:
 - BE-0002
 - BE-0008
@@ -40,7 +38,7 @@ flow:
   on_no: next
   on_unknown: next
   bind:
-    subject_guid: process_guid
+    entity: process:process_guid
 - step: 3
   question: Q-0018
   on_yes: close:benign_true_positive:prevalent_in_org
@@ -52,7 +50,7 @@ flow:
   on_no: next
   on_unknown: next
   bind:
-    subject_guid: process_guid
+    entity: process:process_guid
 - step: 5
   question: Q-0004
   on_yes: close:benign_true_positive:approved_change
@@ -61,4 +59,4 @@ flow:
 source: splunk/security_content detections/endpoint/registry_keys_used_for_persistence.yml
 license: Apache-2.0
 status: draft
-version: 1
+version: 2

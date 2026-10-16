@@ -16,6 +16,12 @@ assumed_alert_fields:
 - parent_process_path
 - parent_process_guid
 - _time
+derived_fields:
+  url_hosts:
+    from: process
+    pattern: https?://([^/\s:\"')]+)
+    all: true
+    note: every URL host in the command line
 fingerprint:
 - dest
 - user
@@ -51,4 +57,4 @@ flow:
 source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
 license: MITRE ATT&CK Terms of Use
 status: draft
-version: 1
+version: 2

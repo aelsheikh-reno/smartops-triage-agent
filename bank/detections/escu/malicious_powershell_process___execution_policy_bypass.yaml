@@ -49,4 +49,4 @@ flow:
 source: splunk/security_content detections/endpoint/malicious_powershell_process___execution_policy_bypass.yml
 license: Apache-2.0
 status: draft
-version: 1
+version: 2

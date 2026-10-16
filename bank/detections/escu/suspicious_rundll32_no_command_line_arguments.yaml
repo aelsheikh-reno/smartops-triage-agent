@@ -37,7 +37,7 @@ flow:
   on_no: escalate
   on_unknown: flag
   bind:
-    subject_guid: parent_process_guid
+    entity: process:parent_process_guid
 - step: 3
   question: Q-0014
   on_yes: close:benign_true_positive:activity_baselined_on_host
@@ -51,4 +51,4 @@ flow:
 source: splunk/security_content detections/endpoint/suspicious_rundll32_no_command_line_arguments.yml
 license: Apache-2.0
 status: draft
-version: 1
+version: 2

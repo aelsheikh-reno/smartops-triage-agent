@@ -39,7 +39,7 @@ flow:
   on_no: next
   on_unknown: next
   bind:
-    subject_guid: process_guid
+    entity: process:process_guid
 - step: 3
   question: Q-0014
   on_yes: close:benign_true_positive:activity_baselined_on_host
@@ -58,4 +58,4 @@ flow:
 source: splunk/security_content detections/endpoint/process_execution_via_wmi.yml
 license: Apache-2.0
 status: draft
-version: 1
+version: 2

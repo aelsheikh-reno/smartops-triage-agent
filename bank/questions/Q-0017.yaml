@@ -1,13 +1,15 @@
 id: Q-0017
 text: Is every URL host in the command line an internal or approved download domain?
 tests: BE-0010
-answer_source: context
+capability:
+  name: list.lookup
+  inputs:
+    list: CF-0010
+    entity: value:url_hosts
 needs:
   context:
   - CF-0010
-  alert_fields:
-  - process
-notes: No URL parsed from the command line means unknown, not yes.
+notes: url_hosts is derived from the command line by the detection. No URL parsed means unknown, not yes.
 source:
 - splunk/security_content detections/endpoint/windows_file_download_via_certutil.yml
 - splunk/security_content detections/endpoint/bitsadmin_download_file.yml
@@ -16,4 +18,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

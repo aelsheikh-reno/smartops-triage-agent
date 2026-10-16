@@ -1,14 +1,17 @@
 id: Q-0026
 text: Does an authorized security test engagement cover this host or user at the alert time?
 tests: BE-0016
-answer_source: context
+capability:
+  name: list.lookup
+  inputs:
+    list: CF-0014
+    entity:
+    - value:dest
+    - value:user
+    at_time: value:_time
 needs:
   context:
   - CF-0014
-  alert_fields:
-  - dest
-  - user
-  - _time
 source:
 - splunk/security_content detections/endpoint/detect_sharphound_usage.yml
 license:
@@ -16,4 +19,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

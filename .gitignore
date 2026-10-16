@@ -3,3 +3,4 @@ sources/
 *.db
 __pycache__/
 .venv/
+build/

@@ -50,4 +50,4 @@ flow:
 source: splunk/security_content detections/endpoint/windows_schtasks_create_run_as_system.yml
 license: Apache-2.0
 status: draft
-version: 1
+version: 2

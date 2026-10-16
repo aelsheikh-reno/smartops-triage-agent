@@ -1,15 +1,22 @@
 id: Q-0009
 text: Was the remote access tool launched by one of its expected parents (its own service or a sanctioned deployment tool), matched on the parent's hash or signer plus path?
 tests: BE-0006
-answer_source: context
+capability:
+  name: list.lookup
+  inputs:
+    list:
+    - CF-0006.expected_parents
+    - CF-0001
+    entity: process:parent_process_guid
 needs:
-  context: [CF-0006, CF-0001]
-  alert_fields: [parent_process_guid, parent_process_path]
-  enrichment: [process_creation_by_guid]
+  context:
+  - CF-0006
+  - CF-0001
 source:
-  - elastic/detection-rules rules/windows/command_and_control_new_terms_rmm_signer.toml (parent and session context)
-license: [Elastic-2.0]
+- elastic/detection-rules rules/windows/command_and_control_new_terms_rmm_signer.toml (parent and session context)
+license:
+- Elastic-2.0
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

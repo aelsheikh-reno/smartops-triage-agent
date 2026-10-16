@@ -8,8 +8,10 @@ match_rule: valid signature AND signer on the list AND binary not in excluded_bi
 collected_by: customer
 seed:
   signers:
-  - Microsoft Windows
-  - Microsoft Corporation
+  - signer: Microsoft Windows
+    verified: false
+  - signer: Microsoft Corporation
+    verified: false
   excluded_binaries:
   - adplus.exe
   - bitsadmin.exe
@@ -40,4 +42,4 @@ seed:
 source:
 - LOLBAS-Project/LOLBAS yml (Category Dump; commonly abused Execute/Download binaries)
 license: GPL-3.0
-version: 2
+version: 3

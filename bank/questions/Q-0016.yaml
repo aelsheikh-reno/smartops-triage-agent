@@ -1,12 +1,14 @@
 id: Q-0016
 text: Is the host on the customer's list of hosts whose role requires RDP?
 tests: BE-0009
-answer_source: context
+capability:
+  name: list.lookup
+  inputs:
+    list: CF-0009
+    entity: value:dest
 needs:
   context:
   - CF-0009
-  alert_fields:
-  - dest
 source:
 - splunk/security_content detections/endpoint/windows_remote_services_rdp_enable.yml
 license:
@@ -14,4 +16,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

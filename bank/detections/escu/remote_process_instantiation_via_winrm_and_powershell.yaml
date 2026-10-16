@@ -60,4 +60,4 @@ flow:
 source: splunk/security_content detections/endpoint/remote_process_instantiation_via_winrm_and_powershell.yml
 license: Apache-2.0
 status: draft
-version: 1
+version: 2

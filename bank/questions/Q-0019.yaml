@@ -1,15 +1,15 @@
 id: Q-0019
 text: Is the subject binary validly signed by a trusted publisher and not on the excluded-binaries list?
 tests: BE-0018
-answer_source: context
+capability:
+  name: file.signer
+  inputs:
+    entity: process:subject_guid
+    trusted_list: CF-0008
 needs:
   context:
   - CF-0008
-  alert_fields:
-  - subject_guid
-  enrichment:
-  - process_creation_by_guid
-notes: subject_guid and the enrichment are bound per detection (parent process, registry writer, loaded module, driver). A trusted signature is evidence, not clearance.
+notes: The entity is bound per detection (parent process, registry writer, loaded module, driver file). A trusted signature is evidence, not clearance. CF-0008 seed signers are unverified until onboarding.
 source:
 - splunk/security_content detections/endpoint/suspicious_rundll32_no_command_line_arguments.yml
 - LOLBAS-Project/LOLBAS yml
@@ -19,4 +19,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

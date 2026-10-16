@@ -1,15 +1,15 @@
 id: Q-0013
 text: Is the acting process a sanctioned deployment or management tool, matched on hash or on signer plus path?
 tests: BE-0002
-answer_source: context
+capability:
+  name: list.lookup
+  inputs:
+    list: CF-0001
+    entity: process:subject_guid
 needs:
   context:
   - CF-0001
-  alert_fields:
-  - subject_guid
-  enrichment:
-  - process_creation_by_guid
-notes: 'subject_guid is bound per detection: the alert''s own process, or the writer of a registry change.'
+notes: 'The entity is bound per detection: the alert''s own process, or the writer of a registry change.'
 source:
 - splunk/security_content detections/endpoint/process_execution_via_wmi.yml
 - splunk/security_content detections/endpoint/registry_keys_used_for_persistence.yml
@@ -18,4 +18,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

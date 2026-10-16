@@ -34,7 +34,7 @@ flow:
   on_no: next
   on_unknown: next
   bind:
-    subject_guid: process_guid
+    entity: process:process_guid
 - step: 3
   question: Q-0004
   on_yes: close:benign_true_positive:approved_change
@@ -43,4 +43,4 @@ flow:
 source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
 license: MITRE ATT&CK Terms of Use
 status: draft
-version: 1
+version: 2

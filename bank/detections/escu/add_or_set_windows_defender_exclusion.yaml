@@ -21,6 +21,12 @@ explanations:
 - BE-0012
 - BE-0001
 - BE-0003
+derived_fields:
+  defender_exclusions:
+    from: process
+    pattern: -(?:Exclusion\w+|ControlledFolderAccessAllowedApplications|AttackSurfaceReductionOnlyExclusions)\s+(\S+)
+    all: true
+    note: every exclusion value in the command line
 fingerprint:
 - dest
 - process
@@ -54,4 +60,4 @@ flow:
 source: splunk/security_content detections/endpoint/add_or_set_windows_defender_exclusion.yml
 license: Apache-2.0
 status: draft
-version: 1
+version: 2

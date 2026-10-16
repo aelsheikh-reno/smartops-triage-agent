@@ -1,15 +1,16 @@
 id: Q-0024
 text: Does the driver's SHA256 match a LOLDrivers known vulnerable or malicious sample?
 tests: BE-0014
-answer_source: context
+capability:
+  name: file.reputation
+  inputs:
+    entity: file:ImagePath
+    sources:
+    - CF-0016
 needs:
   context:
   - CF-0016
-  alert_fields:
-  - ImagePath
-  enrichment:
-  - driver_load_by_path
-notes: A no supports BE-0014 (name collision); a yes rules it out.
+notes: 'escalate_only: a hit escalates; a miss is not evidence of a name collision.'
 source:
 - splunk/security_content detections/endpoint/windows_vulnerable_driver_installed.yml
 - magicsword-io/LOLDrivers yaml
@@ -18,4 +19,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

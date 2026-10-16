@@ -1,41 +1,61 @@
 id: escu:detect_remote_access_software_usage_process
 escu_uuid: ffd5e001-2e34-48f4-97a2-26dc4bb08178
 name: Detect Remote Access Software Usage Process
-techniques: [T1219]
-data_source: [Sysmon EventID 1, Windows Event Log Security 4688, CrowdStrike ProcessRollup2]
-required_alert_fields: [dest, user, process_name, process_path, process_hash, process_guid, parent_process_name, parent_process_path, parent_process_guid, _time]
+techniques:
+- T1219
+data_source:
+- Sysmon EventID 1
+- Windows Event Log Security 4688
+- CrowdStrike ProcessRollup2
+required_alert_fields:
+- dest
+- user
+- process_name
+- process_path
+- process_hash
+- process_guid
+- parent_process_name
+- parent_process_path
+- parent_process_guid
+- _time
 intent: Detects execution of a known remote access tool (ESCU remote_access_software lookup) on an endpoint from process creation logs.
 fp_quality: good
-explanations: [BE-0006, BE-0007, BE-0003]
-fingerprint: [dest, process_name, process_hash]
+explanations:
+- BE-0006
+- BE-0007
+- BE-0003
+fingerprint:
+- dest
+- process_name
+- process_hash
 precedent_validity: 7d
 flow:
-  - step: 1
-    question: Q-0000
-    on_yes: close:inherit:precedent_match
-    on_no: next
-    on_unknown: next
-  - step: 2
-    question: Q-0008   # tool and path are sanctioned
-    on_yes: next
-    on_no: escalate
-    on_unknown: flag
-  - step: 3
-    question: Q-0009   # launched by an expected parent
-    on_yes: next
-    on_no: escalate
-    on_unknown: next
-  - step: 4
-    question: Q-0010   # established on this host
-    on_yes: close:benign_true_positive:sanctioned_rmm_baselined
-    on_no: next
-    on_unknown: next
-  - step: 5
-    question: Q-0004   # new install covered by a change
-    on_yes: close:benign_true_positive:approved_change
-    on_no: escalate
-    on_unknown: flag
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0008
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 3
+  question: Q-0009
+  on_yes: next
+  on_no: escalate
+  on_unknown: next
+- step: 4
+  question: Q-0010
+  on_yes: close:benign_true_positive:sanctioned_rmm_baselined
+  on_no: next
+  on_unknown: next
+- step: 5
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
 source: splunk/security_content detections/endpoint/detect_remote_access_software_usage_process.yml
 license: Apache-2.0
 status: draft
-version: 2
+version: 3

@@ -1,14 +1,14 @@
 id: Q-0012
 text: Has this user run the same normalized command line on any host on at least 3 distinct days in the 30 days before the alert window?
 tests: BE-0007
-answer_source: baseline
-needs:
-  baseline:
-  - cmdline_by_user_30d
-  alert_fields:
-  - user
-  - process
-notes: 'Command lines are normalized before comparison: GUIDs, hex strings, numbers, temp file names and user profile names are masked.'
+capability:
+  name: entity.baseline
+  inputs:
+    entity: value:user
+    behavior: ran the normalized command line value:process on any host
+  params:
+    min_days: 3
+    lookback: 30d
 source:
 - splunk/security_content detections/endpoint/remote_process_instantiation_via_winrm_and_powershell.yml (limited set of hosts or users)
 license:
@@ -16,4 +16,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

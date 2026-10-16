@@ -1,13 +1,15 @@
 id: Q-0022
 text: Is every exclusion value in the command line on the customer's approved Defender exclusion list for this host?
 tests: BE-0012
-answer_source: context
+capability:
+  name: list.lookup
+  inputs:
+    list: CF-0012
+    entity: value:defender_exclusions
+    host: value:dest
 needs:
   context:
   - CF-0012
-  alert_fields:
-  - process
-  - dest
 source:
 - splunk/security_content detections/endpoint/add_or_set_windows_defender_exclusion.yml
 license:
@@ -15,4 +17,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

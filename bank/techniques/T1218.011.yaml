@@ -34,7 +34,7 @@ flow:
   on_no: escalate
   on_unknown: flag
   bind:
-    subject_guid: parent_process_guid
+    entity: process:parent_process_guid
 - step: 3
   question: Q-0014
   on_yes: close:benign_true_positive:activity_baselined_on_host
@@ -48,4 +48,4 @@ flow:
 source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
 license: MITRE ATT&CK Terms of Use
 status: draft
-version: 1
+version: 2

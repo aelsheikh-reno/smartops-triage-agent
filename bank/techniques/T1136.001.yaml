@@ -30,15 +30,17 @@ flow:
   on_no: escalate
   on_unknown: flag
   bind:
-    user: src_user
+    user: value:src_user
 - step: 4
   question: Q-0004
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
   bind:
-    user: src_user
+    entities:
+    - value:dest
+    - value:src_user
 source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
 license: MITRE ATT&CK Terms of Use
 status: draft
-version: 1
+version: 2

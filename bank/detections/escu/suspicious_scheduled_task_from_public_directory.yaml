@@ -56,4 +56,4 @@ flow:
 source: splunk/security_content detections/endpoint/suspicious_scheduled_task_from_public_directory.yml
 license: Apache-2.0
 status: draft
-version: 1
+version: 2

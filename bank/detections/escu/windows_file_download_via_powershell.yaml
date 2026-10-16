@@ -29,6 +29,11 @@ derived_fields:
     from: process
     pattern: https?://([^/\s:\"')]+)
     note: first URL host in the command line
+  url_hosts:
+    from: process
+    pattern: https?://([^/\s:\"')]+)
+    all: true
+    note: every URL host in the command line
 fingerprint:
 - dest
 - parent_process_name
@@ -63,4 +68,4 @@ flow:
 source: splunk/security_content detections/endpoint/windows_file_download_via_powershell.yml
 license: Apache-2.0
 status: draft
-version: 1
+version: 2

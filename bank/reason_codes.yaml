@@ -54,9 +54,6 @@ reason_codes:
 - code: approved_driver_exception
   disposition: benign_true_positive
   description: Vulnerable driver covered by an unexpired risk acceptance.
-- code: driver_name_collision
-  disposition: false_positive
-  description: Driver matched LOLDrivers by name only; hash is not a known sample and the signer is trusted.
 - code: authorized_security_test
   disposition: benign_true_positive
   description: Covered by an authorized security test engagement.

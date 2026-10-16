@@ -11,8 +11,6 @@ required_alert_fields:
 - dest
 intent: Detects a kernel driver service install (7045) whose file name matches LOLDrivers, from Windows System logs.
 fp_quality: good
-enrichment:
-  note: Driver hash and signer come from the driver-load event (Sysmon EID 6) for the same ImagePath. 7045 carries neither, and ESCU matches LOLDrivers on file name only.
 explanations:
 - BE-0015
 - BE-0014
@@ -39,13 +37,14 @@ flow:
   on_unknown: next
 - step: 4
   question: Q-0019
-  on_yes: close:false_positive:driver_name_collision
+  on_yes: flag
   on_no: escalate
   on_unknown: flag
   bind:
-    subject_guid: ImagePath
-    enrichment: driver_load_by_path
+    entity: file:ImagePath
 source: splunk/security_content detections/endpoint/windows_vulnerable_driver_installed.yml
 license: Apache-2.0
 status: draft
-version: 1
+version: 2
+notes: ESCU matches LOLDrivers on driver file name only. A hash miss in LOLDrivers plus a trusted signer is not enough to call it a name collision (vulnerable drivers are trusted-signed and LOLDrivers is
+  incomplete), so that case flags.

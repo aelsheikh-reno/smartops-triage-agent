@@ -5,6 +5,8 @@
 #   vague = generic ("admins may", "filter as needed"); benign causes must come from Sigma/Elastic/LOLBAS
 #   none  = no usable benign cause stated
 # escu_uuid is ESCU's stable id; file names can change between ESCU releases.
+attack_version: "20.0"  # validated against sources/attack-stix-data enterprise-attack-20.0.json
+escu_status_checked: production  # all 25 status: production, none in detections/deprecated
 domain: endpoint_windows
 status: proposed
 step2_picks:
@@ -48,12 +50,12 @@ detections:
     technique: [T1105]
     fp_quality: none
     reason: Classic LOLBin download; benign cases come from LOLBAS and parent-process allowlists.
-  - id: escu:certutil_with_decode_argument
-    escu_uuid: bfe94226-8c10-11eb-a4b3-acde48001122
-    name: CertUtil With Decode Argument
-    technique: [T1140]
-    fp_quality: vague
-    reason: Pairs with the download rule; benign decode by cert/admin scripts is parent- and path-testable.
+  - id: escu:windows_office_product_spawned_uncommon_process
+    escu_uuid: 55d8741c-fa32-4692-8109-410304961eb8
+    name: Windows Office Product Spawned Uncommon Process
+    technique: [T1566.001]
+    fp_quality: none
+    reason: Office spawning cmd/PowerShell/wscript/cscript/mshta is the phishing payload signal; benign cases are known add-ins and macro-driven business workbooks.
   - id: escu:bitsadmin_download_file
     escu_uuid: 80630ff4-8e4c-11eb-aab5-acde48001122
     name: BITSAdmin Download File
@@ -125,7 +127,7 @@ detections:
     name: Windows Event Log Cleared
     technique: [T1685.005]
     fp_quality: vague
-    reason: Admin maintenance or reimaging; tests change-window context, otherwise escalate.
+    reason: Admin maintenance or reimaging; tests change-window context, otherwise escalate. T1685.005 replaces T1070.001 (revoked in v19).
   - id: escu:detect_remote_access_software_usage_process
     escu_uuid: ffd5e001-2e34-48f4-97a2-26dc4bb08178
     name: Detect Remote Access Software Usage Process

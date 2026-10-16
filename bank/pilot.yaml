@@ -1,0 +1,164 @@
+# Pilot selection: endpoint Windows, 25 ESCU detections.
+# Source: splunk/security_content (Apache-2.0), detections/endpoint.
+# fp_quality grades the ESCU known_false_positives text:
+#   good  = names a concrete benign cause a yes/no question can test
+#   vague = generic ("admins may", "filter as needed"); benign causes must come from Sigma/Elastic/LOLBAS
+#   none  = no usable benign cause stated
+# escu_uuid is ESCU's stable id; file names can change between ESCU releases.
+domain: endpoint_windows
+status: proposed
+step2_picks:
+  - escu:detect_psexec_with_accepteula_flag
+  - escu:windows_possible_credential_dumping
+  - escu:detect_remote_access_software_usage_process
+detections:
+  - id: escu:detect_psexec_with_accepteula_flag
+    escu_uuid: 27c3a83d-cada-47c6-9042-67baf19d2574
+    name: Detect PsExec With accepteula Flag
+    technique: [T1021.002]
+    fp_quality: good
+    reason: High-volume admin tool; benign case is a known admin or jump host, testable from context.
+  - id: escu:windows_service_creation_on_remote_endpoint
+    escu_uuid: e0eea4fa-4274-11ec-882b-3e22fbd008af
+    name: Windows Service Creation on Remote Endpoint
+    technique: [T1543.003]
+    fp_quality: good
+    reason: Software deployment creates remote services; testable via deployment-tool and admin-host context.
+  - id: escu:process_execution_via_wmi
+    escu_uuid: 24869767-8579-485d-9a4f-d9ddfd8f0cac
+    name: Process Execution via WMI
+    technique: [T1047]
+    fp_quality: vague
+    reason: SCCM/RMM agents spawn via WmiPrvSE constantly; tests sanctioned-management-tool context.
+  - id: escu:remote_process_instantiation_via_winrm_and_powershell
+    escu_uuid: ba24cda8-4716-11ec-8009-3e22fbd008af
+    name: Remote Process Instantiation via WinRM and PowerShell
+    technique: [T1021.006]
+    fp_quality: good
+    reason: Admin automation over WinRM; limited to a small set of hosts/users, so baseline answers it.
+  - id: escu:windows_remote_services_rdp_enable
+    escu_uuid: 8fbd2e88-4ea5-40b9-9217-fd0855e08cc0
+    name: Windows Remote Services Rdp Enable
+    technique: [T1021.001]
+    fp_quality: vague
+    reason: Admin or GPO enabling RDP; tests change-window and GPO context.
+  - id: escu:windows_file_download_via_certutil
+    escu_uuid: 7fac8d40-e370-45ea-a4a3-031bbcc18b02
+    name: Windows File Download Via CertUtil
+    technique: [T1105]
+    fp_quality: none
+    reason: Classic LOLBin download; benign cases come from LOLBAS and parent-process allowlists.
+  - id: escu:certutil_with_decode_argument
+    escu_uuid: bfe94226-8c10-11eb-a4b3-acde48001122
+    name: CertUtil With Decode Argument
+    technique: [T1140]
+    fp_quality: vague
+    reason: Pairs with the download rule; benign decode by cert/admin scripts is parent- and path-testable.
+  - id: escu:bitsadmin_download_file
+    escu_uuid: 80630ff4-8e4c-11eb-aab5-acde48001122
+    name: BITSAdmin Download File
+    technique: [T1197, T1105]
+    fp_quality: vague
+    reason: Updaters and installers use BITS; tests parent-process and destination-domain context.
+  - id: escu:windows_file_download_via_powershell
+    escu_uuid: 58c4e56c-b5b8-46a3-b5fb-6537dca3c6de
+    name: Windows File Download Via PowerShell
+    technique: [T1059.001, T1105]
+    fp_quality: vague
+    reason: Very noisy; install and admin scripts download constantly, so baseline and domain allowlist carry it.
+  - id: escu:malicious_powershell_process___execution_policy_bypass
+    escu_uuid: 9be56c82-b1cc-4318-87eb-d138afaaca39
+    name: Malicious PowerShell Process - Execution Policy Bypass
+    technique: [T1059.001]
+    fp_quality: vague
+    reason: Logon scripts and vendor agents use -ep bypass; one of the noisiest endpoint rules.
+  - id: escu:windows_schtasks_create_run_as_system
+    escu_uuid: 41a0e58e-884c-11ec-9976-acde48001122
+    name: Windows Schtasks Create Run As System
+    technique: [T1053.005]
+    fp_quality: good
+    reason: Installers create SYSTEM tasks; testable by parent process and signed installer.
+  - id: escu:suspicious_scheduled_task_from_public_directory
+    escu_uuid: 7feb7972-7ac3-11eb-bac8-acde48001122
+    name: Suspicious Scheduled Task from Public Directory
+    technique: [T1053.005]
+    fp_quality: vague
+    reason: Badly behaved apps run tasks from public paths; tests baseline and known-app context.
+  - id: escu:registry_keys_used_for_persistence
+    escu_uuid: f5f6af30-7aa7-4295-bfe9-07fe87c01a4b
+    name: Registry Keys Used For Persistence
+    technique: [T1547.001]
+    fp_quality: good
+    reason: Run-key writes by legitimate startup apps; high volume, baseline-friendly.
+  - id: escu:detect_new_local_admin_account
+    escu_uuid: b25f6f62-0712-43c1-b203-083231ffd97d
+    name: Detect New Local Admin account
+    technique: [T1136.001]
+    fp_quality: good
+    reason: Provisioning with a service request; tests change-ticket and identity context.
+  - id: escu:windows_possible_credential_dumping
+    escu_uuid: e4723b92-7266-11ec-af45-acde48001122
+    name: Windows Possible Credential Dumping
+    technique: [T1003.001]
+    fp_quality: good
+    reason: EDR/AV read lsass routinely; tests sanctioned-security-tool context and the crown-jewel guardrail.
+  - id: escu:creation_of_shadow_copy
+    escu_uuid: eb120f5f-b879-4a63-97c1-93352b5df844
+    name: Creation of Shadow Copy
+    technique: [T1003.003]
+    fp_quality: vague
+    reason: Backup software creates shadow copies; tests sanctioned-backup-tool context.
+  - id: escu:deleting_shadow_copies
+    escu_uuid: b89919ed-ee5f-492c-b139-95dbb162039e
+    name: Deleting Shadow Copies
+    technique: [T1490]
+    fp_quality: good
+    reason: Contrast case; benign deletion is rare, so the flow should escalate fast rather than invent a benign cause.
+  - id: escu:add_or_set_windows_defender_exclusion
+    escu_uuid: 773b66fe-4dd9-11ec-8289-acde48001122
+    name: Add or Set Windows Defender Exclusion
+    technique: [T1685]
+    fp_quality: vague
+    reason: IT and app installers add exclusions; uses ATT&CK v18 T1685 (replaces revoked T1562.001).
+  - id: escu:windows_event_log_cleared
+    escu_uuid: ad517544-aff9-4c96-bd99-d6eb43bfbb6a
+    name: Windows Event Log Cleared
+    technique: [T1685.005]
+    fp_quality: vague
+    reason: Admin maintenance or reimaging; tests change-window context, otherwise escalate.
+  - id: escu:detect_remote_access_software_usage_process
+    escu_uuid: ffd5e001-2e34-48f4-97a2-26dc4bb08178
+    name: Detect Remote Access Software Usage Process
+    technique: [T1219]
+    fp_quality: good
+    reason: Sanctioned RMM is the dominant benign case; tests sanctioned-tool context and case memory.
+  - id: escu:suspicious_rundll32_no_command_line_arguments
+    escu_uuid: e451bd16-e4c5-4109-8eb1-c4c6ecf048b4
+    name: Suspicious Rundll32 no Command Line Arguments
+    technique: [T1218.011]
+    fp_quality: vague
+    reason: Common injection signal with rare benign moved-copy cases; tests baseline per host.
+  - id: escu:suspicious_regsvr32_register_suspicious_path
+    escu_uuid: 62732736-6250-11eb-ae93-0242ac130002
+    name: Suspicious Regsvr32 Register Suspicious Path
+    technique: [T1218.010]
+    fp_quality: none
+    reason: Per-user installers register DLLs from user paths; benign cases from LOLBAS and signer checks.
+  - id: escu:detect_mshta_url_in_command_line
+    escu_uuid: 9b3af1e6-5b68-11eb-ae93-0242ac130002
+    name: Detect MSHTA Url in Command Line
+    technique: [T1218.005]
+    fp_quality: vague
+    reason: Legacy intranet HTAs; tests internal-domain allowlist context.
+  - id: escu:windows_vulnerable_driver_installed
+    escu_uuid: 1dda7586-57be-4a1b-8de1-a9ad802b9a7f
+    name: Windows Vulnerable Driver Installed
+    technique: [T1543.003]
+    fp_quality: good
+    reason: Old vendor drivers are common; tests LOLDrivers data, signer and asset context.
+  - id: escu:detect_sharphound_usage
+    escu_uuid: dd04b29a-beed-11eb-87bc-acde48001122
+    name: Detect SharpHound Usage
+    technique: [T1069.001, T1069.002, T1087.001, T1087.002, T1482]
+    fp_quality: none
+    reason: Benign case is an authorised pentest or AD audit; tests engagement-window context.

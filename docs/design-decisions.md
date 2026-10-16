@@ -71,6 +71,9 @@ Steps:
 4. Strong match → inherit questions as drafts. Technique only → capped at Recommend. Neither → context pack. Every mapping starts in Shadow.
 5. Drop inherited questions that need fields the notables don't populate.
 6. The steward asks the customer's rule owner to confirm in plain language, for example: "This rule detects X. In 30 days it fired 400 times, 92% from the patch servers. Is that what you intended?" The mapping is stored in SQL once confirmed. No vector search at runtime.
+   - If the rule has no active owner (`identity.status`), the steward asks the SOC lead instead.
+   - If nobody confirms within 14 days (parameter `intent_confirm_days`), the mapping may run but is capped at Recommend. It can never reach Auto until someone confirms it.
+   - The steward re-asks monthly and lists unconfirmed mappings in its metrics.
 
 Data and safety:
 - Everything in this service runs on the customer's premises.
@@ -138,7 +141,7 @@ Per detection: Shadow (verdict hidden) → Recommend (analyst accepts or overrid
 Record source and license on every question; non-Apache text needs legal review before commercial use.
 
 ## 12. Knowledge Steward agent
-A second agent keeps the triage knowledge current: context facts, allowlists, exceptions, questions and runbooks. It runs continuously, so triage quality does not depend on people following documentation or on who is still on the team. The triage agent decides; the steward keeps what it decides with up to date.
+A second agent keeps the triage knowledge current: context facts, allowlists, exceptions, questions and runbooks. It runs continuously, so triage quality does not depend on people following documentation or on who is still on the team. The triage agent decides; the steward keeps the knowledge it decides with up to date.
 
 Duties:
 1. Fact freshness: finds facts near expiry, or whose owner is disabled or has left (identity capabilities), and asks the right person to re-confirm. Expired facts stop being used.
@@ -156,7 +159,7 @@ Guardrails:
 - It writes only through the MCP server's `list.propose_update` and fact-update capabilities, and never edits customer tools directly.
 - It runs on the same deployment as the triage agent, on the customer's premises.
 
-Metrics: proposals made, accepted and rejected; stale facts; average fact age; unused entries removed; time from a recurring pattern to an approved fact; runbook drift (should be zero).
+Metrics: proposals made, accepted and rejected; unconfirmed rule mappings (§8); stale facts; average fact age; unused entries removed; time from a recurring pattern to an approved fact; runbook drift (should be zero).
 
 Capabilities it needs (specification only; to be added to `bank/capabilities.yaml` in a steward group with `flow_use: forbidden`, so no triage flow can call them):
 - `fact.metadata`: a fact's owner, expiry and last use.
@@ -176,11 +179,14 @@ It runs on every input a language model reads that contains alert or customer-so
 - the rule intent model (§8), on SPL, rule descriptions, search results and notables
 - investigation (later phase)
 
-On a hit:
-- The text is not passed to the model.
-- The alert escalates with reason code `injection_suspected`, in every mode.
-- The hit is logged with its score.
-- A hit is never benign evidence. Injection text inside an alert is itself evidence of an attacker.
+On a hit, what happens depends on where the text came from. In every case the text never reaches the model, and the hit is logged with its score.
+- In an alert (explanation writer, close reviewer, investigation):
+  - The alert escalates with reason code `injection_suspected`, in every mode.
+  - A hit is never benign evidence. Injection text inside an alert is itself evidence of an attacker.
+- In the rule intent service (§8):
+  - A hit in the SPL or the rule description stops the mapping, and the rule goes to a human.
+  - A hit in a past notable or search result excludes that item from the model's inputs, and the item is opened as a review case for the SOC.
+- In the steward's closure mining (§12): the closure is not counted as evidence for any proposal, and the note goes to the SOC lead.
 
 Model choice is open. Candidates:
 - Protect AI's DeBERTa-v3 prompt-injection classifier. Splunk's post on the OWASP Top 10 for LLM applications points to Protect AI's detection model.

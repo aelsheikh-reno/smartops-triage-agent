@@ -9,6 +9,9 @@ capability:
   params:
     min_days: 3
     lookback: 30d
+attacker_influence:
+  rating: high
+  reason: The command line is attacker-chosen; copying a routine one is enough.
 source:
 - splunk/security_content detections/endpoint/remote_process_instantiation_via_winrm_and_powershell.yml (limited set of hosts or users)
 license:
@@ -16,4 +19,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

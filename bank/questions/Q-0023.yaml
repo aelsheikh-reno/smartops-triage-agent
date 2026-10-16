@@ -7,6 +7,9 @@ capability:
     list: CF-0015
     entity: value:dest
     at_time: value:_time
+attacker_influence:
+  rating: none
+  reason: Asset lifecycle record maintained by IT.
 needs:
   context:
   - CF-0015
@@ -17,4 +20,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

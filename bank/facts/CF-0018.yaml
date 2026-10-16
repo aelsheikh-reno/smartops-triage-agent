@@ -1,0 +1,18 @@
+id: CF-0018
+name: approved_scanners
+description: Addresses of approved vulnerability scanners and authorised testers, with their schedule.
+fields:
+- address_or_range
+- owner
+- purpose
+- schedule
+- expires
+match_rule: source address within address_or_range, and at_time inside schedule when one is given
+collected_by: customer
+example:
+  address_or_range: 10.20.30.0/28
+  owner: Vulnerability management
+  purpose: authenticated scanning
+  schedule: Sat 22:00-Sun 06:00
+  expires: '2027-06-30'
+version: 1

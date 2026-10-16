@@ -1,0 +1,18 @@
+id: CF-0022
+name: removable_media_exceptions
+description: Users or groups approved to use removable storage, with device class and expiry.
+fields:
+- users_or_groups
+- device_classes
+- ticket
+- expires
+match_rule: user in users_or_groups, device class listed, not expired
+collected_by: customer
+example:
+  users_or_groups:
+  - CORP\Branch-IT
+  device_classes:
+  - encrypted usb storage
+  ticket: CHG0049001
+  expires: '2027-03-31'
+version: 1

@@ -1,0 +1,19 @@
+id: CF-0019
+name: phishing_simulations
+description: Approved phishing-simulation campaigns, identified by sending infrastructure and a campaign marker header.
+fields:
+- campaign_id
+- sending_addresses
+- marker_header
+- start
+- end
+match_rule: message sent from a listed address AND carrying the campaign marker, inside start..end; sender domain alone never matches
+collected_by: customer
+example:
+  campaign_id: SIM-2026-10
+  sending_addresses:
+  - 198.51.100.10
+  marker_header: 'X-Campaign-Token: <secret>'
+  start: '2026-10-01'
+  end: '2026-10-31'
+version: 1

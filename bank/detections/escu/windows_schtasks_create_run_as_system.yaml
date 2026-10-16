@@ -45,13 +45,20 @@ flow:
   on_no: next
   on_unknown: next
 - step: 3
-  question: Q-0015
-  on_yes: close:benign_true_positive:prevalent_in_org
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
   on_no: next
   on_unknown: next
 - step: 4
-  question: Q-0004
-  on_yes: close:benign_true_positive:approved_change
+  question: Q-0019
+  on_yes: next
+  on_no: flag
+  on_unknown: flag
+  bind:
+    entity: process:parent_process_guid
+- step: 5
+  question: Q-0015
+  on_yes: close:benign_true_positive:prevalent_in_org
   on_no: escalate
   on_unknown: flag
 source:
@@ -60,4 +67,4 @@ source:
   title: Windows Schtasks Create Run As System
 license: Apache-2.0
 status: draft
-version: 5
+version: 6

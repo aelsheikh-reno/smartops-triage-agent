@@ -1,0 +1,19 @@
+id: Q-0042
+text: Was every connection from the source in the alert window denied, with none allowed or established?
+tests: BE-0028
+capability:
+  name: traffic.denied_only
+  inputs:
+    src: value:src
+    dest: value:dest
+    window: value:_time
+attacker_influence:
+  rating: low
+  reason: Session outcomes come from the network control's own records.
+source:
+- bank/use_cases.yaml triage_hints
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

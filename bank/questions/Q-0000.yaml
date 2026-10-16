@@ -6,6 +6,9 @@ capability:
   name: case.precedent
   inputs:
     fingerprint: value:fingerprint
+attacker_influence:
+  rating: low
+  reason: Fingerprint includes hashes and key attributes; an attacker must reproduce a previously closed fingerprint exactly.
 needs:
   context:
   - CF-0007
@@ -19,4 +22,4 @@ license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 3
+version: 4

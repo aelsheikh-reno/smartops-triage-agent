@@ -1,0 +1,23 @@
+id: Q-0029
+text: Is the detection in a high-risk class (hacktool, credential theft, ransomware, web shell, exploit, remote access trojan, backdoor)?
+tests: BE-0020
+capability:
+  name: alert.field
+  inputs:
+    field: value:category
+    in:
+      param: av_high_risk_categories
+attacker_influence:
+  rating: low
+  reason: Class assigned by the product.
+notes: 'A yes rules out the low-risk explanation and escalates, blocked or not: these classes mean a person is likely at the keyboard.'
+source:
+- bank/use_cases.yaml triage_hints
+- 'SigmaHQ/sigma rules/category/antivirus (high-risk signature classes: hacktool, password dumper, ransomware, web shell, exploit framework, remote access tool)'
+license:
+- internal
+- DRL-1.1
+text_origin: original
+legal_review: false
+status: draft
+version: 1

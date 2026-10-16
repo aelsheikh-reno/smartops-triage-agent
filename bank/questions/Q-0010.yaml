@@ -9,6 +9,9 @@ capability:
   params:
     min_days: 3
     lookback: 30d
+attacker_influence:
+  rating: low
+  reason: Binary identity is OS-verified and the history ends before the alert window.
 source:
 - elastic/detection-rules rules/windows/command_and_control_new_terms_rmm_signer.toml (first appearance vs established)
 license:
@@ -16,4 +19,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 3
+version: 4

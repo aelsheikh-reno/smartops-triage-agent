@@ -1,0 +1,71 @@
+id: vendor:dlp_match
+name: DLP policy match
+family: vendor
+use_case: UC-010
+techniques:
+- T1048
+- T1567
+data_source:
+- Splunk CIM Data Loss Prevention data model
+sigma_logsource: []
+sigma_logsource_none: Sigma has no log-source category for this alert type.
+sigma_refs: []
+required_alert_fields:
+- src_user
+- dest
+- signature
+- object
+- action
+- severity
+- _time
+intent: 'Generic: a DLP control reports regulated data leaving through email, web, cloud storage or print (normalized DLP alert, any product).'
+fp_quality: generic
+notes: 'The user''s own sending history can only flag, never close: an insider builds that baseline.'
+explanations:
+- BE-0019
+- BE-0025
+- BE-0026
+- BE-0007
+derived_fields:
+  recipient_domain:
+    from: dest
+    pattern: '@?([A-Za-z0-9.-]+\.[A-Za-z]{2,})$'
+    note: domain of the destination address or URL
+fingerprint:
+- src_user
+- signature
+- recipient_domain
+precedent_validity: 24h
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0027
+  on_yes: close:mitigated_true_positive:blocked_by_control
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0038
+  on_yes: close:benign_true_positive:approved_business_exception
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0039
+  on_yes: close:benign_true_positive:approved_recipient
+  on_no: next
+  on_unknown: next
+- step: 5
+  question: Q-0040
+  on_yes: flag
+  on_no: escalate
+  on_unknown: flag
+source:
+  repo: internal
+  path: bank/use_cases.yaml#UC-010
+  title: DLP policy match
+license: internal
+status: draft
+version: 1

@@ -30,15 +30,15 @@ flow:
   on_unknown: next
 - step: 2
   question: Q-0014
-  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_yes: flag
   on_no: next
   on_unknown: next
 - step: 3
   question: Q-0015
-  on_yes: close:benign_true_positive:prevalent_in_org
+  on_yes: flag
   on_no: escalate
   on_unknown: flag
 source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
 license: MITRE ATT&CK Terms of Use
 status: draft
-version: 2
+version: 3

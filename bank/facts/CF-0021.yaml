@@ -1,0 +1,17 @@
+id: CF-0021
+name: approved_partner_domains
+description: External domains approved to receive specific data classes.
+fields:
+- domain
+- partner
+- data_classes
+- expires
+match_rule: recipient domain equals or is a subdomain of a listed domain, data class allowed, not expired
+collected_by: customer
+example:
+  domain: partnerbank.example
+  partner: Correspondent bank
+  data_classes:
+  - payment instructions
+  expires: '2027-12-31'
+version: 1

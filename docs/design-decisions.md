@@ -6,6 +6,8 @@ A fast, time-boxed first pass on an alert: is it worth investigating, and how ur
 ## 2. Method
 For each detection, list its 2–3 most common benign explanations and test only those, as yes/no questions. One holds → close as false positive or benign true positive, with a reason code. None holds → escalate. Missing answer → unknown → analyst decides.
 
+Vendor alerts (AV/EDR, IDS/IPS, WAF, email gateway, DLP, proxy, firewall, device control) add a third close: **mitigated true positive**, when the activity was malicious or unwanted but the control that raised the alert stopped it (blocked, quarantined, denied) and nothing else needs doing. Each vendor family is one generic detection (`vendor:` prefix) bound to normalized alert fields, never one per product.
+
 ## 3. Boundary
 Only entities named in the alert, only alerts that already fired, a fixed ±24h window. Pivoting to other entities or building raw-log timelines is investigation, out of scope.
 
@@ -18,6 +20,8 @@ Every question is answerable by one lookup against:
 
 ### Capabilities and the MCP layer
 The agent never knows which tools a customer has. Each question declares exactly one capability (`bank/capabilities.yaml`, e.g. `list.lookup`, `entity.baseline`, `org.prevalence`, `change.window`, `file.signer`, `file.reputation`). The agent calls an MCP server, which routes the capability to whatever tools exist for that customer; any of them may be disconnected. The bank holds no tool names or SPL.
+
+`alert.field` reads a normalized field of the alert itself (for example the control's action). It is answered locally, not through the MCP server, and does not count against the call budget.
 
 Answer contract: `answer` (yes | no | unknown), `unknown_reason` (no_capability | unavailable | no_data), `evidence`, `source_tool`, `observed_at`.
 - no_data: follow the step's `on_unknown`.

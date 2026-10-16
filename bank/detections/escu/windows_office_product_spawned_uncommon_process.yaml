@@ -23,7 +23,8 @@ required_alert_fields:
 - process_name
 intent: Detects an Office application spawning a shell, script host or LOLBin (cmd, PowerShell, wscript, cscript, mshta, rundll32, regsvr32, certutil, bitsadmin, wmic) from process creation logs.
 fp_quality: none
-notes: 'fp_quality none: The source rule gives no benign cause. The tested causes (routine business macros and add-ins) come from analyst practice and need review.'
+notes: 'fp_quality none: The source rule gives no benign cause. The tested causes (routine business macros and add-ins) come from analyst practice and need review. Command-line and registry-value baselines
+  are attacker-chosen strings (attacker_influence high), so on their own they flag instead of closing.'
 explanations:
 - BE-0007
 - BE-0008
@@ -41,12 +42,12 @@ flow:
   on_unknown: next
 - step: 2
   question: Q-0014
-  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_yes: flag
   on_no: next
   on_unknown: next
 - step: 3
   question: Q-0015
-  on_yes: close:benign_true_positive:prevalent_in_org
+  on_yes: flag
   on_no: escalate
   on_unknown: flag
 source:
@@ -55,4 +56,4 @@ source:
   title: Windows Office Product Spawned Uncommon Process
 license: Apache-2.0
 status: draft
-version: 5
+version: 6

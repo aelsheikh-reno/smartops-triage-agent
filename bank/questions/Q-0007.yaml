@@ -9,6 +9,9 @@ capability:
   params:
     min_days: 5
     lookback: 30d
+attacker_influence:
+  rating: low
+  reason: Binary identity is OS-verified and the history ends before the alert window.
 notes: "The \xB124h alert window is excluded so an intruder's repeated access during the incident cannot baseline itself."
 source:
 - elastic/detection-rules rules/windows/credential_access_lsass_openprocess_api.toml (first time seen, prior behavior)
@@ -17,4 +20,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 3
+version: 4

@@ -1,0 +1,60 @@
+id: vendor:removable_media
+name: Removable media (device control) alert
+family: vendor
+use_case: UC-016
+techniques:
+- T1052.001
+- T1091
+data_source:
+- Normalized device-control alert (endpoint or DLP product)
+sigma_logsource: []
+sigma_logsource_none: Sigma has no log-source category for this alert type.
+sigma_refs: []
+required_alert_fields:
+- dest
+- user
+- device_id
+- device_class
+- action
+- files_written
+- _time
+intent: 'Generic: an endpoint device-control or DLP product reports removable storage connected or used (any product).'
+fp_quality: generic
+notes: Device serial numbers can be spoofed by programmable USB devices, so an approved-device list is not used to close.
+explanations:
+- BE-0019
+- BE-0025
+- BE-0029
+fingerprint:
+- dest
+- user
+- device_id
+precedent_validity: 7d
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0027
+  on_yes: close:mitigated_true_positive:blocked_by_control
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0043
+  on_yes: close:benign_true_positive:approved_business_exception
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0044
+  on_yes: close:benign_true_positive:no_data_transferred
+  on_no: escalate
+  on_unknown: flag
+source:
+  repo: internal
+  path: bank/use_cases.yaml#UC-016
+  title: Removable media (device control) alert
+license: internal
+status: draft
+version: 1

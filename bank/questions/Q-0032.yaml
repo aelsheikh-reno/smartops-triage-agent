@@ -1,0 +1,18 @@
+id: Q-0032
+text: Is the source address known bad in a reputation source?
+tests: BE-0030
+capability:
+  name: ip.reputation
+  inputs:
+    ip: value:src
+attacker_influence:
+  rating: low
+  reason: Address comes from the network record.
+notes: 'escalate_only: a hit escalates; a miss is not benign evidence.'
+source:
+- bank/use_cases.yaml triage_hints
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

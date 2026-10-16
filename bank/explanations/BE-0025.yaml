@@ -1,0 +1,7 @@
+id: BE-0025
+name: Approved business exception
+description: An approved, unexpired exception covers this user, data or device.
+source:
+- bank/use_cases.yaml triage_hints
+license: internal
+version: 1

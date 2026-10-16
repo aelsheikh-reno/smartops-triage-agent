@@ -1,0 +1,59 @@
+id: vendor:firewall_deny
+name: Firewall deny or port-scan alert
+family: vendor
+use_case: UC-003
+techniques:
+- T1046
+- T1595.001
+data_source:
+- Splunk CIM Network_Traffic data model
+sigma_logsource:
+- category: firewall
+sigma_refs: []
+required_alert_fields:
+- src
+- dest
+- dest_port
+- transport
+- action
+- rule
+- _time
+intent: 'Generic: a firewall reports denied connections or a scan pattern from a source (normalized network-traffic alert, any product).'
+fp_quality: generic
+explanations:
+- BE-0021
+- BE-0028
+- BE-0030
+fingerprint:
+- src
+- dest_port
+- rule
+precedent_validity: 24h
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0031
+  on_yes: close:benign_true_positive:approved_scanner_activity
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0032
+  on_yes: escalate
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0042
+  on_yes: close:mitigated_true_positive:denied_no_successful_connection
+  on_no: escalate
+  on_unknown: flag
+source:
+  repo: internal
+  path: bank/use_cases.yaml#UC-003
+  title: Firewall deny or port-scan alert
+license: internal
+status: draft
+version: 1

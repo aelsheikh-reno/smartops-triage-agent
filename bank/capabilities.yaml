@@ -26,7 +26,7 @@ scope:   # enforced by the MCP server, not by the agent
   windows: event lookups use the fixed ±24h alert window; baseline and prevalence capabilities use their declared lookbacks, always ending before the alert window, and return counts, not raw events
   access: read-only, except list.propose_update, which only creates a proposal
   timeout_seconds: 10            # a timeout is unknown_reason unavailable
-  max_calls_per_alert: 6         # includes Q0; internal hash or signer resolution does not count; exceeding it flags the alert
+  max_calls_per_alert: 6         # includes Q0; alert.field and internal hash or signer resolution do not count; exceeding it flags the alert
 
 capabilities:
   - name: case.precedent
@@ -109,6 +109,54 @@ capabilities:
     unknown_means: A covering change exists but has no implementer data. Returned as unknown with unknown_reason no_data, so it follows on_unknown and never closes.
     notes: Group membership is resolved by the server, as identity.groups would.
     escalate_only: false
+
+  - name: alert.field
+    kind: local
+    inputs: [field, in]
+    yes_means: The alert's normalized field holds one of the listed values (case-insensitive).
+    no_means: The field holds another value.
+    escalate_only: false
+    notes: Read from the alert itself, not through the MCP server; does not count against the call budget. Unknown when the field is missing or empty. Added because vendor alerts carry the decisive fact (the control's action, the product's detection class) in the alert, and no other capability reads it.
+
+  - name: url.reputation
+    kind: reputation
+    inputs: [entity]
+    yes_means: A reputation source marks a URL or domain in the entity as malicious.
+    no_means: No source marks it. Not benign evidence.
+    escalate_only: true
+    notes: Added because file.reputation and ip.reputation cannot take URLs or domains, which drive proxy and email alerts.
+
+  - name: vuln.not_applicable
+    kind: lookup
+    inputs: [host, signature, max_age]
+    yes_means: Vulnerability data no older than max_age shows the host is not affected by the vulnerability the signature targets (product or version absent, or patched).
+    no_means: The host is affected, or the data shows the targeted product present and unpatched.
+    escalate_only: false
+    notes: Unknown when the signature maps to no vulnerability or no recent data exists. Added because no existing capability reads vulnerability-management data, the main benign check for exploit signatures.
+
+  - name: email.message_status
+    kind: lookup
+    inputs: [message_id]
+    yes_means: The message is quarantined or removed from every recipient mailbox now.
+    no_means: At least one copy is still in a mailbox.
+    escalate_only: false
+    notes: Added because no existing capability reads mailbox or mail-security state.
+
+  - name: email.no_interaction
+    kind: lookup
+    inputs: [message_id]
+    yes_means: Click and attachment-open records show no recipient followed a link or opened an attachment from the message.
+    no_means: At least one recipient clicked or opened.
+    escalate_only: false
+    notes: Unknown when click or open records are not collected. Added for the same reason as email.message_status.
+
+  - name: traffic.denied_only
+    kind: lookup
+    inputs: [src, dest, window]
+    yes_means: Every connection from src (to dest, when given) in the alert window was denied; none was allowed or established.
+    no_means: At least one connection was allowed or established.
+    escalate_only: false
+    notes: Added because no existing capability summarises allowed versus denied sessions for an address.
 
   - name: list.propose_update
     kind: write

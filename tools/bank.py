@@ -55,6 +55,9 @@ def source_ids(b):
     """Map each rule-level detection's source-library id (e.g. escu:<file stem>) to its bank id."""
     out = {}
     for did, d in b["detections"].items():
+        if did.startswith("vendor:"):
+            out[did] = did
+            continue
         src = d.get("source")
         if isinstance(src, dict) and src.get("path"):
             stem = os.path.splitext(os.path.basename(src["path"]))[0]

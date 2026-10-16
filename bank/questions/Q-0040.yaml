@@ -1,0 +1,21 @@
+id: Q-0040
+text: Has this user sent the same data class to the same destination on at least 3 distinct days in the 30 days before the alert window?
+tests: BE-0007
+capability:
+  name: entity.baseline
+  inputs:
+    entity: value:src_user
+    behavior: sent data matching value:signature to value:recipient_domain
+  params:
+    min_days: 3
+    lookback: 30d
+attacker_influence:
+  rating: high
+  reason: The user's own past behaviour; an insider who has been exfiltrating for weeks has built the baseline.
+source:
+- bank/use_cases.yaml triage_hints
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

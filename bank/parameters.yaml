@@ -1,5 +1,55 @@
-# Per-customer parameters with bank defaults. A customer overlay may override any of them.
 parameters:
-  org_prevalence_min_hosts: {default: 5, description: Minimum distinct hosts for org.prevalence to answer yes}
-  org_prevalence_min_weeks: {default: 3, description: Minimum weeks (of the 4 before the alert window) with the pattern present}
-  org_prevalence_of_weeks: {default: 4, description: Weeks examined before the alert window}
+  org_prevalence_min_hosts:
+    default: 5
+    description: Minimum distinct hosts for org.prevalence to answer yes
+  org_prevalence_min_weeks:
+    default: 3
+    description: Minimum weeks (of the 4 before the alert window) with the pattern present
+  org_prevalence_of_weeks:
+    default: 4
+    description: Weeks examined before the alert window
+  blocked_action_values:
+    default:
+    - blocked
+    - quarantined
+    - cleaned
+    - deleted
+    - dropped
+    - denied
+    - rejected
+    - prevented
+    - reset
+    description: Normalized action values meaning the control stopped the item
+  av_low_risk_categories:
+    default:
+    - pua
+    - potentially unwanted
+    - adware
+    - tracking cookie
+    - grayware
+    description: Detection classes treated as low risk once blocked
+  av_high_risk_categories:
+    default:
+    - hacktool
+    - password dumper
+    - credential theft
+    - ransomware
+    - web shell
+    - exploit
+    - exploit framework
+    - remote access trojan
+    - backdoor
+    description: Detection classes that always escalate, blocked or not
+  web_low_risk_categories:
+    default:
+    - advertising
+    - streaming media
+    - social networking
+    - games
+    - shopping
+    - personal storage
+    - entertainment
+    description: Web categories treated as low risk once blocked
+  vuln_data_max_age:
+    default: 30d
+    description: Oldest vulnerability data vuln.not_applicable may rely on

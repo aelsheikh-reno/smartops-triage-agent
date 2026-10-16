@@ -70,9 +70,16 @@ use_cases:
         name: Windows Defender Threat Detected
       - id: sigma:5a9e1b2c-8f7d-4a1e-9b3c-0f6d7e5a4b1f
         name: Windows Defender Threat Severity Default Action Modified
-  coverage: technique-only
-  covered_detections: 0
-  linked_detections: 33
+    vendor:
+      total: 1
+      shown:
+      - id: vendor:av_detection
+        name: Antivirus or EDR malware detection
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 34
+  covered_by:
+  - vendor:av_detection
   technique_fallbacks:
   - T1105
 - id: UC-002
@@ -138,9 +145,16 @@ use_cases:
     sigma:
       total: 0
       shown: []
-  coverage: none
-  covered_detections: 0
-  linked_detections: 15
+    vendor:
+      total: 1
+      shown:
+      - id: vendor:ids_alert
+        name: IDS or IPS signature alert
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 16
+  covered_by:
+  - vendor:ids_alert
 - id: UC-003
   name: Firewall denies and port-scan noise
   domain: vendor_alert
@@ -204,9 +218,16 @@ use_cases:
         name: Windows Defender Firewall Has Been Reset To Its Default Configuration
       - id: sigma:00bb5bd5-1379-4fcf-a965-a5b6f7478064
         name: Windows Firewall Settings Have Been Changed
-  coverage: none
-  covered_detections: 0
-  linked_detections: 16
+    vendor:
+      total: 1
+      shown:
+      - id: vendor:firewall_deny
+        name: Firewall deny or port-scan alert
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 17
+  covered_by:
+  - vendor:firewall_deny
 - id: UC-004
   name: Web proxy and URL-filter blocks
   domain: vendor_alert
@@ -260,9 +281,16 @@ use_cases:
         name: Remote Thread Creation Ttdinject.exe Proxy
       - id: sigma:0403d67d-6227-4ea8-8145-4e72db7da120
         name: UtilityFunctions.ps1 Proxy Dll
-  coverage: none
-  covered_detections: 0
-  linked_detections: 11
+    vendor:
+      total: 1
+      shown:
+      - id: vendor:proxy_block
+        name: Web proxy or URL-filter block
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 12
+  covered_by:
+  - vendor:proxy_block
 - id: UC-005
   name: Brute force and password spray
   domain: identity
@@ -421,9 +449,16 @@ use_cases:
     sigma:
       total: 0
       shown: []
-  coverage: none
-  covered_detections: 0
-  linked_detections: 14
+    vendor:
+      total: 1
+      shown:
+      - id: vendor:waf_alert
+        name: Web application firewall alert
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 15
+  covered_by:
+  - vendor:waf_alert
 - id: UC-008
   name: Phishing email blocked or delivered (email gateway)
   domain: vendor_alert
@@ -495,11 +530,17 @@ use_cases:
         name: Okta FastPass Phishing Detection
       - id: sigma:fcdf69e5-a3d3-452a-9724-26f2308bf2b1
         name: Phishing Pattern ISO in Archive
+    vendor:
+      total: 1
+      shown:
+      - id: vendor:email_gateway
+        name: Email gateway threat alert
   coverage: rule-level-partial
-  covered_detections: 1
-  linked_detections: 60
+  covered_detections: 2
+  linked_detections: 61
   covered_by:
   - escu:windows_office_product_spawned_uncommon_process
+  - vendor:email_gateway
   technique_fallbacks:
   - T1566.001
 - id: UC-009
@@ -580,9 +621,22 @@ use_cases:
         name: Script Interpreter Spawning Credential Scanner - Windows
       - id: sigma:ea5c131b-380d-49f9-aeb3-920694da4d4b
         name: Suspicious Unsigned Thor Scanner Execution
-  coverage: none
-  covered_detections: 0
-  linked_detections: 24
+    vendor:
+      total: 3
+      shown:
+      - id: vendor:ids_alert
+        name: IDS or IPS signature alert
+      - id: vendor:waf_alert
+        name: Web application firewall alert
+      - id: vendor:firewall_deny
+        name: Firewall deny or port-scan alert
+  coverage: rule-level-partial
+  covered_detections: 3
+  linked_detections: 27
+  covered_by:
+  - vendor:ids_alert
+  - vendor:waf_alert
+  - vendor:firewall_deny
 - id: UC-010
   name: DLP policy match
   domain: vendor_alert
@@ -634,9 +688,16 @@ use_cases:
     sigma:
       total: 0
       shown: []
-  coverage: none
-  covered_detections: 0
-  linked_detections: 9
+    vendor:
+      total: 1
+      shown:
+      - id: vendor:dlp_match
+        name: DLP policy match
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 10
+  covered_by:
+  - vendor:dlp_match
 - id: UC-011
   name: Impossible travel and unfamiliar sign-in
   domain: identity
@@ -864,9 +925,16 @@ use_cases:
     sigma:
       total: 0
       shown: []
-  coverage: none
-  covered_detections: 0
-  linked_detections: 1
+    vendor:
+      total: 1
+      shown:
+      - id: vendor:user_reported_phishing
+        name: User-reported phishing email
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 2
+  covered_by:
+  - vendor:user_reported_phishing
 - id: UC-015
   name: MFA fatigue and MFA failures
   domain: identity
@@ -993,9 +1061,16 @@ use_cases:
         name: External Disk Drive Or USB Storage Device Was Recognized By The System
       - id: sigma:1a4bd6e3-4c6e-405d-a9a3-53a116e341d4
         name: USB Device Plugged
-  coverage: none
-  covered_detections: 0
-  linked_detections: 9
+    vendor:
+      total: 1
+      shown:
+      - id: vendor:removable_media
+        name: Removable media (device control) alert
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 10
+  covered_by:
+  - vendor:removable_media
 - id: UC-017
   name: Living-off-the-land binaries
   domain: endpoint_windows

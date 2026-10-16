@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bank as B  # noqa: E402
 
 REQUIRED = {
-    "question": ["id", "text", "tests", "capability", "source", "license", "text_origin", "legal_review", "status", "version"],
+    "question": ["id", "text", "tests", "capability", "attacker_influence", "source", "license", "text_origin", "legal_review", "status", "version"],
     "explanation": ["id", "name", "description", "source", "license", "version"],
     "fact": ["id", "name", "description", "fields", "collected_by", "version"],
     "rule": ["id", "name", "techniques", "data_source", "sigma_logsource", "sigma_refs", "required_alert_fields", "intent", "fp_quality", "fingerprint", "precedent_validity", "flow", "source", "license", "status", "version"],
@@ -68,6 +68,9 @@ def main():
         if not isinstance(cap, dict) or cap.get("name") not in caps:
             err(w, f"unknown capability {cap.get('name') if isinstance(cap, dict) else cap}")
             continue
+        ai = q.get("attacker_influence") or {}
+        if ai.get("rating") not in ("none", "low", "high") or not str(ai.get("reason", "")).strip():
+            err(w, "attacker_influence needs rating none|low|high and a one-line reason")
         if caps[cap["name"]].get("flow_use") == "forbidden":
             err(w, f"capability {cap['name']} cannot back a question")
         for lid in B.list_refs(q):
@@ -166,19 +169,28 @@ def main():
         for t in techs:
             if attack_ids is not None and t not in attack_ids:
                 err(w, f"technique {t} not active in ATT&CK v20.0")
-            if kind == "rule" and t not in b["techniques"]:
+            if kind == "rule" and d.get("family") != "vendor" and t not in b["techniques"]:
                 warnings.append(f"{d['id']}: no technique fallback for {t}")
         if kind == "rule":
+            vendor = d.get("family") == "vendor"
+            if d.get("fp_quality") not in ("good", "vague", "none", "generic"):
+                err(w, f"fp_quality {d.get('fp_quality')} must be good|vague|none|generic")
+            if vendor:
+                if not d["id"].startswith("vendor:"):
+                    err(w, "vendor-family detections use the vendor: id prefix")
+                if b["use_cases"] and d.get("use_case") not in {u["id"] for u in b["use_cases"]}:
+                    err(w, f"use_case {d.get('use_case')} not in the catalog")
             ls = d.get("sigma_logsource") or []
-            if not ls:
-                err(w, "sigma_logsource must list at least one {product, category|service}")
+            if not ls and not (vendor and d.get("sigma_logsource_none")):
+                err(w, "sigma_logsource must list at least one entry (vendor families may leave it empty with sigma_logsource_none)")
             for entry in ls:
                 keys = set(entry) - {"product"}
-                if "product" not in entry or len(keys) != 1 or not keys <= {"category", "service"}:
-                    err(w, f"sigma_logsource entry {entry} must be product plus one of category or service")
+                if len(keys) != 1 or not keys <= {"category", "service"}:
+                    err(w, f"sigma_logsource entry {entry} must be [product plus] one of category or service")
                 elif sigma_tax is not None:
                     kind_key = keys.pop()
-                    if entry[kind_key] not in sigma_tax.get(entry["product"], {}).get(kind_key, {}):
+                    product = entry.get("product", "empty")
+                    if entry[kind_key] not in sigma_tax.get(product, {}).get(kind_key, {}):
                         err(w, f"sigma_logsource {entry} not in Sigma taxonomy (tests/logsource.json)")
             for ref in d.get("sigma_refs") or []:
                 if ref.get("relation") not in ("equivalent", "closest"):
@@ -207,8 +219,9 @@ def main():
         flow = d.get("flow", [])
         if not 1 <= len(flow) <= 5:
             err(w, f"flow has {len(flow)} steps (1-5 allowed)")
-        if len(flow) > budget:
-            err(w, f"flow exceeds call budget {budget}")
+        calls = sum(1 for st in flow if caps.get((b["questions"].get(st.get("question")) or {}).get("capability", {}).get("name"), {}).get("kind") != "local")
+        if calls > budget:
+            err(w, f"flow makes {calls} capability calls, over the budget of {budget}")
         for n, st in enumerate(flow, 1):
             where = f"{w} step {n}"
             if st.get("step") != n:
@@ -287,6 +300,8 @@ def main():
                 for x in block.get("shown", []):
                     if src_ids and src in src_ids and x["id"] not in src_ids[src]:
                         err(w, f"linked {x['id']} not found in cloned {src} sources")
+                    if src == "vendor" and x["id"] not in b["detections"]:
+                        err(w, f"linked {x['id']} is not a bank vendor detection")
             covered = u.get("covered_by", [])
             shown = {x["id"] for blk in u["linked"].values() for x in blk.get("shown", [])}
             for d in covered:

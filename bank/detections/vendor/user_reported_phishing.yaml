@@ -1,0 +1,62 @@
+id: vendor:user_reported_phishing
+name: User-reported phishing email
+family: vendor
+use_case: UC-014
+techniques:
+- T1566
+data_source:
+- Splunk CIM Email data model (user-reported message)
+sigma_logsource: []
+sigma_logsource_none: Sigma has no log-source category for this alert type.
+sigma_refs: []
+required_alert_fields:
+- message_id
+- user
+- src_user
+- recipient
+- subject
+- url
+- _time
+intent: 'Generic: a user reports an email as phishing through the report button or a reporting mailbox.'
+fp_quality: generic
+notes: 'Repeat reports of the same message attach to the open case through the fingerprint. A clean scanning verdict is not used to close: it is the easiest signal for an attacker to game.'
+explanations:
+- BE-0023
+- BE-0024
+- BE-0030
+fingerprint:
+- message_id
+precedent_validity: 7d
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0037
+  on_yes: close:benign_true_positive:authorized_phishing_simulation
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0034
+  on_yes: escalate
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0035
+  on_yes: next
+  on_no: flag
+  on_unknown: flag
+- step: 5
+  question: Q-0036
+  on_yes: close:mitigated_true_positive:contained_without_interaction
+  on_no: escalate
+  on_unknown: flag
+source:
+  repo: internal
+  path: bank/use_cases.yaml#UC-014
+  title: User-reported phishing email
+license: internal
+status: draft
+version: 1

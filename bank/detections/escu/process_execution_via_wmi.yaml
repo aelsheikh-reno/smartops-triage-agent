@@ -48,15 +48,15 @@ flow:
   bind:
     entity: process:process_guid
 - step: 3
-  question: Q-0014
-  on_yes: close:benign_true_positive:activity_baselined_on_host
-  on_no: next
-  on_unknown: next
-- step: 4
   question: Q-0002
   on_yes: next
   on_no: escalate
   on_unknown: flag
+- step: 4
+  question: Q-0014
+  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_no: next
+  on_unknown: next
 - step: 5
   question: Q-0004
   on_yes: close:benign_true_positive:approved_change
@@ -68,4 +68,4 @@ source:
   title: Process Execution via WMI
 license: Apache-2.0
 status: draft
-version: 5
+version: 6

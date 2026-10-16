@@ -6,6 +6,9 @@ capability:
   inputs:
     list: CF-0001
     entity: process:parent_process_guid
+attacker_influence:
+  rating: low
+  reason: Matched on hash or OS-verified signer plus path; the attacker would have to run under the sanctioned tool itself.
 needs:
   context:
   - CF-0001
@@ -18,4 +21,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 3
+version: 4

@@ -12,6 +12,9 @@ capability:
       param: org_prevalence_min_weeks
     of_weeks:
       param: org_prevalence_of_weeks
+attacker_influence:
+  rating: high
+  reason: The command line is attacker-chosen; a fleet-wide routine command can be reused or its script tampered with.
 source:
 - splunk/security_content detections/endpoint/windows_schtasks_create_run_as_system.yml
 - splunk/security_content detections/endpoint/malicious_powershell_process___execution_policy_bypass.yml
@@ -20,4 +23,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

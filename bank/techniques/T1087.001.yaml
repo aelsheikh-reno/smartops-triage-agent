@@ -34,11 +34,16 @@ flow:
   on_no: next
   on_unknown: next
 - step: 3
+  question: Q-0002
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 4
   question: Q-0014
   on_yes: close:benign_true_positive:activity_baselined_on_host
   on_no: next
   on_unknown: next
-- step: 4
+- step: 5
   question: Q-0004
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
@@ -46,4 +51,4 @@ flow:
 source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
 license: MITRE ATT&CK Terms of Use
 status: draft
-version: 2
+version: 3

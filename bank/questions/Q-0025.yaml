@@ -8,6 +8,9 @@ capability:
     entity: file:ImagePath
     host: value:dest
     at_time: value:_time
+attacker_influence:
+  rating: low
+  reason: Exception keyed on driver hash and host.
 needs:
   context:
   - CF-0017
@@ -18,4 +21,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

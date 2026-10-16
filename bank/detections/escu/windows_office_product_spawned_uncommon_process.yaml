@@ -7,8 +7,13 @@ data_source:
 - Sysmon EventID 1
 - Windows Event Log Security 4688
 - CrowdStrike ProcessRollup2
-telemetry_class:
-- process_creation
+sigma_logsource:
+- product: windows
+  category: process_creation
+sigma_refs:
+- id: 438025f9-5856-4663-83f7-52f878a70a50
+  title: Suspicious Microsoft Office Child Process
+  relation: equivalent
 required_alert_fields:
 - _time
 - dest
@@ -47,4 +52,4 @@ flow:
 source: splunk/security_content detections/endpoint/windows_office_product_spawned_uncommon_process.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4

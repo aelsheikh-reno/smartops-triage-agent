@@ -8,9 +8,15 @@ data_source:
 - Windows Event Log Security 4688
 - CrowdStrike ProcessRollup2
 - Cisco Network Visibility Module Flow Data
-telemetry_class:
-- process_creation
-- network
+sigma_logsource:
+- product: windows
+  category: process_creation
+- product: windows
+  category: network_connection
+sigma_refs:
+- id: 19b08b1c-861d-4e75-a1ef-ea0c1baf202b
+  title: Suspicious Download Via Certutil.EXE
+  relation: closest
 required_alert_fields:
 - _time
 - dest
@@ -70,4 +76,4 @@ flow:
 source: splunk/security_content detections/endpoint/windows_file_download_via_certutil.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4

@@ -9,9 +9,18 @@ data_source:
 - Windows Event Log Security 4688
 - CrowdStrike ProcessRollup2
 - Cisco Network Visibility Module Flow Data
-telemetry_class:
-- process_creation
-- network
+sigma_logsource:
+- product: windows
+  category: process_creation
+- product: windows
+  category: network_connection
+sigma_refs:
+- id: 85b0b087-eddf-4a2b-b033-d771fa2b9775
+  title: PowerShell Download and Execution Cradles
+  relation: closest
+- id: 5e3cc4d8-3e68-43db-8656-eaaeefdec9cc
+  title: Suspicious Invoke-WebRequest Execution
+  relation: closest
 required_alert_fields:
 - _time
 - dest
@@ -71,4 +80,4 @@ flow:
 source: splunk/security_content detections/endpoint/windows_file_download_via_powershell.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4

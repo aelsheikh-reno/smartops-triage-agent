@@ -6,8 +6,18 @@ techniques:
 data_source:
 - Windows Event Log Security 1102
 - Windows Event Log System 104
-telemetry_class:
-- log_management
+sigma_logsource:
+- product: windows
+  service: security
+- product: windows
+  service: system
+sigma_refs:
+- id: d99b79d2-0a6f-4f46-ad8b-260b6e17f982
+  title: Security Eventlog Cleared
+  relation: equivalent
+- id: a62b37e0-45d3-48d9-a517-90c1a1b0186b
+  title: Eventlog Cleared
+  relation: equivalent
 required_alert_fields:
 - EventCode
 - _time
@@ -42,4 +52,4 @@ flow:
 source: splunk/security_content detections/endpoint/windows_event_log_cleared.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4

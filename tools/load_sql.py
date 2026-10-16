@@ -45,8 +45,8 @@ def main():
         db.executemany("INSERT INTO question_needs VALUES (?,?,?)", [(q["id"], t, r) for t, r in sorted(needs)])
     n_steps = 0
     for level, d in B.flows(b):
-        db.execute("INSERT INTO detections VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                   (d["id"], level, d["name"], J(d.get("techniques", [d["id"]])), J(d.get("data_source", [])),
+        db.execute("INSERT INTO detections VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                   (d["id"], level, d["name"], J(d.get("techniques", [d["id"]])), J(d.get("data_source", [])), J(d.get("sigma_logsource", [])), J(d.get("sigma_refs", [])),
                     J(d.get("required_alert_fields") or d.get("assumed_alert_fields")), d.get("intent"), d.get("fp_quality"),
                     J(d["fingerprint"]), d["precedent_validity"], d.get("max_mode"), d["status"], d["version"]))
         for st in d["flow"]:

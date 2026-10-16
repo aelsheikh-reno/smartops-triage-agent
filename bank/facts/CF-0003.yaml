@@ -8,7 +8,8 @@ fields:
 - start
 - end
 - summary
-match_rule: host in hosts, at_time within start..end, and user listed in implementers directly or through group membership
+match_rule: host in hosts and at_time within start..end; yes if user is in implementers (directly or by group); no if no change covers host and time, or covering changes list implementers without the user;
+  unknown (no_data) if a covering change has no implementers
 collected_by: customer
 example:
   ticket_id: CHG0041123
@@ -20,4 +21,4 @@ example:
   start: 2026-10-16T20:00Z
   end: 2026-10-16T23:00Z
   summary: App patching
-version: 2
+version: 3

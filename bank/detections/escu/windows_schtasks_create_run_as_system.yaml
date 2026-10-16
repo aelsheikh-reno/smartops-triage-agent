@@ -7,8 +7,13 @@ data_source:
 - Sysmon EventID 1
 - Windows Event Log Security 4688
 - CrowdStrike ProcessRollup2
-telemetry_class:
-- process_creation
+sigma_logsource:
+- product: windows
+  category: process_creation
+sigma_refs:
+- id: 89ca78fd-b37c-4310-b3d3-81a023f83936
+  title: Schtasks Creation Or Modification With SYSTEM Privileges
+  relation: equivalent
 required_alert_fields:
 - _time
 - dest
@@ -52,4 +57,4 @@ flow:
 source: splunk/security_content detections/endpoint/windows_schtasks_create_run_as_system.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4

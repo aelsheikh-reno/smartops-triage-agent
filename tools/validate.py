@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Validate the question bank. Exit 1 on any error."""
+import glob
 import json
 import os
 import re
@@ -12,14 +13,13 @@ REQUIRED = {
     "question": ["id", "text", "tests", "capability", "source", "license", "text_origin", "legal_review", "status", "version"],
     "explanation": ["id", "name", "description", "source", "license", "version"],
     "fact": ["id", "name", "description", "fields", "collected_by", "version"],
-    "rule": ["id", "name", "techniques", "data_source", "telemetry_class", "required_alert_fields", "intent", "fp_quality", "fingerprint", "precedent_validity", "flow", "source", "license", "status", "version"],
+    "rule": ["id", "name", "techniques", "data_source", "sigma_logsource", "sigma_refs", "required_alert_fields", "intent", "fp_quality", "fingerprint", "precedent_validity", "flow", "source", "license", "status", "version"],
     "technique": ["id", "name", "attack_version", "max_mode", "assumed_alert_fields", "fingerprint", "precedent_validity", "flow", "source", "license", "status", "version"],
 }
 # Integration names and query syntax that must not appear outside source/data_source/license fields.
 FORBIDDEN = re.compile(r"\b(splunk|servicenow|jira|crowdstrike|sentinelone|qradar|carbon black|tstats|sourcetype|index\s*=|inputlookup|\|\s*stats)\b", re.I)
 EXEMPT_KEYS = {"source", "data_source", "license", "_file", "seed_from"}
-TELEMETRY = {"process_creation", "process_access", "registry", "image_load", "driver_load", "file", "network", "dns",
-             "authentication", "account_management", "log_management", "service_install"}
+SIGMA = os.path.join(B.ROOT, "sources/sigma")
 ATTACK = os.path.join(B.ROOT, "sources/attack-stix-data/enterprise-attack/enterprise-attack-20.0.json")
 
 
@@ -87,6 +87,20 @@ def main():
             for path, hit in scan_text(doc):
                 err(doc.get("_file", "bank/capabilities.yaml"), f"tool name or query syntax '{hit}' at {path}")
 
+    sigma_tax, sigma_ids = None, None
+    if os.path.isdir(SIGMA):
+        with open(os.path.join(SIGMA, "tests/logsource.json")) as fh:
+            sigma_tax = json.load(fh)["legit"]
+        sigma_ids = {}
+        for path in glob.glob(os.path.join(SIGMA, "rules*/**/*.yml"), recursive=True):
+            with open(path) as fh:
+                for line in fh:
+                    if line.startswith("id: "):
+                        sigma_ids[line[4:].strip()] = path
+                        break
+    else:
+        warnings.append("SigmaHQ repo not found under sources/; sigma_logsource and sigma_refs not checked")
+
     attack_ids = None
     if os.path.exists(ATTACK):
         with open(ATTACK) as fh:
@@ -110,9 +124,32 @@ def main():
                 err(w, f"technique {t} not active in ATT&CK v20.0")
             if kind == "rule" and t not in b["techniques"]:
                 warnings.append(f"{d['id']}: no technique fallback for {t}")
-        for tc in d.get("telemetry_class", []):
-            if tc not in TELEMETRY:
-                err(w, f"unknown telemetry_class {tc}")
+        if kind == "rule":
+            ls = d.get("sigma_logsource") or []
+            if not ls:
+                err(w, "sigma_logsource must list at least one {product, category|service}")
+            for entry in ls:
+                keys = set(entry) - {"product"}
+                if "product" not in entry or len(keys) != 1 or not keys <= {"category", "service"}:
+                    err(w, f"sigma_logsource entry {entry} must be product plus one of category or service")
+                elif sigma_tax is not None:
+                    kind_key = keys.pop()
+                    if entry[kind_key] not in sigma_tax.get(entry["product"], {}).get(kind_key, {}):
+                        err(w, f"sigma_logsource {entry} not in Sigma taxonomy (tests/logsource.json)")
+            for ref in d.get("sigma_refs") or []:
+                if ref.get("relation") not in ("equivalent", "closest"):
+                    err(w, f"sigma_refs {ref.get('id')}: relation must be equivalent or closest")
+                if sigma_ids is not None:
+                    path = sigma_ids.get(ref.get("id"))
+                    if not path:
+                        err(w, f"sigma_refs {ref.get('id')} not found in SigmaHQ rules")
+                    else:
+                        with open(path) as fh:
+                            text = fh.read()
+                        if f"title: {ref.get('title')}" not in text:
+                            err(w, f"sigma_refs {ref['id']}: title does not match {os.path.relpath(path, SIGMA)}")
+                        if "status: deprecated" in text:
+                            err(w, f"sigma_refs {ref['id']} is deprecated")
         for step, edge, bad in B.tainted_closes(b, d.get("flow", [])):
             info.append(f"{d['id']}: close at step {step} ({edge}) flags until onboarding verifies seed data used at step(s) {bad}")
         for e in d.get("explanations", []):

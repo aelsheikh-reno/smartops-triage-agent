@@ -105,7 +105,8 @@ capabilities:
     kind: lookup
     inputs: [entities, user, at_time]
     yes_means: An approved change covers one of the entities at at_time and lists user, or a group user belongs to, as an implementer.
-    no_means: No approved change covers the entity and time, or none that does lists the user or one of the user's groups.
+    no_means: No approved change covers the entity and time, or every covering change lists implementers and the user is not among them (directly or by group).
+    unknown_means: A covering change exists but has no implementer data. Returned as unknown with unknown_reason no_data, so it follows on_unknown and never closes.
     notes: Group membership is resolved by the server, as identity.groups would.
     escalate_only: false
 

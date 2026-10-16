@@ -7,8 +7,13 @@ data_source:
 - Sysmon EventID 1
 - Windows Event Log Security 4688
 - CrowdStrike ProcessRollup2
-telemetry_class:
-- process_creation
+sigma_logsource:
+- product: windows
+  category: process_creation
+sigma_refs:
+- id: 36210e0d-5b19-485d-a087-c096088885f0
+  title: Suspicious PowerShell Parameter Substring
+  relation: closest
 required_alert_fields:
 - _time
 - dest
@@ -51,4 +56,4 @@ flow:
 source: splunk/security_content detections/endpoint/malicious_powershell_process___execution_policy_bypass.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4

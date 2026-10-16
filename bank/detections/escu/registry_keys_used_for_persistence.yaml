@@ -5,8 +5,13 @@ techniques:
 - T1547.001
 data_source:
 - Sysmon EventID 13
-telemetry_class:
-- registry
+sigma_logsource:
+- product: windows
+  category: registry_set
+sigma_refs:
+- id: 20f0ee37-5942-4e45-b7d5-c5b5db9df5cd
+  title: CurrentVersion Autorun Keys Modification
+  relation: closest
 required_alert_fields:
 - _time
 - dest
@@ -61,4 +66,4 @@ flow:
 source: splunk/security_content detections/endpoint/registry_keys_used_for_persistence.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4

@@ -7,8 +7,13 @@ data_source:
 - Sysmon EventID 1
 - Windows Event Log Security 4688
 - CrowdStrike ProcessRollup2
-telemetry_class:
-- process_creation
+sigma_logsource:
+- product: windows
+  category: process_creation
+sigma_refs:
+- id: 17769c90-230e-488b-a463-e05c08e9d48f
+  title: Powershell Defender Exclusion
+  relation: equivalent
 required_alert_fields:
 - _time
 - dest
@@ -62,4 +67,4 @@ flow:
 source: splunk/security_content detections/endpoint/add_or_set_windows_defender_exclusion.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4

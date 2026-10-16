@@ -11,6 +11,7 @@ capability:
 needs:
   context:
   - CF-0003
+notes: A covering change without implementer data answers unknown (no_data), never yes.
 source:
 - elastic/detection-rules rules/windows/command_and_control_new_terms_rmm_signer.toml
 - splunk/security_content detections/endpoint/detect_new_local_admin_account.yml
@@ -20,4 +21,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 3
+version: 4

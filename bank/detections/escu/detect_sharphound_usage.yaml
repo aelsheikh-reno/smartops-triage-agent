@@ -11,8 +11,13 @@ data_source:
 - Sysmon EventID 1
 - Windows Event Log Security 4688
 - CrowdStrike ProcessRollup2
-telemetry_class:
-- process_creation
+sigma_logsource:
+- product: windows
+  category: process_creation
+sigma_refs:
+- id: f376c8a7-a2d0-4ddc-aa0c-16c17236d962
+  title: HackTool - Bloodhound/Sharphound Execution
+  relation: closest
 required_alert_fields:
 - _time
 - dest
@@ -41,4 +46,4 @@ flow:
 source: splunk/security_content detections/endpoint/detect_sharphound_usage.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4

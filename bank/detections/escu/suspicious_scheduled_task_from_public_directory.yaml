@@ -7,8 +7,13 @@ data_source:
 - Sysmon EventID 1
 - Windows Event Log Security 4688
 - CrowdStrike ProcessRollup2
-telemetry_class:
-- process_creation
+sigma_logsource:
+- product: windows
+  category: process_creation
+sigma_refs:
+- id: 81325ce1-be01-4250-944f-b4789644556f
+  title: Schedule Task Creation From Env Variable Or Potentially Suspicious Path Via Schtasks.EXE
+  relation: closest
 required_alert_fields:
 - _time
 - dest
@@ -58,4 +63,4 @@ flow:
 source: splunk/security_content detections/endpoint/suspicious_scheduled_task_from_public_directory.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4

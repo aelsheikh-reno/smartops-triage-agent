@@ -51,6 +51,8 @@ CREATE TABLE detections (
     name               TEXT NOT NULL,
     techniques_json    TEXT NOT NULL,
     data_source_json   TEXT NOT NULL,
+    sigma_logsource_json TEXT NOT NULL,   -- offline matching metadata, never used at runtime
+    sigma_refs_json    TEXT NOT NULL,
     alert_fields_json  TEXT NOT NULL,
     intent             TEXT,
     fp_quality         TEXT,

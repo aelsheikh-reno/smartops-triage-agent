@@ -7,8 +7,13 @@ data_source:
 - Sysmon EventID 1
 - Windows Event Log Security 4688
 - CrowdStrike ProcessRollup2
-telemetry_class:
-- process_creation
+sigma_logsource:
+- product: windows
+  category: process_creation
+sigma_refs:
+- id: 85ff530b-261d-48c6-a441-facaa2e81e48
+  title: New Service Creation Using Sc.EXE
+  relation: closest
 required_alert_fields:
 - _time
 - dest
@@ -64,4 +69,4 @@ flow:
 source: splunk/security_content detections/endpoint/windows_service_creation_on_remote_endpoint.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4

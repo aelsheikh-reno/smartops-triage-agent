@@ -5,8 +5,16 @@ techniques:
 - T1543.003
 data_source:
 - Windows Event Log System 7045
-telemetry_class:
-- service_install
+sigma_logsource:
+- product: windows
+  service: system
+sigma_refs:
+- id: 72cd00d6-490c-4650-86ff-1d11f491daa1
+  title: Vulnerable Driver Load By Name
+  relation: equivalent
+- id: 7aaaf4b8-e47c-4295-92ee-6ed40a6f60c8
+  title: Vulnerable Driver Load
+  relation: closest
 required_alert_fields:
 - ImagePath
 - _time
@@ -47,6 +55,6 @@ flow:
 source: splunk/security_content detections/endpoint/windows_vulnerable_driver_installed.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4
 notes: ESCU matches LOLDrivers on driver file name only. A hash miss in LOLDrivers plus a trusted signer is not enough to call it a name collision (vulnerable drivers are trusted-signed and LOLDrivers is
   incomplete), so that case flags.

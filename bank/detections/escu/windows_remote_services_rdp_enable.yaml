@@ -5,8 +5,13 @@ techniques:
 - T1021.001
 data_source:
 - Sysmon EventID 13
-telemetry_class:
-- registry
+sigma_logsource:
+- product: windows
+  category: registry_set
+sigma_refs:
+- id: a2863fbc-d5cb-48d5-83fb-d976d4b1743b
+  title: RDP Sensitive Settings Changed to Zero
+  relation: closest
 required_alert_fields:
 - _time
 - dest
@@ -54,4 +59,4 @@ flow:
 source: splunk/security_content detections/endpoint/windows_remote_services_rdp_enable.yml
 license: Apache-2.0
 status: draft
-version: 3
+version: 4

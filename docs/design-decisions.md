@@ -11,7 +11,7 @@ Only entities named in the alert, only alerts that already fired, a fixed ±24h 
 
 ## 4. Questions are portable, answers are local
 Every question is answerable by one lookup against:
-- Context store: assets, identities, allowlists, VPN ranges, sanctioned tools, change windows (customer-provided or mined from Splunk)
+- Context store: assets, identities, allowlists, VPN ranges, sanctioned tools, change windows with their implementers (customer-provided or mined from Splunk)
 - Baseline engine: "is this normal for this entity?" yes/no, from the customer's logs
 - Case memory: precedents (past closures with reasons)
 - Alert field: values in the notable itself
@@ -23,12 +23,12 @@ Answer contract: `answer` (yes | no | unknown), `unknown_reason` (no_capability 
 - no_data: follow the step's `on_unknown`.
 - unavailable (tool down, timeout): never closes; the alert is flagged and the detection runs in Recommend until the capability is healthy again.
 - no_capability: resolved per customer at onboarding. The question is disabled, its step follows `on_unknown` without a call, and it is listed in the coverage report.
-- A yes that rests on seed data with `verified: false` cannot close; the close becomes a flag until onboarding verifies the entry.
+- A yes that rests on seed data with `verified: false` taints the rest of the flow: that step and any later close reached through it become a flag until onboarding verifies the entry.
 - Reputation and anomaly capabilities are escalate_only: a hit escalates, a miss is never benign evidence.
 
 The MCP server enforces scope: entities named in the alert only; fixed windows (±24h for event lookups; baselines and prevalence use their declared lookbacks and return counts, not raw events); read-only; a per-call timeout (timeout = unavailable); at most 6 calls per alert including Q0. Resolving a file's hash or signer inside a lookup is the server's job and does not count against the budget.
 
-Write-back goes only through `list.propose_update`. Reduce-scrutiny changes (allowlist additions) need human approval with an owner and an expiry. Increase-scrutiny changes (watchlists, removing an allowlist entry) may be automatic. Enforcement blocks need approval.
+Write-back goes only through `list.propose_update`. Reduce-scrutiny changes (allowlist additions) need human approval with an owner and an expiry. Increase-scrutiny changes (watchlists, removing an allowlist entry) may be automatic; removing an allowlist entry must notify the fact's owner. Enforcement blocks need approval.
 
 Allowlist and "known tool" lookups match on file hash, or code-signing signer plus path, never on name or path alone. Names and paths are attacker-controlled. Where the alert lacks hash or signer, fetch them from the same process's creation event by process GUID; if still unavailable, the answer is unknown.
 

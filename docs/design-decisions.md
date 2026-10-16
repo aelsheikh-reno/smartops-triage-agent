@@ -16,6 +16,8 @@ Every question is answerable by one lookup against:
 - Case memory: precedents (past closures with reasons)
 - Alert field: values in the notable itself
 
+Allowlist and "known tool" lookups match on file hash, or code-signing signer plus path, never on name or path alone. Names and paths are attacker-controlled. Where the alert lacks hash or signer, fetch them from the same process's creation event by process GUID; if still unavailable, the answer is unknown.
+
 ## 5. Bank structure
 - Two levels: rule-level flows per known detection (ESCU, Sigma, Elastic) and technique-level fallback flows per ATT&CK technique.
 - Technique-only rules are capped at Recommend mode.

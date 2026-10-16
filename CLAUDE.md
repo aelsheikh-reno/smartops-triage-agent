@@ -9,6 +9,7 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 ## Rules
 - YAML under `bank/` is the source of truth. Everything else is generated from it.
 - Every question is yes/no and answerable by one lookup (context, baseline, case_memory or alert_field).
+- Any allowlist or "known tool" question matches on file hash, or code-signing signer plus path. Never on name or path alone.
 - Flows: at most 5 steps, early exit, `on_yes` / `on_no` / `on_unknown` on every step.
 - Every question records `source` and `license`. Flag text copied from non-Apache sources for legal review.
 - New questions start as `status: draft`. Only a human marks them `approved`.

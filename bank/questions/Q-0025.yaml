@@ -1,0 +1,21 @@
+id: Q-0025
+text: Is there an unexpired approved exception for this driver's SHA256 on this host?
+tests: BE-0015
+capability:
+  name: list.lookup
+  inputs:
+    list: CF-0017
+    entity: file:ImagePath
+    host: value:dest
+    at_time: value:_time
+needs:
+  context:
+  - CF-0017
+source:
+- splunk/security_content detections/endpoint/windows_vulnerable_driver_installed.yml
+license:
+- Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 2

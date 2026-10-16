@@ -1,0 +1,19 @@
+id: Q-0010
+text: Has this same binary (same hash, or same signer and path) run on this host on at least 3 distinct days in the 30 days before the alert window?
+tests: BE-0007
+capability:
+  name: entity.baseline
+  inputs:
+    entity: value:dest
+    behavior: the binary of process:process_guid ran
+  params:
+    min_days: 3
+    lookback: 30d
+source:
+- elastic/detection-rules rules/windows/command_and_control_new_terms_rmm_signer.toml (first appearance vs established)
+license:
+- Elastic-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 3

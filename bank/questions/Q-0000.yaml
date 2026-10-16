@@ -1,0 +1,22 @@
+id: Q-0000
+text: Was an alert with the same fingerprint closed by an original decision (an analyst or a non-precedent flow step) with a recorded reason within the validity window, on an entity that is not a crown
+  jewel, with no other alert on the entity in the window?
+tests: BE-0000
+capability:
+  name: case.precedent
+  inputs:
+    fingerprint: value:fingerprint
+needs:
+  context:
+  - CF-0007
+notes: 'A closure with reason precedent_match is never itself a precedent; precedents cannot chain. In Shadow and Recommend the precedent is shown to the analyst instead of closing. Validity window is set
+  per detection (precedent_validity).
+
+  '
+source:
+- "design-decisions.md \xA75"
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 3

@@ -1,0 +1,24 @@
+id: CF-0003
+name: change_windows
+description: Approved change tickets and maintenance windows, with the hosts they cover, the accounts or groups that implement them, and their start and end times.
+fields:
+- ticket_id
+- hosts
+- implementers
+- start
+- end
+- summary
+match_rule: host in hosts and at_time within start..end; yes if user is in implementers (directly or by group); no if no change covers host and time, or covering changes list implementers without the user;
+  unknown (no_data) if a covering change has no implementers
+collected_by: customer
+example:
+  ticket_id: CHG0041123
+  hosts:
+  - srv-app-01
+  implementers:
+  - CORP\jsmith-adm
+  - CORP\IT-AppPatching
+  start: 2026-10-16T20:00Z
+  end: 2026-10-16T23:00Z
+  summary: App patching
+version: 3

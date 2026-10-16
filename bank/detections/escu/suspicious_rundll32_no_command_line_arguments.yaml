@@ -1,0 +1,64 @@
+id: escu:suspicious_rundll32_no_command_line_arguments
+escu_uuid: e451bd16-e4c5-4109-8eb1-c4c6ecf048b4
+name: Suspicious Rundll32 no Command Line Arguments
+techniques:
+- T1218.011
+data_source:
+- Sysmon EventID 1
+- Windows Event Log Security 4688
+- CrowdStrike ProcessRollup2
+sigma_logsource:
+- product: windows
+  category: process_creation
+sigma_refs:
+- id: 1775e15e-b61b-4d14-a1a3-80981298085a
+  title: Rundll32 Execution Without CommandLine Parameters
+  relation: equivalent
+- id: 5bb68627-3198-40ca-b458-49f973db8752
+  title: Rundll32 Execution Without Parameters
+  relation: closest
+required_alert_fields:
+- _time
+- dest
+- parent_process_guid
+- parent_process_name
+- process
+- process_path
+intent: Detects rundll32.exe running with no arguments (typical injection target) from process creation logs.
+fp_quality: vague
+explanations:
+- BE-0018
+- BE-0007
+- BE-0008
+fingerprint:
+- dest
+- parent_process_name
+- process_path
+precedent_validity: 72h
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0019
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+  bind:
+    entity: process:parent_process_guid
+- step: 3
+  question: Q-0014
+  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0015
+  on_yes: close:benign_true_positive:prevalent_in_org
+  on_no: escalate
+  on_unknown: flag
+source: splunk/security_content detections/endpoint/suspicious_rundll32_no_command_line_arguments.yml
+license: Apache-2.0
+status: draft
+version: 4

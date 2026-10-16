@@ -1,0 +1,19 @@
+id: Q-0005
+text: Is the process that opened LSASS on the customer's sanctioned LSASS accessor list, matched on hash or on signer plus path?
+tests: BE-0004
+capability:
+  name: list.lookup
+  inputs:
+    list: CF-0004
+    entity: process:SourceProcessGUID
+needs:
+  context:
+  - CF-0004
+source:
+- splunk/security_content detections/endpoint/windows_possible_credential_dumping.yml
+license:
+- Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 3

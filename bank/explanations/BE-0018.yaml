@@ -1,0 +1,11 @@
+id: BE-0018
+name: Trusted-signed software
+description: The acting binary is validly signed by a trusted publisher and is not a LOLBin, script host or dump tool.
+source:
+- splunk/security_content detections/endpoint/registry_keys_used_for_persistence.yml (known_false_positives)
+- splunk/security_content detections/endpoint/suspicious_rundll32_no_command_line_arguments.yml (known_false_positives)
+- LOLBAS-Project/LOLBAS yml (exclusions)
+license:
+- Apache-2.0
+- GPL-3.0
+version: 1

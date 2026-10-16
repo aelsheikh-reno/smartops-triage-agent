@@ -1,0 +1,6 @@
+id: BE-0000
+name: Precedent
+description: An analyst already closed an alert with the same fingerprint, with a recorded reason, recently enough that the reason still holds.
+source: [design-decisions.md §5 (Q0)]
+license: internal
+version: 1

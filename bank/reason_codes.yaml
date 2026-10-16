@@ -1,0 +1,65 @@
+# Dispositions:
+#   false_positive        the rule matched, but the activity is not the behavior the rule intends to catch
+#   benign_true_positive  the intended behavior happened and is authorized or expected
+#   inherit               (Q0 only) take the disposition and reason of the cited precedent
+# Outcome grammar for flow steps: next | close:<disposition>:<reason_code> | escalate | flag
+#   flag = stop and hand to an analyst with no verdict (missing context on a decisive question)
+#   An unknown answer never closes an alert.
+reason_codes:
+- code: precedent_match
+  disposition: inherit
+  description: Same fingerprint closed with a recorded reason inside the validity window.
+- code: sanctioned_deployment_tool
+  disposition: benign_true_positive
+  description: Launched by a customer-sanctioned software deployment or management tool.
+- code: admin_activity_baselined
+  disposition: benign_true_positive
+  description: IT admin account doing activity it routinely does on this host.
+- code: approved_change
+  disposition: benign_true_positive
+  description: Covered by an approved change ticket or maintenance window for this host or user.
+- code: sanctioned_lsass_accessor
+  disposition: false_positive
+  description: LSASS opened by a customer-sanctioned security, backup or monitoring tool.
+- code: known_benign_lsass_accessor
+  disposition: false_positive
+  description: LSASS opened by a publicly documented benign tool from its expected install path.
+- code: lsass_access_baselined
+  disposition: false_positive
+  description: The same binary opens LSASS on this host routinely.
+- code: sanctioned_rmm_baselined
+  disposition: benign_true_positive
+  description: Sanctioned remote access tool, launched normally, established on this host.
+- code: sanctioned_management_tool
+  disposition: benign_true_positive
+  description: Acting process is a customer-sanctioned deployment or management tool.
+- code: activity_baselined_on_host
+  disposition: benign_true_positive
+  description: The same command, from the same parent binary, runs routinely on this host.
+- code: prevalent_in_org
+  disposition: benign_true_positive
+  description: The same command or change was common across the fleet before the alert window.
+- code: rdp_expected_on_host
+  disposition: benign_true_positive
+  description: RDP is required by the host's role.
+- code: sanctioned_backup_tool
+  disposition: benign_true_positive
+  description: Sanctioned backup software managing shadow copies.
+- code: approved_av_exclusion
+  disposition: benign_true_positive
+  description: Exclusion is on the approved list for this host.
+- code: host_rebuild
+  disposition: benign_true_positive
+  description: Host is being rebuilt or decommissioned.
+- code: approved_driver_exception
+  disposition: benign_true_positive
+  description: Vulnerable driver covered by an unexpired risk acceptance.
+- code: authorized_security_test
+  disposition: benign_true_positive
+  description: Covered by an authorized security test engagement.
+- code: provisioning_service_account
+  disposition: benign_true_positive
+  description: Account change made by a provisioning service account.
+- code: trusted_signed_software
+  disposition: benign_true_positive
+  description: Acting binary is trusted-signed and not a LOLBin, script host or dump tool.

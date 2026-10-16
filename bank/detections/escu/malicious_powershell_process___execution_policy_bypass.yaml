@@ -1,0 +1,59 @@
+id: escu:malicious_powershell_process___execution_policy_bypass
+escu_uuid: 9be56c82-b1cc-4318-87eb-d138afaaca39
+name: Malicious PowerShell Process - Execution Policy Bypass
+techniques:
+- T1059.001
+data_source:
+- Sysmon EventID 1
+- Windows Event Log Security 4688
+- CrowdStrike ProcessRollup2
+sigma_logsource:
+- product: windows
+  category: process_creation
+sigma_refs:
+- id: 36210e0d-5b19-485d-a087-c096088885f0
+  title: Suspicious PowerShell Parameter Substring
+  relation: closest
+required_alert_fields:
+- _time
+- dest
+- parent_process_guid
+- parent_process_name
+- parent_process_path
+- process
+intent: Detects PowerShell started with -ExecutionPolicy Bypass from process creation logs.
+fp_quality: vague
+explanations:
+- BE-0002
+- BE-0007
+- BE-0008
+fingerprint:
+- dest
+- parent_process_name
+- process
+precedent_validity: 72h
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0001
+  on_yes: close:benign_true_positive:sanctioned_deployment_tool
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0014
+  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0015
+  on_yes: close:benign_true_positive:prevalent_in_org
+  on_no: escalate
+  on_unknown: flag
+source: splunk/security_content detections/endpoint/malicious_powershell_process___execution_policy_bypass.yml
+license: Apache-2.0
+status: draft
+version: 4

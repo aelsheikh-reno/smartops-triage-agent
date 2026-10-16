@@ -1,0 +1,60 @@
+id: escu:detect_new_local_admin_account
+escu_uuid: b25f6f62-0712-43c1-b203-083231ffd97d
+name: Detect New Local Admin account
+techniques:
+- T1136.001
+data_source:
+- Windows Event Log Security 4732
+- Windows Event Log Security 4720
+sigma_logsource:
+- product: windows
+  service: security
+sigma_refs:
+- id: c265cf08-3f99-46c1-8d59-328247057d57
+  title: User Added to Local Administrator Group
+  relation: closest
+required_alert_fields:
+- _time
+- dest
+- src_user
+- user
+intent: Detects a new local account (4720) that is added to local Administrators (4732) within 180 minutes, from Windows Security logs.
+fp_quality: good
+explanations:
+- BE-0017
+- BE-0001
+- BE-0003
+fingerprint:
+- dest
+- src_user
+- user
+precedent_validity: 72h
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0020
+  on_yes: close:benign_true_positive:provisioning_service_account
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0002
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+  bind:
+    user: value:src_user
+- step: 4
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+  bind:
+    user: value:src_user
+source: splunk/security_content detections/endpoint/detect_new_local_admin_account.yml
+license: Apache-2.0
+status: draft
+version: 4

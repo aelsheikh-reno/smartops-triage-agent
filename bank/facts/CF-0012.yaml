@@ -1,0 +1,17 @@
+id: CF-0012
+name: approved_av_exclusions
+description: Defender exclusions IT has approved (paths, processes, extensions, ASR-only exclusions).
+fields:
+- exclusion_type
+- value
+- scope_hosts
+- ticket
+match_rule: exact value match after environment-variable expansion; wildcards only where the approved value itself contains them
+collected_by: customer
+example:
+  exclusion_type: path
+  value: D:\SQLData\*.mdf
+  scope_hosts:
+  - sql-*
+  ticket: CHG0038812
+version: 1

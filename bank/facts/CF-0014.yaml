@@ -1,0 +1,19 @@
+id: CF-0014
+name: authorized_security_tests
+description: Approved penetration tests, red team exercises and AD audits with scope and window.
+fields:
+- engagement_id
+- tester_accounts
+- hosts
+- start
+- end
+collected_by: customer
+example:
+  engagement_id: PT-2026-Q4
+  tester_accounts:
+  - CORP\pt-tester1
+  hosts:
+  - pt-laptop-01
+  start: 2026-10-12T00:00Z
+  end: 2026-10-23T23:59Z
+version: 1

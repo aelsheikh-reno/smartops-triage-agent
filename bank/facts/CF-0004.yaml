@@ -1,0 +1,7 @@
+id: CF-0004
+name: sanctioned_lsass_accessors
+description: Customer-approved security, backup, monitoring or support tools that open LSASS without running as SYSTEM.
+fields: [tool_name, process_path, signer]
+collected_by: customer
+example: {tool_name: Vendor support collector, process_path: 'C:\Program Files\Vendor\collector.exe', signer: Vendor Inc.}
+version: 1

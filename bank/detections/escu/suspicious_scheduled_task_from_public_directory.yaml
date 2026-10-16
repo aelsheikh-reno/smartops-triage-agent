@@ -1,0 +1,66 @@
+id: escu:suspicious_scheduled_task_from_public_directory
+escu_uuid: 7feb7972-7ac3-11eb-bac8-acde48001122
+name: Suspicious Scheduled Task from Public Directory
+techniques:
+- T1053.005
+data_source:
+- Sysmon EventID 1
+- Windows Event Log Security 4688
+- CrowdStrike ProcessRollup2
+sigma_logsource:
+- product: windows
+  category: process_creation
+sigma_refs:
+- id: 81325ce1-be01-4250-944f-b4789644556f
+  title: Schedule Task Creation From Env Variable Or Potentially Suspicious Path Via Schtasks.EXE
+  relation: closest
+required_alert_fields:
+- _time
+- dest
+- parent_process_guid
+- parent_process_name
+- parent_process_path
+- process
+- user
+intent: Detects schtasks.exe /create with an action in a public directory (Users\Public, ProgramData, Windows\Temp) from process creation logs.
+fp_quality: vague
+explanations:
+- BE-0002
+- BE-0008
+- BE-0007
+- BE-0003
+fingerprint:
+- dest
+- parent_process_name
+- process
+precedent_validity: 7d
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0001
+  on_yes: close:benign_true_positive:sanctioned_deployment_tool
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0015
+  on_yes: close:benign_true_positive:prevalent_in_org
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0014
+  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_no: next
+  on_unknown: next
+- step: 5
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+source: splunk/security_content detections/endpoint/suspicious_scheduled_task_from_public_directory.yml
+license: Apache-2.0
+status: draft
+version: 4

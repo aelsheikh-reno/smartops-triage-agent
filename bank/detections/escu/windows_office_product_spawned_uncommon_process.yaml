@@ -1,0 +1,55 @@
+id: escu:windows_office_product_spawned_uncommon_process
+escu_uuid: 55d8741c-fa32-4692-8109-410304961eb8
+name: Windows Office Product Spawned Uncommon Process
+techniques:
+- T1566.001
+data_source:
+- Sysmon EventID 1
+- Windows Event Log Security 4688
+- CrowdStrike ProcessRollup2
+sigma_logsource:
+- product: windows
+  category: process_creation
+sigma_refs:
+- id: 438025f9-5856-4663-83f7-52f878a70a50
+  title: Suspicious Microsoft Office Child Process
+  relation: equivalent
+required_alert_fields:
+- _time
+- dest
+- parent_process_guid
+- parent_process_name
+- process
+- process_name
+intent: Detects an Office application spawning a shell, script host or LOLBin (cmd, PowerShell, wscript, cscript, mshta, rundll32, regsvr32, certutil, bitsadmin, wmic) from process creation logs.
+fp_quality: none
+notes: 'fp_quality none: ESCU gives no benign cause. The tested causes (routine business macros and add-ins) come from analyst practice and need review.'
+explanations:
+- BE-0007
+- BE-0008
+fingerprint:
+- dest
+- parent_process_name
+- process_name
+- process
+precedent_validity: 24h
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0014
+  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0015
+  on_yes: close:benign_true_positive:prevalent_in_org
+  on_no: escalate
+  on_unknown: flag
+source: splunk/security_content detections/endpoint/windows_office_product_spawned_uncommon_process.yml
+license: Apache-2.0
+status: draft
+version: 4

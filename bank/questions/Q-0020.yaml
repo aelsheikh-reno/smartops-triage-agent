@@ -1,0 +1,19 @@
+id: Q-0020
+text: Was the account created or added to local Administrators by a provisioning service account?
+tests: BE-0017
+capability:
+  name: list.lookup
+  inputs:
+    list: CF-0013
+    entity: value:src_user
+needs:
+  context:
+  - CF-0013
+source:
+- splunk/security_content detections/endpoint/detect_new_local_admin_account.yml
+license:
+- Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 2

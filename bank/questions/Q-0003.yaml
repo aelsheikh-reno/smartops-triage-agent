@@ -1,0 +1,21 @@
+id: Q-0003
+text: Has this user run this same binary (same hash, or same signer and path) on this host on at least 3 distinct days in the 30 days before the alert window?
+tests: BE-0007
+capability:
+  name: entity.baseline
+  inputs:
+    entity:
+    - value:user
+    - value:dest
+    behavior: ran the binary of process:process_guid
+  params:
+    min_days: 3
+    lookback: 30d
+source:
+- elastic/detection-rules rules/windows/execution_psexec_lateral_movement_command.toml
+license:
+- Elastic-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 3

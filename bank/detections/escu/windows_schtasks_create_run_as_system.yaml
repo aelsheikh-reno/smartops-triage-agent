@@ -1,0 +1,60 @@
+id: escu:windows_schtasks_create_run_as_system
+escu_uuid: 41a0e58e-884c-11ec-9976-acde48001122
+name: Windows Schtasks Create Run As System
+techniques:
+- T1053.005
+data_source:
+- Sysmon EventID 1
+- Windows Event Log Security 4688
+- CrowdStrike ProcessRollup2
+sigma_logsource:
+- product: windows
+  category: process_creation
+sigma_refs:
+- id: 89ca78fd-b37c-4310-b3d3-81a023f83936
+  title: Schtasks Creation Or Modification With SYSTEM Privileges
+  relation: equivalent
+required_alert_fields:
+- _time
+- dest
+- parent_process_guid
+- parent_process_name
+- parent_process_path
+- process
+- user
+intent: Detects schtasks.exe /create /ru SYSTEM from process creation logs.
+fp_quality: good
+explanations:
+- BE-0002
+- BE-0008
+- BE-0003
+fingerprint:
+- dest
+- parent_process_name
+- process
+precedent_validity: 7d
+flow:
+- step: 1
+  question: Q-0000
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0001
+  on_yes: close:benign_true_positive:sanctioned_deployment_tool
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0015
+  on_yes: close:benign_true_positive:prevalent_in_org
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+source: splunk/security_content detections/endpoint/windows_schtasks_create_run_as_system.yml
+license: Apache-2.0
+status: draft
+version: 4

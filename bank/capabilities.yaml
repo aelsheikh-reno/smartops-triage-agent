@@ -1,0 +1,123 @@
+# Capabilities the agent may ask the MCP server for. The server maps each one to whatever
+# customer tools exist; the bank never names tools or carries queries.
+#
+# Entity references used in inputs:
+#   process:<field>  the process identified by the GUID in <field>
+#   module:<field>   the module (DLL or registered file) loaded by the process GUID in <field>
+#   file:<field>     the file at the path in <field>
+#   value:<field>    a literal alert value (or a derived field)
+# File-typed entities are resolved to hash and signer by the server when a list's match_rule needs them.
+
+answer_contract:
+  answer: yes | no | unknown
+  unknown_reason: no_capability | unavailable | no_data   # required when answer is unknown
+  evidence: values compared, matched list entry ids, counts, and verified flag of any seed entry used
+  source_tool: opaque identifier of the tool the server used; recorded for audit, never interpreted by the bank
+  observed_at: RFC3339 timestamp of the data the answer is based on
+
+unknown_semantics:
+  no_data: follow the step's on_unknown.
+  unavailable: never closes. Stop and flag; the detection runs in Recommend until the capability is healthy.
+  no_capability: resolved per customer at onboarding. The question is disabled for that customer, its step follows on_unknown without a call, and it appears in the coverage report.
+unverified_seed: A yes whose evidence rests on a seed entry with verified false taints the flow. That step, and any later close reached through it, becomes flag until onboarding verifies the entry.
+
+scope:   # enforced by the MCP server, not by the agent
+  entities: only entities named in the alert (and derived fields parsed from it)
+  windows: event lookups use the fixed ±24h alert window; baseline and prevalence capabilities use their declared lookbacks, always ending before the alert window, and return counts, not raw events
+  access: read-only, except list.propose_update, which only creates a proposal
+  timeout_seconds: 10            # a timeout is unknown_reason unavailable
+  max_calls_per_alert: 6         # includes Q0; internal hash or signer resolution does not count; exceeding it flags the alert
+
+capabilities:
+  - name: case.precedent
+    kind: lookup
+    inputs: [detection_id, fingerprint, validity_window]
+    yes_means: An alert with the same fingerprint was closed by an original decision (an analyst or a non-precedent flow step) with a recorded reason inside the validity window, the entity is not a crown jewel, and no other alert hit the entity in the window.
+    no_means: No such closure.
+    escalate_only: false
+
+  - name: list.lookup
+    kind: lookup
+    inputs: [list, entity, host (optional), at_time (optional)]
+    yes_means: The entity matches an entry of the named context list under that list's match_rule (file entities match on sha256, or signer plus path), the entry's host scope includes host when given, and the entry is in force at at_time when the list is time-bound.
+    no_means: No entry matches.
+    escalate_only: false
+
+  - name: file.hash
+    kind: attribute
+    inputs: [entity, reference]
+    yes_means: The file's SHA256 was obtained and equals the reference value or a reference list entry.
+    no_means: The hash was obtained and does not match.
+    escalate_only: false
+    notes: Used directly when a question needs only a hash comparison; also resolved inside list.lookup.
+
+  - name: file.signer
+    kind: attribute
+    inputs: [entity, trusted_list]
+    yes_means: The file has a valid code signature from a publisher on trusted_list and the binary is not on that list's excluded_binaries.
+    no_means: The signature is missing, invalid, from an untrusted publisher, or the binary is excluded.
+    escalate_only: false
+
+  - name: file.reputation
+    kind: reputation
+    inputs: [entity, sources]
+    yes_means: A reputation source (including bank seed lists such as LOLDrivers) marks the file's hash as known vulnerable or malicious.
+    no_means: No source marks it. Not benign evidence.
+    escalate_only: true
+
+  - name: ip.reputation
+    kind: reputation
+    inputs: [ip]
+    yes_means: A reputation source marks the IP as malicious.
+    no_means: No source marks it. Not benign evidence.
+    escalate_only: true
+
+  - name: identity.groups
+    kind: lookup
+    inputs: [user, groups]
+    yes_means: The account is one of, or a direct or nested member of, the named accounts or groups.
+    no_means: It is not.
+    escalate_only: false
+
+  - name: identity.risk
+    kind: anomaly
+    inputs: [user]
+    yes_means: The identity provider rates the account as risky or compromised now.
+    no_means: No risk signal. Not benign evidence.
+    escalate_only: true
+
+  - name: entity.baseline
+    kind: baseline
+    inputs: [entity, behavior, min_days, lookback]
+    yes_means: The entity showed the same behavior on at least min_days distinct days in the lookback, which ends before the alert window.
+    no_means: It did not.
+    escalate_only: false
+    notes: Behaviors that name a binary compare by hash, or signer plus path. Command lines are normalized (GUIDs, hex, numbers, temp names, user profile names masked).
+
+  - name: org.prevalence
+    kind: baseline
+    inputs: [pattern, min_hosts, min_weeks, of_weeks]
+    yes_means: The pattern occurred on at least min_hosts distinct hosts, and in at least min_weeks of the of_weeks weeks before the alert window.
+    no_means: It did not.
+    escalate_only: false
+
+  - name: change.window
+    kind: lookup
+    inputs: [entities, user, at_time]
+    yes_means: An approved change covers one of the entities at at_time and lists user, or a group user belongs to, as an implementer.
+    no_means: No approved change covers the entity and time, or every covering change lists implementers and the user is not among them (directly or by group).
+    unknown_means: A covering change exists but has no implementer data. Returned as unknown with unknown_reason no_data, so it follows on_unknown and never closes.
+    notes: Group membership is resolved by the server, as identity.groups would.
+    escalate_only: false
+
+  - name: list.propose_update
+    kind: write
+    inputs: [list, entry, direction, justification, alert_id]
+    yes_means: The proposal was recorded (reduce_scrutiny, enforcement) or applied (increase_scrutiny).
+    no_means: The proposal was rejected by policy.
+    escalate_only: false
+    flow_use: forbidden   # never a flow step; called after a decision
+    policy:
+      reduce_scrutiny: human approval required, with an owner and an expiry (allowlist additions)
+      increase_scrutiny: may be applied automatically (watchlist additions, removing an allowlist entry); removing an allowlist entry must notify the fact's owner
+      enforcement: human approval required (blocks, isolation)

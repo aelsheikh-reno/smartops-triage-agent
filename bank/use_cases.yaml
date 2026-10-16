@@ -4,7 +4,9 @@
 # linked lists are generated from the cloned sources (ESCU production rules, Azure-Sentinel solutions,
 # SigmaHQ rules/) by name and story matching; 'shown' is capped at 8, 'total' counts all matches.
 # Matches are leads for batch selection, not curated mappings.
-# coverage: rule-level = a linked detection has a bank flow; technique-only = a technique has a bank fallback; none.
+# coverage: rule-level-full = every linked detection has a bank flow; rule-level-partial = some do;
+#   technique-only = none do, but a technique has a bank fallback; none = neither.
+# covered_detections = linked detections with a bank flow; linked_detections = all linked leads (all sources, not only 'shown').
 attack_version: '20.0'
 use_cases:
 - id: UC-001
@@ -16,7 +18,7 @@ use_cases:
   techniques:
   - T1204.002
   - T1105
-  planned_batch: 2-vendor
+  planned_batch: 1-vendor-alerts
   triage_hints:
   - Was the file blocked or quarantined by the product?
   - Is the file hash known bad (reputation)?
@@ -69,8 +71,10 @@ use_cases:
       - id: sigma:5a9e1b2c-8f7d-4a1e-9b3c-0f6d7e5a4b1f
         name: Windows Defender Threat Severity Default Action Modified
   coverage: technique-only
-  covered_by:
-  - technique:T1105
+  covered_detections: 0
+  linked_detections: 33
+  technique_fallbacks:
+  - T1105
 - id: UC-002
   name: IPS/IDS signature alert
   domain: vendor_alert
@@ -80,7 +84,7 @@ use_cases:
   techniques:
   - T1190
   - T1595
-  planned_batch: 2-vendor
+  planned_batch: 1-vendor-alerts
   triage_hints:
   - Did the device block the traffic?
   - Is the source an approved scanner?
@@ -135,16 +139,140 @@ use_cases:
       total: 0
       shown: []
   coverage: none
+  covered_detections: 0
+  linked_detections: 15
 - id: UC-003
+  name: Firewall denies and port-scan noise
+  domain: vendor_alert
+  family: vendor
+  rank: 3
+  volume_reason: Internet-facing ranges of banks and telcos receive continuous scans; deny-threshold and scan alerts fire on traffic the firewall already dropped.
+  techniques:
+  - T1046
+  - T1595.001
+  planned_batch: 1-vendor-alerts
+  triage_hints:
+  - Did the firewall deny the traffic?
+  - Is the source an approved scanner?
+  - Is the source a known-bad address (reputation)?
+  - Did any connection from the same source succeed?
+  linked:
+    escu:
+      total: 5
+      shown:
+      - id: escu:cisco_secure_firewall___blocked_connection
+        name: Cisco Secure Firewall - Blocked Connection
+      - id: escu:cisco_secure_firewall___repeated_blocked_connections
+        name: Cisco Secure Firewall - Repeated Blocked Connections
+      - id: escu:internal_horizontal_port_scan
+        name: Internal Horizontal Port Scan
+      - id: escu:internal_horizontal_port_scan_nmap_top_20
+        name: Internal Horizontal Port Scan NMAP Top 20
+      - id: escu:internal_vertical_port_scan
+        name: Internal Vertical Port Scan
+    sentinel:
+      total: 6
+      shown:
+      - id: sentinel:b2c5907b-1040-4692-9802-9946031017e8
+        name: Port Scan
+        solution: Azure Firewall
+      - id: sentinel:5b72f527-e3f6-4a00-9908-8e4fee14da9f
+        name: CloudNGFW By Palo Alto Networks - possible internal to external port scanning
+        solution: Azure Cloud NGFW by Palo Alto Networks
+      - id: sentinel:3d645a88-2724-41a7-adea-db74c439cf79
+        name: Excessive Amount of Denied Connections from a Single Source
+        solution: Sophos XG Firewall
+      - id: sentinel:3575a9c0-51c9-11ec-bf63-0242ac130002
+        name: PaloAlto - Possible port scan
+        solution: PaloAltoCDL
+      - id: sentinel:427e4c9e-8cf4-4094-a684-a2d060dbca38
+        name: Port Scan Detected
+        solution: Sophos XG Firewall
+      - id: sentinel:1da9853f-3dea-4ea9-b7e5-26730da3d537
+        name: Port scan detected  (ASIM Network Session schema)
+        solution: Network Session Essentials
+    sigma:
+      total: 5
+      shown:
+      - id: sigma:974be8d2-283e-4033-ab08-7505b84204d0
+        name: OpenCanary - Host Port Scan (SYN Scan)
+      - id: sigma:1a9bb21a-1bb5-42d7-aa05-3219c7c8f47d
+        name: PUA - Advanced IP/Port Scanner Update Check
+      - id: sigma:e52cb31c-10ed-4aea-bcb7-593c9f4a315b
+        name: UAC Bypass via Windows Firewall Snap-In Hijack
+      - id: sigma:04b60639-39c0-412a-9fbe-e82499c881a3
+        name: Windows Defender Firewall Has Been Reset To Its Default Configuration
+      - id: sigma:00bb5bd5-1379-4fcf-a965-a5b6f7478064
+        name: Windows Firewall Settings Have Been Changed
+  coverage: none
+  covered_detections: 0
+  linked_detections: 16
+- id: UC-004
+  name: Web proxy and URL-filter blocks
+  domain: vendor_alert
+  family: vendor
+  rank: 4
+  volume_reason: Every user browses through the proxy; category and reputation blocks fire constantly on ads, trackers and uncategorised sites.
+  techniques:
+  - T1071.001
+  - T1189
+  planned_batch: 1-vendor-alerts
+  triage_hints:
+  - Did the proxy block the request?
+  - Is the URL or domain known bad (reputation)?
+  - Is the blocked category low-risk (ads, uncategorised, streaming)?
+  - Is this user or host repeatedly blocked for the same category (baseline)?
+  linked:
+    escu:
+      total: 1
+      shown:
+      - id: escu:windows_multi_hop_proxy_tor_website_query
+        name: Windows Multi hop Proxy TOR Website Query
+    sentinel:
+      total: 6
+      shown:
+      - id: sentinel:1747715b-1a94-411a-a2b5-d8c40422767c
+        name: CTE - Blocked URL Attempted
+        solution: Cybereinforce
+      - id: sentinel:49da5494-b6b9-42c0-9b9b-b7b219dc8173
+        name: CTE - CTI Blocked URL Attempted
+        solution: Cybereinforce
+      - id: sentinel:7a58b253-0ef2-4248-b4e5-c350f15a8346
+        name: Excessive Denied Proxy Traffic
+        solution: SymantecProxySG
+      - id: sentinel:dd03057e-4347-4853-bf1e-2b2d21eb4e59
+        name: NRT Squid proxy events related to mining pools
+        solution: Syslog
+      - id: sentinel:90d3f6ec-80fb-48e0-9937-2c70c9df9bad
+        name: Squid proxy events for ToR proxies
+        solution: Syslog
+      - id: sentinel:80733eb7-35b2-45b6-b2b8-3c51df258206
+        name: Squid proxy events related to mining pools
+        solution: Syslog
+    sigma:
+      total: 4
+      shown:
+      - id: sigma:7d6d30b8-5b91-4b90-a891-46cccaf29598
+        name: Program Executed Using Proxy/Local Command Via SSH.EXE
+      - id: sigma:2c03648b-e081-41a5-b9fb-7d854a915091
+        name: Rclone Activity via Proxy
+      - id: sigma:c15e99a3-c474-48ab-b9a7-84549a7a9d16
+        name: Remote Thread Creation Ttdinject.exe Proxy
+      - id: sigma:0403d67d-6227-4ea8-8145-4e72db7da120
+        name: UtilityFunctions.ps1 Proxy Dll
+  coverage: none
+  covered_detections: 0
+  linked_detections: 11
+- id: UC-005
   name: Brute force and password spray
   domain: identity
   family: correlation
-  rank: 3
+  rank: 5
   volume_reason: VPN, OWA and Entra ID sign-in pages face the internet; failed-logon thresholds trip many times a day, mostly from bots and users with stale passwords.
   techniques:
   - T1110.001
   - T1110.003
-  planned_batch: 1-identity-cloud
+  planned_batch: 2-identity-cloud
   escu_stories:
   - Active Directory Password Spraying
   linked:
@@ -206,15 +334,54 @@ use_cases:
       - id: sigma:bac9fb54-2da7-44e9-988f-11e9a5edbc0c
         name: Potential Password Spraying Attempt Using Dsacls.EXE
   coverage: none
-- id: UC-004
+  covered_detections: 0
+  linked_detections: 82
+- id: UC-006
+  name: Account lockouts
+  domain: identity
+  family: correlation
+  rank: 6
+  volume_reason: Password expiry and cached credentials on phones and mapped drives lock users out many times a day; helpdesk tickets follow.
+  techniques:
+  - T1110
+  planned_batch: 2-identity-cloud
+  linked:
+    escu:
+      total: 4
+      shown:
+      - id: escu:cisco_asa___user_account_lockout_threshold_exceeded
+        name: Cisco ASA - User Account Lockout Threshold Exceeded
+      - id: escu:detect_excessive_account_lockouts_from_endpoint
+        name: Detect Excessive Account Lockouts From Endpoint
+      - id: escu:detect_excessive_user_account_lockouts
+        name: Detect Excessive User Account Lockouts
+      - id: escu:okta_multiple_accounts_locked_out
+        name: Okta Multiple Accounts Locked Out
+    sentinel:
+      total: 1
+      shown:
+      - id: sentinel:fbff0a97-1972-4df8-a78c-254ccb9879ef
+        name: Samsung Knox - Password Lockout Events
+        solution: Samsung Knox Asset Intelligence
+    sigma:
+      total: 2
+      shown:
+      - id: sigma:2b7d6fc0-71ac-4cf7-8ed1-b5788ee5257a
+        name: Account Lockout
+      - id: sigma:14701da0-4b0f-4ee6-9c95-2ffb4e73bb9a
+        name: Okta User Account Locked Out
+  coverage: none
+  covered_detections: 0
+  linked_detections: 7
+- id: UC-007
   name: WAF alert
   domain: vendor_alert
   family: vendor
-  rank: 4
+  rank: 7
   volume_reason: Online banking, mobile-app APIs and telco self-care portals are attacked and scanned around the clock.
   techniques:
   - T1190
-  planned_batch: 2-vendor
+  planned_batch: 1-vendor-alerts
   triage_hints:
   - Did the WAF block the request?
   - Is the source an approved scanner or penetration tester?
@@ -255,16 +422,18 @@ use_cases:
       total: 0
       shown: []
   coverage: none
-- id: UC-005
+  covered_detections: 0
+  linked_detections: 14
+- id: UC-008
   name: Phishing email blocked or delivered (email gateway)
   domain: vendor_alert
   family: vendor
-  rank: 5
+  rank: 8
   volume_reason: Email is the main attack vector against banks; gateways block thousands of messages and alert on the ones delivered.
   techniques:
   - T1566.001
   - T1566.002
-  planned_batch: 2-vendor
+  planned_batch: 1-vendor-alerts
   triage_hints:
   - Was the message blocked or quarantined?
   - Was it delivered and was a link clicked or attachment opened?
@@ -276,6 +445,8 @@ use_cases:
     escu:
       total: 33
       shown:
+      - id: escu:windows_office_product_spawned_uncommon_process
+        name: Windows Office Product Spawned Uncommon Process
       - id: escu:detect_outlook_exe_writing_a_zip_file
         name: Detect Outlook exe writing a zip file
       - id: escu:detect_rtlo_in_file_name
@@ -290,8 +461,6 @@ use_cases:
         name: O365 Email Reported By User Found Malicious
       - id: escu:o365_safe_links_detection
         name: O365 Safe Links Detection
-      - id: escu:o365_threat_intelligence_suspicious_email_delivered
-        name: O365 Threat Intelligence Suspicious Email Delivered
     sentinel:
       total: 25
       shown:
@@ -326,19 +495,23 @@ use_cases:
         name: Okta FastPass Phishing Detection
       - id: sigma:fcdf69e5-a3d3-452a-9724-26f2308bf2b1
         name: Phishing Pattern ISO in Archive
-  coverage: technique-only
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 60
   covered_by:
-  - technique:T1566.001
-- id: UC-006
+  - escu:windows_office_product_spawned_uncommon_process
+  technique_fallbacks:
+  - T1566.001
+- id: UC-009
   name: Vulnerability-scanner noise
   domain: vendor_alert
   family: vendor
-  rank: 6
+  rank: 9
   volume_reason: Weekly authenticated scans trip IDS, brute-force and discovery rules unless scanners are allowlisted.
   techniques:
   - T1595.002
   - T1046
-  planned_batch: 2-vendor
+  planned_batch: 1-vendor-alerts
   triage_hints:
   - Is the source an approved scanner?
   - Is the activity inside the scanner's scheduled window?
@@ -408,16 +581,18 @@ use_cases:
       - id: sigma:ea5c131b-380d-49f9-aeb3-920694da4d4b
         name: Suspicious Unsigned Thor Scanner Execution
   coverage: none
-- id: UC-007
+  covered_detections: 0
+  linked_detections: 24
+- id: UC-010
   name: DLP policy match
   domain: vendor_alert
   family: vendor
-  rank: 7
+  rank: 10
   volume_reason: Regulated customer data (card numbers, national IDs, IBANs) under SAMA, CBUAE and NCA rules means broad DLP policies with high audit-mode volume.
   techniques:
   - T1048
   - T1567
-  planned_batch: 2-vendor
+  planned_batch: 1-vendor-alerts
   triage_hints:
   - Was the transfer blocked, or audit-only?
   - Is the recipient internal or an approved partner domain?
@@ -460,15 +635,17 @@ use_cases:
       total: 0
       shown: []
   coverage: none
-- id: UC-008
+  covered_detections: 0
+  linked_detections: 9
+- id: UC-011
   name: Impossible travel and unfamiliar sign-in
   domain: identity
   family: correlation
-  rank: 8
+  rank: 11
   volume_reason: Frequent business travel, roaming mobile users and VPN egress points abroad make location anomalies common.
   techniques:
   - T1078.004
-  planned_batch: 1-identity-cloud
+  planned_batch: 2-identity-cloud
   linked:
     escu:
       total: 2
@@ -514,11 +691,13 @@ use_cases:
       - id: sigma:128faeef-79dd-44ca-b43c-a9e236a60f49
         name: Unfamiliar Sign-In Properties
   coverage: none
-- id: UC-009
+  covered_detections: 0
+  linked_detections: 15
+- id: UC-012
   name: Suspicious PowerShell and script execution
   domain: endpoint_windows
   family: correlation
-  rank: 9
+  rank: 12
   volume_reason: Admin and vendor scripts use encoded or bypass flags daily; PowerShell rules are among the noisiest endpoint rules.
   techniques:
   - T1059.001
@@ -534,6 +713,8 @@ use_cases:
         name: Malicious PowerShell Process - Execution Policy Bypass
       - id: escu:windows_file_download_via_powershell
         name: Windows File Download Via PowerShell
+      - id: escu:remote_process_instantiation_via_winrm_and_powershell
+        name: Remote Process Instantiation via WinRM and PowerShell
       - id: escu:azure_ad_successful_powershell_authentication
         name: Azure AD Successful PowerShell Authentication
       - id: escu:creation_of_shadow_copy_with_wmic_and_powershell
@@ -544,8 +725,6 @@ use_cases:
         name: Detect Certify With PowerShell Script Block Logging
       - id: escu:detect_empire_with_powershell_script_block_logging
         name: Detect Empire with PowerShell Script Block Logging
-      - id: escu:detect_mimikatz_with_powershell_script_block_logging
-        name: Detect Mimikatz With PowerShell Script Block Logging
     sentinel:
       total: 9
       shown:
@@ -592,15 +771,20 @@ use_cases:
         name: AgentExecutor PowerShell Execution
       - id: sigma:64e8e417-c19a-475a-8d19-98ea705394cc
         name: Alternate PowerShell Hosts - PowerShell Module
-  coverage: rule-level
+  coverage: rule-level-partial
+  covered_detections: 3
+  linked_detections: 414
   covered_by:
   - escu:malicious_powershell_process___execution_policy_bypass
+  - escu:remote_process_instantiation_via_winrm_and_powershell
   - escu:windows_file_download_via_powershell
-- id: UC-010
+  technique_fallbacks:
+  - T1059.001
+- id: UC-013
   name: Connections to threat-intel indicators
   domain: network
   family: correlation
-  rank: 10
+  rank: 13
   volume_reason: TI feeds match shared CDN and cloud IPs constantly; most hits are stale or shared infrastructure.
   techniques:
   - T1071.001
@@ -649,17 +833,24 @@ use_cases:
       - id: sigma:7892ec59-c5bb-496d-8968-e5d210ca3ac4
         name: DPAPI Backup Keys And Certificate Export Activity IOC
   coverage: technique-only
-  covered_by:
-  - technique:T1105
-- id: UC-011
+  covered_detections: 0
+  linked_detections: 141
+  technique_fallbacks:
+  - T1105
+- id: UC-014
   name: Phishing reported by users
-  domain: email
-  family: correlation
-  rank: 11
+  domain: vendor_alert
+  family: vendor
+  rank: 14
   volume_reason: Awareness programmes required by GCC regulators drive high report volumes, most of them spam or simulations.
   techniques:
   - T1566
-  planned_batch: 3-network-email
+  planned_batch: 1-vendor-alerts
+  triage_hints:
+  - Was the reported message already quarantined or removed?
+  - Is the reported message a sanctioned phishing simulation?
+  - Are the sender, URLs or attachments known bad (reputation)?
+  - Did other recipients interact with the same message?
   linked:
     escu:
       total: 0
@@ -674,15 +865,17 @@ use_cases:
       total: 0
       shown: []
   coverage: none
-- id: UC-012
+  covered_detections: 0
+  linked_detections: 1
+- id: UC-015
   name: MFA fatigue and MFA failures
   domain: identity
   family: correlation
-  rank: 12
+  rank: 15
   volume_reason: Push-based MFA is standard in GCC banks; denied and timed-out prompts are frequent, true fatigue attacks are rare.
   techniques:
   - T1621
-  planned_batch: 1-identity-cloud
+  planned_batch: 2-identity-cloud
   escu_stories:
   - Okta MFA Exhaustion
   linked:
@@ -752,11 +945,62 @@ use_cases:
       - id: sigma:e40f4962-b02b-4192-9bfe-245f7ece1f99
         name: Multifactor Authentication Denied
   coverage: none
-- id: UC-013
+  covered_detections: 0
+  linked_detections: 67
+- id: UC-016
+  name: USB and removable media
+  domain: data
+  family: vendor
+  rank: 16
+  volume_reason: Banks block or audit USB storage by policy; device-control alerts fire whenever staff plug in phones, chargers or personal drives.
+  techniques:
+  - T1052.001
+  - T1091
+  planned_batch: 1-vendor-alerts
+  triage_hints:
+  - Was the device blocked by device control?
+  - Is the device on the approved removable-media list?
+  - Was any file actually written to the device?
+  - Does an approved business exception cover the user?
+  linked:
+    escu:
+      total: 4
+      shown:
+      - id: escu:windows_mustang_panda_usb_tool_execution
+        name: Windows Mustang Panda USB Tool Execution
+      - id: escu:windows_process_executed_from_removable_media
+        name: Windows Process Executed From Removable Media
+      - id: escu:windows_replication_through_removable_media
+        name: Windows Replication Through Removable Media
+      - id: escu:windows_usbstor_registry_key_modification
+        name: Windows USBSTOR Registry Key Modification
+    sentinel:
+      total: 3
+      shown:
+      - id: sentinel:3ab04acf-e0e7-4f7c-8995-748ab4c848c2
+        name: Files Copied to USB Drives
+        solution: Microsoft Defender XDR
+      - id: sentinel:c5e75cb6-cea0-49c2-a998-da414035aac1
+        name: Dataverse - Terminated employee exfiltration to USB drive
+        solution: Microsoft Business Applications
+      - id: sentinel:A22B2ECF-1478-4400-877E-07A32E53A897
+        name: Removable storage ONLINE event from secRMM
+        solution: Squadra Technologies SecRmm
+    sigma:
+      total: 2
+      shown:
+      - id: sigma:f69a87ea-955e-4fb4-adb2-bb9fd6685632
+        name: External Disk Drive Or USB Storage Device Was Recognized By The System
+      - id: sigma:1a4bd6e3-4c6e-405d-a9a3-53a116e341d4
+        name: USB Device Plugged
+  coverage: none
+  covered_detections: 0
+  linked_detections: 9
+- id: UC-017
   name: Living-off-the-land binaries
   domain: endpoint_windows
   family: correlation
-  rank: 13
+  rank: 17
   volume_reason: Signed Windows binaries such as certutil, mshta and rundll32 are used by installers and IT tools as often as by attackers.
   techniques:
   - T1218
@@ -779,12 +1023,12 @@ use_cases:
         name: Suspicious Rundll32 no Command Line Arguments
       - id: escu:windows_file_download_via_certutil
         name: Windows File Download Via CertUtil
+      - id: escu:suspicious_scheduled_task_from_public_directory
+        name: Suspicious Scheduled Task from Public Directory
       - id: escu:bits_job_persistence
         name: BITS Job Persistence
       - id: escu:certutil_with_decode_argument
         name: CertUtil With Decode Argument
-      - id: escu:certutil_exe_certificate_extraction
-        name: Certutil exe certificate extraction
     sentinel:
       total: 6
       shown:
@@ -825,18 +1069,23 @@ use_cases:
         name: File In Suspicious Location Encoded To Base64 Via Certutil.EXE
       - id: sigma:b18c9d4c-fac9-4708-bd06-dd5bfacf200f
         name: HackTool - F-Secure C3 Load by Rundll32
-  coverage: rule-level
+  coverage: rule-level-partial
+  covered_detections: 6
+  linked_detections: 201
   covered_by:
   - escu:bitsadmin_download_file
   - escu:detect_mshta_url_in_command_line
   - escu:suspicious_regsvr32_register_suspicious_path
   - escu:suspicious_rundll32_no_command_line_arguments
+  - escu:suspicious_scheduled_task_from_public_directory
   - escu:windows_file_download_via_certutil
-- id: UC-014
+  technique_fallbacks:
+  - T1105
+- id: UC-018
   name: Scheduled task, service and Run-key persistence
   domain: endpoint_windows
   family: correlation
-  rank: 14
+  rank: 18
   volume_reason: Every software install and update writes tasks, services or Run keys; ransomware operators use the same mechanisms.
   techniques:
   - T1053.005
@@ -856,6 +1105,8 @@ use_cases:
         name: Suspicious Scheduled Task from Public Directory
       - id: escu:windows_schtasks_create_run_as_system
         name: Windows Schtasks Create Run As System
+      - id: escu:windows_service_creation_on_remote_endpoint
+        name: Windows Service Creation on Remote Endpoint
       - id: escu:active_setup_registry_autostart
         name: Active Setup Registry Autostart
       - id: escu:certutil_exe_certificate_extraction
@@ -864,8 +1115,6 @@ use_cases:
         name: Detect Path Interception By Creation Of program exe
       - id: escu:etw_registry_disabled
         name: ETW Registry Disabled
-      - id: escu:hiding_files_and_directories_with_attrib_exe
-        name: Hiding Files And Directories With Attrib exe
     sentinel:
       total: 8
       shown:
@@ -912,16 +1161,23 @@ use_cases:
         name: CurrentControlSet Autorun Keys Modification
       - id: sigma:20f0ee37-5942-4e45-b7d5-c5b5db9df5cd
         name: CurrentVersion Autorun Keys Modification
-  coverage: rule-level
+  coverage: rule-level-partial
+  covered_detections: 4
+  linked_detections: 183
   covered_by:
   - escu:registry_keys_used_for_persistence
   - escu:suspicious_scheduled_task_from_public_directory
   - escu:windows_schtasks_create_run_as_system
-- id: UC-015
+  - escu:windows_service_creation_on_remote_endpoint
+  technique_fallbacks:
+  - T1053.005
+  - T1543.003
+  - T1547.001
+- id: UC-019
   name: Lateral movement with admin tools
   domain: endpoint_windows
   family: correlation
-  rank: 15
+  rank: 19
   volume_reason: Server teams use PsExec, WMI and WinRM routinely; telling admin work from lateral movement is a daily task.
   techniques:
   - T1021.002
@@ -997,17 +1253,52 @@ use_cases:
         name: MMC20 Lateral Movement
       - id: sigma:6fb63b40-e02a-403e-9ffd-3bcc1d749442
         name: Metasploit Or Impacket Service Installation Via SMB PsExec
-  coverage: rule-level
+  coverage: rule-level-partial
+  covered_detections: 4
+  linked_detections: 141
   covered_by:
   - escu:detect_psexec_with_accepteula_flag
   - escu:process_execution_via_wmi
   - escu:remote_process_instantiation_via_winrm_and_powershell
   - escu:windows_service_creation_on_remote_endpoint
-- id: UC-016
+  technique_fallbacks:
+  - T1021.002
+  - T1021.006
+  - T1047
+- id: UC-020
+  name: Service account interactive logon
+  domain: identity
+  family: correlation
+  rank: 20
+  volume_reason: Legacy applications and admins reusing service-account passwords produce regular interactive or RDP logons by accounts that should only run services.
+  techniques:
+  - T1078.002
+  - T1078.003
+  planned_batch: 2-identity-cloud
+  linked:
+    escu:
+      total: 0
+      shown: []
+    sentinel:
+      total: 2
+      shown:
+      - id: sentinel:d29cc957-0ddb-4d00-8d6f-ad1bb345ff9a
+        name: Service Accounts Performing Remote PS
+        solution: Microsoft Defender XDR
+      - id: sentinel:6c17f270-cd56-48cc-9196-1728ffea6538
+        name: New service account gained access to IaaS resource
+        solution: Authomize
+    sigma:
+      total: 0
+      shown: []
+  coverage: none
+  covered_detections: 0
+  linked_detections: 2
+- id: UC-021
   name: Suspicious DNS (tunnelling, DGA, dynamic DNS)
   domain: network
   family: correlation
-  rank: 16
+  rank: 21
   volume_reason: Huge query volumes make DNS analytics noisy; tunnelling and DGA are real C2 channels.
   techniques:
   - T1071.004
@@ -1084,11 +1375,13 @@ use_cases:
       - id: sigma:882e858a-3233-4ba8-855e-2f3d3575803d
         name: DNS Query Request By QuickAssist.EXE
   coverage: none
-- id: UC-017
+  covered_detections: 0
+  linked_detections: 106
+- id: UC-022
   name: Internal port and network scanning
   domain: network
   family: correlation
-  rank: 17
+  rank: 22
   volume_reason: Asset discovery, monitoring and scanner tools sweep internal ranges continuously.
   techniques:
   - T1046
@@ -1163,11 +1456,13 @@ use_cases:
       - id: sigma:f6ecd1cf-19b8-4488-97f6-00f0924991a3
         name: PUA - Nmap/Zenmap Execution
   coverage: none
-- id: UC-018
+  covered_detections: 0
+  linked_detections: 36
+- id: UC-023
   name: Remote access tool use
   domain: endpoint_windows
   family: correlation
-  rank: 18
+  rank: 23
   volume_reason: Outsourced IT and vendor support in the region rely on AnyDesk- and TeamViewer-style tools; attackers use the same tools.
   techniques:
   - T1219
@@ -1222,14 +1517,18 @@ use_cases:
         name: Remote Access Tool - Anydesk Execution From Suspicious Folder
       - id: sigma:b6d98a4f-cef0-4abf-bbf6-24132854a83d
         name: Remote Access Tool - GoToAssist Execution
-  coverage: rule-level
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 57
   covered_by:
   - escu:detect_remote_access_software_usage_process
-- id: UC-019
+  technique_fallbacks:
+  - T1219
+- id: UC-024
   name: Exploitation of public-facing applications
   domain: network
   family: correlation
-  rank: 19
+  rank: 24
   volume_reason: Internet-facing VPN, Citrix, Exchange and file-transfer appliances are prime targets, and scanner traffic inflates volume.
   techniques:
   - T1190
@@ -1301,16 +1600,18 @@ use_cases:
       - id: sigma:7745c2ea-24a5-4290-b680-04359cb84b35
         name: Path Traversal Exploitation Attempts
   coverage: none
-- id: UC-020
+  covered_detections: 0
+  linked_detections: 61
+- id: UC-025
   name: Mass download or external sharing (SharePoint, OneDrive)
   domain: cloud_azure_m365
   family: correlation
-  rank: 20
+  rank: 25
   volume_reason: Departing employees and partner sharing drive frequent hits; insider-risk programmes require review.
   techniques:
   - T1530
   - T1567.002
-  planned_batch: 1-identity-cloud
+  planned_batch: 2-identity-cloud
   escu_stories:
   - Office 365 Collection Techniques
   linked:
@@ -1370,11 +1671,13 @@ use_cases:
       - id: sigma:1f0489be-b496-4ddf-b3a9-5900f2044e9c
         name: Suspicious File Write to SharePoint Layouts Directory
   coverage: none
-- id: UC-021
+  covered_detections: 0
+  linked_detections: 40
+- id: UC-026
   name: Data exfiltration over the network
   domain: data
   family: correlation
-  rank: 21
+  rank: 26
   volume_reason: Backups, cloud sync and large uploads to file-sharing sites look alike at the firewall.
   techniques:
   - T1048
@@ -1450,11 +1753,13 @@ use_cases:
       - id: sigma:3a8da4e0-36c1-40d2-8b29-b3e890d5172a
         name: NTDS Exfiltration Filename Patterns
   coverage: none
-- id: UC-022
+  covered_detections: 0
+  linked_detections: 74
+- id: UC-027
   name: Cloud provider security alerts (GuardDuty, Defender for Cloud, Security Hub)
   domain: vendor_alert
   family: vendor
-  rank: 22
+  rank: 27
   volume_reason: Provider-native detectors produce steady medium-severity findings that need the same benign checks as rule alerts.
   techniques:
   - T1078.004
@@ -1503,16 +1808,18 @@ use_cases:
       total: 0
       shown: []
   coverage: none
-- id: UC-023
+  covered_detections: 0
+  linked_detections: 11
+- id: UC-028
   name: Azure resource and subscription changes
   domain: cloud_azure_m365
   family: correlation
-  rank: 23
+  rank: 28
   volume_reason: Infrastructure-as-code pipelines change Azure resources constantly; mass deletion or new subscriptions matter.
   techniques:
   - T1578
   - T1098.003
-  planned_batch: 1-identity-cloud
+  planned_batch: 2-identity-cloud
   linked:
     escu:
       total: 9
@@ -1580,11 +1887,13 @@ use_cases:
       - id: sigma:352a54e1-74ba-4929-9d47-8193d67aba1e
         name: Azure Domain Federation Settings Modified
   coverage: none
-- id: UC-024
+  covered_detections: 0
+  linked_detections: 50
+- id: UC-029
   name: Linux SSH brute force and suspicious logins
   domain: endpoint_linux
   family: correlation
-  rank: 24
+  rank: 29
   volume_reason: Telco core and bank middleware run on Linux; exposed SSH sees constant guessing.
   techniques:
   - T1110
@@ -1657,11 +1966,60 @@ use_cases:
       - id: sigma:2daa93a0-a5fb-41c5-8cd8-3c11294bfd1f
         name: Potential SSH Tunnel Persistence Install Using A Scheduled Task
   coverage: none
-- id: UC-025
+  covered_detections: 0
+  linked_detections: 35
+- id: UC-030
+  name: Privileged access outside the PAM vault
+  domain: identity
+  family: correlation
+  rank: 30
+  volume_reason: Bank regulators expect privileged sessions to go through PAM; admins connecting directly with privileged accounts are a frequent audit finding.
+  techniques:
+  - T1078.002
+  - T1078.003
+  planned_batch: 2-identity-cloud
+  linked:
+    escu:
+      total: 0
+      shown: []
+    sentinel:
+      total: 10
+      shown:
+      - id: sentinel:34c5aff9-a8c2-4601-9654-c7e46342d03b
+        name: Privileged Accounts - Sign in Failure Spikes
+        solution: Microsoft Entra ID
+      - id: sentinel:a5fe9489-cf8b-47ae-a87e-8f3a13e4203e
+        name: Alsid privileged accounts issues
+        solution: Alsid For AD
+      - id: sentinel:317e757e-c320-448e-8837-fc61a70fe609
+        name: Commvault Cloud Alert
+        solution: Commvault Security IQ
+      - id: sentinel:1aaff41f-4e18-45b1-bb34-de6eb4943cf2
+        name: Component Object Model Hijacking - Vault7 trick
+        solution: FalconFriday
+      - id: sentinel:3f4bd2a1-7c58-4a83-9c2e-6d1f0a8b5c31
+        name: ContraForce - Privileged access change
+        solution: ContraForce
+      - id: sentinel:e1bfca9b-7980-469f-a57c-16e81451861b
+        name: Delinea - Privileged account access anomaly (secret-access volume vs baseline)
+        solution: Delinea Platform
+      - id: sentinel:5c170c73-75ba-48ea-8dfc-e4e2d4f23979
+        name: TIE privileged accounts issues
+        solution: Tenable App
+      - id: sentinel:19ed623e-1b1c-45e0-ac74-c1e629fbf117
+        name: Tape Media Vault Deleted
+        solution: Veeam
+    sigma:
+      total: 0
+      shown: []
+  coverage: none
+  covered_detections: 0
+  linked_detections: 10
+- id: UC-031
   name: C2 beaconing and suspicious outbound traffic
   domain: network
   family: correlation
-  rank: 25
+  rank: 31
   volume_reason: Telemetry and update agents beacon on schedules that resemble C2.
   techniques:
   - T1071.001
@@ -1673,6 +2031,8 @@ use_cases:
     escu:
       total: 38
       shown:
+      - id: escu:detect_remote_access_software_usage_process
+        name: Detect Remote Access Software Usage Process
       - id: escu:cisco_nvm___osascript_network_connection_for_a_long_duration
         name: Cisco NVM - Osascript Network Connection for a Long Duration
       - id: escu:cisco_secure_firewall___remote_access_software_usage_traffic
@@ -1687,8 +2047,6 @@ use_cases:
         name: Detect Remote Access Software Usage File
       - id: escu:detect_remote_access_software_usage_fileinfo
         name: Detect Remote Access Software Usage FileInfo
-      - id: escu:detect_remote_access_software_usage_process
-        name: Detect Remote Access Software Usage Process
     sentinel:
       total: 12
       shown:
@@ -1731,17 +2089,21 @@ use_cases:
         name: Suspicious Cobalt Strike DNS Beaconing - DNS Client
       - id: sigma:f356a9c4-effd-4608-bbf8-408afd5cd006
         name: Suspicious Cobalt Strike DNS Beaconing - Sysmon
-  coverage: none
-- id: UC-026
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 56
+  covered_by:
+  - escu:detect_remote_access_software_usage_process
+- id: UC-032
   name: Kerberos attacks (Kerberoasting, AS-REP roasting)
   domain: identity
   family: correlation
-  rank: 26
+  rank: 32
   volume_reason: Legacy applications that still request RC4 tickets make Kerberoasting rules noisy in large AD estates.
   techniques:
   - T1558.003
   - T1558.004
-  planned_batch: 1-identity-cloud
+  planned_batch: 2-identity-cloud
   escu_stories:
   - Active Directory Kerberos Attacks
   linked:
@@ -1811,11 +2173,13 @@ use_cases:
       - id: sigma:b07e58cf-cacc-4135-8473-ccb2eba63dd2
         name: Potential Kerberos Coercion by Spoofing SPNs via DNS Manipulation
   coverage: none
-- id: UC-027
+  covered_detections: 0
+  linked_detections: 67
+- id: UC-033
   name: Active Directory reconnaissance
   domain: identity
   family: correlation
-  rank: 27
+  rank: 33
   volume_reason: Admin tooling and audits enumerate AD constantly; BloodHound-style collection is a common early attacker step.
   techniques:
   - T1087.002
@@ -1890,14 +2254,20 @@ use_cases:
         name: Hardware Model Reconnaissance Via Wmic.EXE
       - id: sigma:fe63010f-8823-4864-a96b-a7b4a0f7b929
         name: LSASS Process Reconnaissance Via Findstr.EXE
-  coverage: rule-level
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 252
   covered_by:
   - escu:detect_sharphound_usage
-- id: UC-028
+  technique_fallbacks:
+  - T1069.002
+  - T1087.002
+  - T1482
+- id: UC-034
   name: Malicious Office documents and macros
   domain: endpoint_windows
   family: correlation
-  rank: 28
+  rank: 34
   volume_reason: Finance and trade-finance teams handle macro-enabled workbooks daily.
   techniques:
   - T1566.001
@@ -1971,14 +2341,18 @@ use_cases:
         name: Macro Enabled In A Potentially Suspicious Document
       - id: sigma:829a3bdf-34da-4051-9cf4-8ed221a8ae4f
         name: Microsoft Office DLL Sideload
-  coverage: rule-level
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 90
   covered_by:
   - escu:windows_office_product_spawned_uncommon_process
-- id: UC-029
+  technique_fallbacks:
+  - T1566.001
+- id: UC-035
   name: Linux privilege escalation and sudo abuse
   domain: endpoint_linux
   family: correlation
-  rank: 29
+  rank: 35
   volume_reason: Operations teams use sudo heavily, so sudo-based rules are noisy.
   techniques:
   - T1548.003
@@ -2025,11 +2399,13 @@ use_cases:
       - id: sigma:6a50f16c-3b7b-42d1-b081-0fdd3ba70a73
         name: User Added To Root/Sudoers Group Using Usermod
   coverage: none
-- id: UC-030
+  covered_detections: 0
+  linked_detections: 137
+- id: UC-036
   name: New account or new local admin
   domain: identity
   family: correlation
-  rank: 30
+  rank: 36
   volume_reason: Provisioning and imaging create accounts daily; unexpected local admins are a common persistence step.
   techniques:
   - T1136.001
@@ -2101,19 +2477,23 @@ use_cases:
         name: Hidden User Creation
       - id: sigma:66b6be3d-55d0-4f47-9855-d69df21740ea
         name: Local User Creation
-  coverage: rule-level
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 54
   covered_by:
   - escu:detect_new_local_admin_account
-- id: UC-031
+  technique_fallbacks:
+  - T1136.001
+- id: UC-037
   name: Mailbox rules, forwarding and business email compromise
   domain: email
   family: correlation
-  rank: 31
+  rank: 37
   volume_reason: Business email compromise targets payment and trade-finance staff, and legitimate forwarding rules are common.
   techniques:
   - T1114.003
   - T1564.008
-  planned_batch: 1-identity-cloud
+  planned_batch: 2-identity-cloud
   linked:
     escu:
       total: 14
@@ -2178,15 +2558,17 @@ use_cases:
       - id: sigma:27e4f1d6-ae72-4ea0-8a67-77a73a289c3d
         name: Suspicious Inbox Forwarding Identity Protection
   coverage: none
-- id: UC-032
+  covered_detections: 0
+  linked_detections: 33
+- id: UC-038
   name: Disabled, dormant or leaver account activity
   domain: identity
   family: correlation
-  rank: 32
+  rank: 38
   volume_reason: Leaver processes lag, and service accounts and contractors reappear.
   techniques:
   - T1078
-  planned_batch: 1-identity-cloud
+  planned_batch: 2-identity-cloud
   linked:
     escu:
       total: 0
@@ -2224,11 +2606,13 @@ use_cases:
       - id: sigma:908655e0-25cf-4ae1-b775-1c8ce9cf43d8
         name: Login to Disabled Account
   coverage: none
-- id: UC-033
+  covered_detections: 0
+  linked_detections: 11
+- id: UC-039
   name: TOR, anonymizer and proxy use
   domain: network
   family: correlation
-  rank: 33
+  rank: 39
   volume_reason: Privacy tools and VPN apps on BYOD trigger it; it also flags attacker infrastructure.
   techniques:
   - T1090.003
@@ -2286,16 +2670,18 @@ use_cases:
       - id: sigma:62f7c9bf-9135-49b2-8aeb-1e54a6ecc13c
         name: Tor Client/Browser Execution
   coverage: none
-- id: UC-034
+  covered_detections: 0
+  linked_detections: 18
+- id: UC-040
   name: Risky OAuth consent and app credentials
   domain: cloud_azure_m365
   family: correlation
-  rank: 34
+  rank: 40
   volume_reason: M365 tenants accumulate third-party apps; consent grants and new app secrets need review.
   techniques:
   - T1528
   - T1098.001
-  planned_batch: 1-identity-cloud
+  planned_batch: 2-identity-cloud
   linked:
     escu:
       total: 33
@@ -2363,11 +2749,13 @@ use_cases:
       - id: sigma:1ca6bd18-0ba0-44ca-851c-92ed89a61085
         name: UAC Bypass Using Consent and Comctl32 - Process
   coverage: none
-- id: UC-035
+  covered_detections: 0
+  linked_detections: 60
+- id: UC-041
   name: Linux persistence (cron, systemd, SSH keys)
   domain: endpoint_linux
   family: correlation
-  rank: 35
+  rank: 41
   volume_reason: Configuration management rewrites cron and systemd units routinely.
   techniques:
   - T1053.003
@@ -2431,16 +2819,18 @@ use_cases:
       - id: sigma:c2e234de-03a3-41e1-b39a-1e56dc17ba67
         name: Remove Scheduled Cron Task/Job
   coverage: none
-- id: UC-036
+  covered_detections: 0
+  linked_detections: 115
+- id: UC-042
   name: Privileged group change
   domain: identity
   family: correlation
-  rank: 36
+  rank: 42
   volume_reason: 'Low volume but high value: every change to Domain Admins or Entra privileged roles must be checked, and joiner-mover-leaver changes cause most of them.'
   techniques:
   - T1098
   - T1098.007
-  planned_batch: 1-identity-cloud
+  planned_batch: 2-identity-cloud
   escu_stories:
   - Active Directory Privilege Escalation
   linked:
@@ -2510,11 +2900,13 @@ use_cases:
       - id: sigma:10fb649c-3600-4d37-b1e6-56ea90bb7e09
         name: User Added To Highly Privileged Group
   coverage: none
-- id: UC-037
+  covered_detections: 0
+  linked_detections: 73
+- id: UC-043
   name: Security tool tampering and log clearing
   domain: endpoint_windows
   family: correlation
-  rank: 37
+  rank: 43
   volume_reason: Exclusions and service changes by IT trigger these often; when real, it is usually minutes before ransomware.
   techniques:
   - T1685
@@ -2588,15 +2980,20 @@ use_cases:
         name: Powershell Defender Exclusion
       - id: sigma:d99b79d2-0a6f-4f46-ad8b-260b6e17f982
         name: Security Eventlog Cleared
-  coverage: rule-level
+  coverage: rule-level-partial
+  covered_detections: 2
+  linked_detections: 114
   covered_by:
   - escu:add_or_set_windows_defender_exclusion
   - escu:windows_event_log_cleared
-- id: UC-038
+  technique_fallbacks:
+  - T1685
+  - T1685.005
+- id: UC-044
   name: Credential dumping
   domain: endpoint_windows
   family: correlation
-  rank: 38
+  rank: 44
   volume_reason: Moderate volume driven by security and backup tools touching LSASS or NTDS; true positives are critical.
   techniques:
   - T1003.001
@@ -2671,26 +3068,33 @@ use_cases:
         name: HackTool - Mimikatz Execution
       - id: sigma:9e099d99-44c2-42b6-a6d8-54c3545cab29
         name: HackTool - Mimikatz Kirbi File Creation
-  coverage: rule-level
+  coverage: rule-level-partial
+  covered_detections: 2
+  linked_detections: 96
   covered_by:
   - escu:creation_of_shadow_copy
   - escu:windows_possible_credential_dumping
-- id: UC-039
+  technique_fallbacks:
+  - T1003.001
+  - T1003.003
+- id: UC-045
   name: 'Insider threat: off-hours and unusual data access'
   domain: data
   family: correlation
-  rank: 39
+  rank: 45
   volume_reason: Shift-based operations in telcos produce legitimate off-hours activity, and regulators expect insider monitoring.
   techniques:
   - T1078
   - T1213
-  planned_batch: 1-identity-cloud
+  planned_batch: 2-identity-cloud
   escu_stories:
   - Insider Threat
   linked:
     escu:
       total: 16
       shown:
+      - id: escu:detect_remote_access_software_usage_process
+        name: Detect Remote Access Software Usage Process
       - id: escu:cisco_secure_firewall___remote_access_software_usage_traffic
         name: Cisco Secure Firewall - Remote Access Software Usage Traffic
       - id: escu:detect_remote_access_software_usage_dns
@@ -2699,8 +3103,6 @@ use_cases:
         name: Detect Remote Access Software Usage File
       - id: escu:detect_remote_access_software_usage_fileinfo
         name: Detect Remote Access Software Usage FileInfo
-      - id: escu:detect_remote_access_software_usage_process
-        name: Detect Remote Access Software Usage Process
       - id: escu:detect_remote_access_software_usage_registry
         name: Detect Remote Access Software Usage Registry
       - id: escu:detect_remote_access_software_usage_traffic
@@ -2737,17 +3139,21 @@ use_cases:
     sigma:
       total: 0
       shown: []
-  coverage: none
-- id: UC-040
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 25
+  covered_by:
+  - escu:detect_remote_access_software_usage_process
+- id: UC-046
   name: Entra ID privileged role and Conditional Access changes
   domain: cloud_azure_m365
   family: correlation
-  rank: 40
+  rank: 46
   volume_reason: Few events, but each change to Global Administrator or Conditional Access can disable controls tenant-wide.
   techniques:
   - T1098.003
   - T1556.009
-  planned_batch: 1-identity-cloud
+  planned_batch: 2-identity-cloud
   escu_stories:
   - Azure Active Directory Privilege Escalation
   - Azure Active Directory Persistence
@@ -2810,11 +3216,13 @@ use_cases:
       - id: sigma:9a60e676-26ac-44c3-814b-0c2a8b977adf
         name: User Access Blocked by Azure Conditional Access
   coverage: none
-- id: UC-041
+  covered_detections: 0
+  linked_detections: 72
+- id: UC-047
   name: Vulnerable or malicious driver
   domain: endpoint_windows
   family: correlation
-  rank: 41
+  rank: 47
   volume_reason: Hardware utilities on older fleets load known-vulnerable drivers; bring-your-own-vulnerable-driver is used to kill EDR.
   techniques:
   - T1068
@@ -2867,14 +3275,18 @@ use_cases:
         name: Driver/DLL Installation Via Odbcconf.EXE
       - id: sigma:a20def93-0709-4eae-9bd2-31206e21e6b2
         name: DriverQuery.EXE Execution
-  coverage: rule-level
+  coverage: rule-level-partial
+  covered_detections: 1
+  linked_detections: 58
   covered_by:
   - escu:windows_vulnerable_driver_installed
-- id: UC-042
+  technique_fallbacks:
+  - T1543.003
+- id: UC-048
   name: AWS root use and IAM changes
   domain: cloud_aws
   family: correlation
-  rank: 42
+  rank: 48
   volume_reason: Few GCC banks run core workloads on AWS yet, but telcos and fintechs do; IAM changes are the key signal.
   techniques:
   - T1078.004
@@ -2945,11 +3357,13 @@ use_cases:
       - id: sigma:8ad1600d-e9dc-4251-b0ee-a65268f29add
         name: AWS Root Credentials
   coverage: none
-- id: UC-043
+  covered_detections: 0
+  linked_detections: 71
+- id: UC-049
   name: Public S3 buckets and storage exposure
   domain: cloud_aws
   family: correlation
-  rank: 43
+  rank: 49
   volume_reason: Misconfiguration more than attack, but data-residency rules make any public bucket urgent.
   techniques:
   - T1530
@@ -3023,11 +3437,13 @@ use_cases:
       - id: sigma:16ab6143-510a-44e2-a615-bdb80b8317fc
         name: Bitbucket Global SSH Settings Changed
   coverage: none
-- id: UC-044
+  covered_detections: 0
+  linked_detections: 44
+- id: UC-050
   name: Crypto mining
   domain: endpoint_linux
   family: correlation
-  rank: 44
+  rank: 50
   volume_reason: Rare on bank endpoints but common on exposed cloud and container workloads.
   techniques:
   - T1496
@@ -3073,11 +3489,13 @@ use_cases:
       - id: sigma:66c3b204-9f88-4d0a-a7f7-8a57d521ca55
         name: Potential Crypto Mining Activity
   coverage: none
-- id: UC-045
+  covered_detections: 0
+  linked_detections: 13
+- id: UC-051
   name: Web shell on server
   domain: network
   family: correlation
-  rank: 45
+  rank: 51
   volume_reason: Low volume; IIS and Exchange servers in the region have been targeted repeatedly.
   techniques:
   - T1505.003
@@ -3135,11 +3553,13 @@ use_cases:
       - id: sigma:2ea44a60-cfda-11ea-87d0-0242ac130003
         name: Webshell ReGeorg Detection Via Web Logs
   coverage: none
-- id: UC-046
+  covered_detections: 0
+  linked_detections: 20
+- id: UC-052
   name: Ransomware precursors and impact
   domain: endpoint_windows
   family: correlation
-  rank: 46
+  rank: 52
   volume_reason: Lowest volume and highest severity; banks treat any shadow-copy deletion or mass-encryption signal as an incident.
   techniques:
   - T1490
@@ -3153,20 +3573,20 @@ use_cases:
       shown:
       - id: escu:deleting_shadow_copies
         name: Deleting Shadow Copies
+      - id: escu:creation_of_shadow_copy
+        name: Creation of Shadow Copy
+      - id: escu:detect_remote_access_software_usage_process
+        name: Detect Remote Access Software Usage Process
+      - id: escu:detect_sharphound_usage
+        name: Detect SharpHound Usage
+      - id: escu:registry_keys_used_for_persistence
+        name: Registry Keys Used For Persistence
+      - id: escu:suspicious_scheduled_task_from_public_directory
+        name: Suspicious Scheduled Task from Public Directory
+      - id: escu:windows_event_log_cleared
+        name: Windows Event Log Cleared
       - id: escu:allow_file_and_printing_sharing_in_firewall
         name: Allow File And Printing Sharing In Firewall
-      - id: escu:allow_network_discovery_in_firewall
-        name: Allow Network Discovery In Firewall
-      - id: escu:allow_operation_with_consent_admin
-        name: Allow Operation with Consent Admin
-      - id: escu:bcdedit_failure_recovery_modification
-        name: BCDEdit Failure Recovery Modification
-      - id: escu:cmlua_or_cmstplua_uac_bypass
-        name: CMLUA Or CMSTPLUA UAC Bypass
-      - id: escu:cisco_secure_firewall___remote_access_software_usage_traffic
-        name: Cisco Secure Firewall - Remote Access Software Usage Traffic
-      - id: escu:clear_unallocated_sector_using_cipher_app
-        name: Clear Unallocated Sector Using Cipher App
     sentinel:
       total: 17
       shown:
@@ -3213,6 +3633,16 @@ use_cases:
         name: Microsoft 365 - Potential Ransomware Activity
       - id: sigma:8b9606c9-28be-4a38-b146-0e313cc232c1
         name: Potential Ransomware Activity Using LegalNotice Message
-  coverage: rule-level
+  coverage: rule-level-partial
+  covered_detections: 7
+  linked_detections: 124
   covered_by:
+  - escu:creation_of_shadow_copy
   - escu:deleting_shadow_copies
+  - escu:detect_remote_access_software_usage_process
+  - escu:detect_sharphound_usage
+  - escu:registry_keys_used_for_persistence
+  - escu:suspicious_scheduled_task_from_public_directory
+  - escu:windows_event_log_cleared
+  technique_fallbacks:
+  - T1490

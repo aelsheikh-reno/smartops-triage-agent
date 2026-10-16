@@ -230,7 +230,7 @@ def main():
                 src_ids["escu"] = {"escu:" + os.path.basename(p)[:-4] for p in glob.glob(os.path.join(escu_dir, "*/*.yml")) if "/deprecated/" not in p}
         for u in ucs:
             w = f"bank/use_cases.yaml {u['id']}"
-            for k in ("name", "domain", "family", "rank", "volume_reason", "techniques", "linked", "coverage"):
+            for k in ("name", "domain", "family", "rank", "volume_reason", "techniques", "linked", "coverage", "covered_detections", "linked_detections"):
                 if k not in u:
                     err(w, f"missing {k}")
             if u.get("family") == "vendor" and not u.get("triage_hints"):
@@ -242,9 +242,25 @@ def main():
                 for x in block.get("shown", []):
                     if src_ids and src in src_ids and x["id"] not in src_ids[src]:
                         err(w, f"linked {x['id']} not found in cloned {src} sources")
-            bank_rules = {d for d in u.get("covered_by", []) if d in b["detections"]}
-            linked = {x["id"] for blk in u["linked"].values() for x in blk.get("shown", [])}
-            want = "rule-level" if bank_rules and bank_rules <= linked else "technique-only" if any(t in b["techniques"] for t in u.get("techniques", [])) else "none"
+            covered = u.get("covered_by", [])
+            shown = {x["id"] for blk in u["linked"].values() for x in blk.get("shown", [])}
+            for d in covered:
+                if d not in b["detections"]:
+                    err(w, f"covered_by {d} has no bank flow")
+                if d not in shown:
+                    err(w, f"covered_by {d} is not among the shown linked detections")
+            for d in sorted(shown & set(b["detections"]) - set(covered)):
+                err(w, f"{d} has a bank flow but is missing from covered_by")
+            n_linked = sum(blk.get("total", 0) for blk in u["linked"].values())
+            if u.get("linked_detections") != n_linked:
+                err(w, f"linked_detections {u.get('linked_detections')} != sum of linked totals {n_linked}")
+            if u.get("covered_detections") != len(covered):
+                err(w, f"covered_detections {u.get('covered_detections')} != len(covered_by) {len(covered)}")
+            fallbacks = [t for t in u.get("techniques", []) if t in b["techniques"]]
+            if sorted(u.get("technique_fallbacks", [])) != sorted(fallbacks):
+                err(w, f"technique_fallbacks should be {sorted(fallbacks)}")
+            want = (("rule-level-full" if len(covered) == n_linked else "rule-level-partial") if covered
+                    else "technique-only" if fallbacks else "none")
             if u.get("coverage") != want:
                 err(w, f"coverage is {u.get('coverage')}, bank says {want}")
     for x in b["pilot"]["detections"]:

@@ -18,3 +18,10 @@ Steps (stop after each):
 3. After approval, build the rest of the pilot plus technique fallbacks.
 4. Run validate, load_sql, rank_facts; show the top 15 context facts.
 5. Commit, push, open a draft PR. Do not merge.
+
+Expansion batches (after the pilot), chosen from `bank/use_cases.yaml` by rank, one branch and draft PR each (`feat/bank-batch-<n>-<domain>`):
+1. Vendor alerts: AV/EDR, IPS/IDS, WAF, email gateway including user-reported phishing, DLP, scanner noise, proxy blocks, firewall denies, removable media.
+2. Identity and cloud: Entra ID, M365, Azure, on-prem AD authentication, lockouts, service accounts, PAM.
+3. Network and email.
+4. Linux.
+5. Cloud workloads (AWS).

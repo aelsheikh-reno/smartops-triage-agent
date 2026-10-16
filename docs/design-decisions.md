@@ -53,7 +53,7 @@ Per detection: Shadow (verdict hidden) → Recommend (analyst accepts or overrid
 - elastic/detection-rules, Elastic License 2.0: "Triage and analysis", "False positive analysis"
 - SigmaHQ/sigma, Detection Rule License (attribution): falsepositives
 - LOLBAS, GTFOBins, LOLDrivers: legitimate uses of binaries and drivers
-- MITRE ATT&CK v18 (mitre-attack/attack-stix-data): techniques, detection strategies
+- MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data): techniques, detection strategies. v19 (April 2026) revoked T1562.001 → T1685 and T1070.001 → T1685.005; use current IDs.
 Record source and license on every question; non-Apache text needs legal review before commercial use.
 
 ## 12. Later phases

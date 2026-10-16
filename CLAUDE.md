@@ -14,5 +14,5 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 - New questions start as `status: draft`. Only a human marks them `approved`.
 - Public source repos are cloned into `sources/`, which is git-ignored. Never commit them.
 - Work on a feature branch, push it, and open a draft PR. Never commit to `main` directly.
-  Exception: docs-only changes (README, docs/) may be committed directly to main. Anything under bank/ or tools/ goes through a branch and PR.
+  Exception: docs-only changes (README, CLAUDE.md, docs/) may be committed directly to main. Anything under bank/ or tools/ goes through a branch and PR.
 - Stop and show the user after each step of the brief. Keep replies concise.

@@ -78,5 +78,33 @@ Per detection: Shadow (verdict hidden) → Recommend (analyst accepts or overrid
 - MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data): techniques, detection strategies. v19 (April 2026) revoked T1562.001 → T1685 and T1070.001 → T1685.005; use current IDs.
 Record source and license on every question; non-Apache text needs legal review before commercial use.
 
-## 12. Later phases
+## 12. Knowledge Steward agent
+A second agent keeps the triage knowledge current: context facts, allowlists, exceptions, questions and runbooks. It runs continuously, so triage quality does not depend on people following documentation or on who is still on the team. The triage agent decides; the steward keeps what it decides with up to date.
+
+Duties:
+1. Fact freshness: finds facts near expiry, or whose owner is disabled or has left (identity capabilities), and asks the right person to re-confirm. Expired facts stop being used.
+2. Closure mining: turns recurring analyst closure reasons into proposals: a new exception, a new fact or a new benign question.
+3. Cleanup: proposes removing allowlist and exception entries unused for 90 days (per-customer parameter).
+4. New patterns: drafts a new question when a benign cause recurs and no question covers it.
+5. Rule changes: new or edited detections are re-mapped by the rule intent service (§8) and start in Shadow; the steward tracks each one until it is mapped, has questions and has a mode.
+6. Runbook sync: generates human-readable runbooks from the bank, so the documentation always matches what the triage agent does.
+7. Turnover resilience: all knowledge lives in the bank and the context store, with owner, reason, evidence and history, never only in people's heads.
+
+Guardrails:
+- It proposes, and never decides, anything that reduces scrutiny: an allowlist entry, an exception, a trusted entity, or a question that adds a close path. Each needs human approval, an owner and an expiry, with a full audit trail.
+- It may apply increase-scrutiny changes on its own (a watchlist entry, removing an expired entry), and must notify the fact's owner.
+- Anti-poisoning: a reduce-scrutiny proposal needs evidence from at least 3 analyst closures, by at least 2 different analysts, on at least 3 distinct days (per-customer parameters). The triage agent's own automatic closures never count as evidence, so the two agents cannot reinforce each other. A proposal driven by alerts from a single source, or by a burst inside one window, is rejected.
+- It writes only through the MCP server's `list.propose_update` and fact-update capabilities, and never edits customer tools directly.
+- It runs on the same deployment as the triage agent, so data stays in-region.
+
+Metrics: proposals made, accepted and rejected; stale facts; average fact age; unused entries removed; time from a recurring pattern to an approved fact; runbook drift (should be zero).
+
+Capabilities it needs (specification only; to be added to `bank/capabilities.yaml` in a steward group with `flow_use: forbidden`, so no triage flow can call them):
+- `fact.metadata`: a fact's owner, expiry and last use.
+- `list.usage`: hit counts and last hit per list entry.
+- `identity.status`: whether an owner's account is active.
+- `closure.history`: analyst closures with reason and analyst id.
+- `rule.inventory`: enabled detections and their change dates.
+
+## 13. Later phases
 Cross-customer analytics with anonymized counts only (question ID, outcome, sector). Investigation agent using an attack-path graph (e.g. MITRE Attack Flow) and a per-incident evidence graph.

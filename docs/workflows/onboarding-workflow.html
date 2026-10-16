@@ -160,9 +160,10 @@ const LANES=[
  {id:'base',name:['Baseline engine'],rows:1,g:'know'},
  {id:'agent',name:['Triage agent'],rows:1,g:'run'},
  {id:'ctl',name:['Autonomy','controller'],rows:1,g:'run'},
+ {id:'stw',name:['Knowledge','steward agent'],rows:3,g:'learn'},
  {id:'cur',name:['Curation','& audit'],rows:2,g:'learn'}
 ];
-const SHORT={reno:'Reno team',soc:'Customer SOC',it:'Customer IT',es:'Splunk ES',mcp:'MCP server',intent:'Rule intent',bank:'Question bank',ctx:'Context store',base:'Baseline engine',agent:'Triage agent',ctl:'Autonomy ctl',cur:'Curation & audit'};
+const SHORT={reno:'Reno team',soc:'Customer SOC',it:'Customer IT',es:'Splunk ES',mcp:'MCP server',intent:'Rule intent',bank:'Question bank',ctx:'Context store',base:'Baseline engine',agent:'Triage agent',ctl:'Autonomy ctl',stw:'Steward agent',cur:'Curation & audit'};
 const ROW=62,NH=44,NW=142,COL=178,PX=24,HEAD=62,LW=140,LAST=11;
 let y=HEAD; LANES.forEach(l=>{l.top=y;l.h=l.rows*ROW;y+=l.h;});
 const H=y+8; const L=Object.fromEntries(LANES.map(l=>[l.id,l]));
@@ -182,7 +183,7 @@ const GATES={
  B:{when:'End of week 1',pass:'Every enabled rule is mapped (known, technique or none) and classified; capabilities discovered; vendor alerts confirmed normalized for each family; coverage report reviewed.',by:'SOC lead'},
  C:{when:'End of week 2',pass:'Top-ranked facts loaded with owners; custom-rule mappings approved; dry run checked by hand.',by:'SOC lead + Reno'},
  D:{when:'End of month 1',pass:'Shadow results reviewed; list of detections moving to Recommend agreed (e.g. ≥95% agreement over 50+ alerts).',by:'SOC lead'},
- E:{when:'End of month 3, or when ready',pass:'Auto list approved detection by detection; crown jewels excluded; audit sampling switched on.',by:'SOC lead (and CISO where required)'}
+ E:{when:'End of month 3, or when ready',pass:'Auto list approved detection by detection; crown jewels excluded; audit sampling switched on; steward proposals reviewed weekly; no unapproved reduce-scrutiny change.',by:'SOC lead (and CISO where required)'}
 };
 
 /* one-time steps: [num, lane, row, col, label lines, detail] */
@@ -203,19 +204,21 @@ const NODES=[
  [14,'es',0,3,['Export closures and','filter macros'],'Export 6–12 months of notable dispositions and analyst comments, plus each rule’s filter macro (their existing exclusions).'],
  [15,'soc',0,3,['Share runbooks','and SOPs'],'Hand over any existing triage runbooks, however informal.'],
  [16,'bank',0,3,['Runbooks into the','customer layer'],'Convert runbook steps into questions in the customer layer of the bank, marked as drafts.'],
- [17,'cur',1,3,['Mine past closures','into drafts'],'Turn past closure reasons into candidate questions and facts. Treated as evidence, not truth: old closures are often blank or wrong.'],
- [18,'reno',0,3,['Coverage report'],'Shows how much of the alert volume has rule-level questions, technique-only questions, or none, and which questions this customer’s tools can actually answer. Questions with no capability are switched off for this customer.'],
- [19,'bank',0,4,['Rank missing facts','→ onboarding form'],'Rank the missing context facts by how many detections each one unblocks. The top of the list becomes the customer’s form.'],
- [20,'it',0,4,['Fill the','onboarding form'],'Crown jewels, VPN and egress ranges, service accounts, sanctioned admin tools, and change windows with who implements each change (a change without implementers cannot close an alert). Partial answers are fine.'],
- [21,'soc',0,4,['Approve custom-rule','mappings'],'A senior analyst confirms each custom rule’s mapping once. Unmapped rules get no verdict, only a context pack.'],
- [22,'ctx',0,5,['Load facts with','owner and expiry'],'Every fact gets an owner and a date to re-check it, because IP ranges and roles change.'],
- [23,'reno',0,5,['Tuning tickets for','noisy rules'],'Rules firing hundreds of times on one entity get throttling or risk-based alerting. That is a detection problem, not a triage problem.'],
- [24,'agent',0,5,['Dry run on','sample notables'],'Run the agent on recent notables and check its answers by hand before it sees live traffic.'],
- [25,'ctl',0,6,['All detections','start in Shadow'],'The agent triages every alert, but analysts don’t see its verdicts, so their decisions stay unbiased.'],
- [26,'reno',0,7,['Month-1 review','with customer'],'Review agreement per detection, the questions that came back unknown (and why: no capability, tool down, or no data), and the facts still missing.'],
- [27,'ctl',0,8,['Promote eligible','to Recommend'],'Detections that passed gate D now show their verdict to analysts.'],
- [28,'ctl',0,10,['Promote eligible','to Auto'],'Detections that kept their agreement rate in Recommend move to Auto, never on crown-jewel assets.'],
- [29,'es',0,10,['Allow agent to','close notables'],'The Splunk account gets permission to close notables, used only for detections in Auto.']
+ [17,'stw',0,3,['Mine past closures','into drafts'],'The steward turns past closure reasons into candidate questions and facts. Treated as evidence, not truth: old closures are often blank or wrong. Every draft goes to a human for approval.'],
+ [18,'stw',1,3,['Steward drafts','runbooks from bank'],'Human-readable runbooks are generated from the bank, so the documentation says exactly what the triage agent does. They replace hand-written runbooks as the reference.'],
+ [19,'reno',0,3,['Coverage report'],'Shows how much of the alert volume has rule-level questions, technique-only questions, or none, and which questions this customer’s tools can actually answer. Questions with no capability are switched off for this customer.'],
+ [20,'bank',0,4,['Rank missing facts','→ onboarding form'],'Rank the missing context facts by how many detections each one unblocks. The top of the list becomes the customer’s form.'],
+ [21,'it',0,4,['Fill the','onboarding form'],'Crown jewels, VPN and egress ranges, service accounts, sanctioned admin tools, and change windows with who implements each change (a change without implementers cannot close an alert). Partial answers are fine.'],
+ [22,'stw',0,4,['Steward chases fact','owners for answers'],'For each missing answer on the form, the steward finds the right owner through the identity data and asks them directly, with reminders, until the fact is answered or marked not applicable.'],
+ [23,'soc',0,4,['Approve custom-rule','mappings'],'A senior analyst confirms each custom rule’s mapping once. Unmapped rules get no verdict, only a context pack.'],
+ [24,'ctx',0,5,['Load facts with','owner and expiry'],'Every fact gets an owner and a date to re-check it, because IP ranges and roles change.'],
+ [25,'reno',0,5,['Tuning tickets for','noisy rules'],'Rules firing hundreds of times on one entity get throttling or risk-based alerting. That is a detection problem, not a triage problem.'],
+ [26,'agent',0,5,['Dry run on','sample notables'],'Run the agent on recent notables and check its answers by hand before it sees live traffic.'],
+ [27,'ctl',0,6,['All detections','start in Shadow'],'The agent triages every alert, but analysts don’t see its verdicts, so their decisions stay unbiased.'],
+ [28,'reno',0,7,['Month-1 review','with customer'],'Review agreement per detection, the questions that came back unknown (and why: no capability, tool down, or no data), and the facts still missing.'],
+ [29,'ctl',0,8,['Promote eligible','to Recommend'],'Detections that passed gate D now show their verdict to analysts.'],
+ [30,'ctl',0,10,['Promote eligible','to Auto'],'Detections that kept their agreement rate in Recommend move to Auto, never on crown-jewel assets.'],
+ [31,'es',0,10,['Allow agent to','close notables'],'The Splunk account gets permission to close notables, used only for detections in Auto.']
 ].map(a=>({num:a[0],lane:a[1],row:a[2],col:a[3],lines:a[4],detail:a[5]}));
 
 /* ongoing processes: [id, lane, row, startCol, endCol, label, cadence, owner, why] */
@@ -224,13 +227,16 @@ const BARS=[
  ['b2','agent',0,6,LAST,'Triage every notable','every alert','Platform','Verdicts are hidden in Shadow, shown in Recommend, acted on in Auto.'],
  ['b3','soc',0,6,7,'Triage as usual; close with a reason','every alert','Customer SOC','The analyst’s reason is the answer key for measuring the agent.'],
  ['b4','soc',0,8,LAST,'Accept or override; handle escalations','every alert','Customer SOC','Overrides are the main way the agent learns.'],
- ['b5','cur',0,6,LAST,'Disagreement review','weekly','Senior analyst + Reno','Each disagreement becomes a missing fact or a new question.'],
+ ['b5','cur',0,6,LAST,'Review steward proposals','weekly','Senior analyst + Reno','Each disagreement and recurring closure reaches a human as a proposal with evidence; nothing that reduces scrutiny changes without approval.'],
  ['b6','intent',0,6,LAST,'Re-map new or changed rules','on change','Platform + senior analyst','A new or edited rule always restarts in Shadow.'],
- ['b7','it',0,8,LAST,'Re-check facts before they expire','per fact','Fact owners','Stale facts cause confident wrong answers.'],
+ ['b7','it',0,8,LAST,'Owners confirm facts when the steward asks','per fact','Fact owners','Stale facts cause confident wrong answers; an expired fact stops being used.'],
  ['b8','bank',0,8,LAST,'Base bank releases + customer layer','monthly','Reno','New public detections and improved questions reach every customer.'],
  ['b9','reno',0,8,LAST,'Report: coverage, agreement, hours saved','monthly','Reno','Shows the customer the value and where gaps remain.'],
  ['b10','cur',1,10,LAST,'Audit 5–10% of auto-closures','weekly','Senior analyst','Catches silent errors in Auto mode.'],
  ['b11','ctl',0,11,LAST,'Promote / demote','weekly','Platform','A failed audit sample sends a detection back to Recommend.'],
+ ['b13','stw',0,6,LAST,'Re-confirm expiring facts with owners','daily','Steward agent','Finds facts near expiry or with an owner who has left, and asks the right person to re-confirm. Expired facts stop being used.'],
+ ['b14','stw',1,6,LAST,'Propose cleanup of unused entries','weekly','Steward agent','Allowlist and exception entries unused for 90 days (per customer) are proposed for removal; the owner is notified.'],
+ ['b15','stw',2,6,LAST,'Keep runbooks in sync','on every bank change','Steward agent','Runbooks are regenerated from the bank, so documentation never drifts from what the agent does.'],
  ['b12','mcp',0,3,LAST,'Tool health check; re-discover on change','every few minutes','Platform','A disconnected tool turns its answers into “unknown, unavailable”: nothing closes on it, and affected detections drop from Auto to Recommend until it’s back.']
 ].map(a=>({id:a[0],lane:a[1],row:a[2],a:a[3],b:a[4],label:a[5],cad:a[6],owner:a[7],why:a[8]}));
 

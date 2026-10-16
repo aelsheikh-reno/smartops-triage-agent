@@ -32,13 +32,35 @@ fingerprint:
 - registry_path
 - registry_value_name
 - registry_value_data
+fingerprint_influence:
+  dest:
+    rating: low
+    reason: Host that reported the event.
+  registry_path:
+    rating: high
+    reason: Key the attacker writes.
+  registry_value_name:
+    rating: high
+    reason: Value name the attacker writes.
+  registry_value_data:
+    rating: high
+    reason: Data the attacker writes.
+precedent_entity: dest
 precedent_validity: 7d
 flow:
 - step: 1
   question: Q-0000
+  bind:
+    entity: value:dest
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce dest in the fingerprint.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
 - step: 2
   question: Q-0013
   on_yes: close:benign_true_positive:sanctioned_management_tool
@@ -69,5 +91,5 @@ source:
   title: Registry Keys Used For Persistence
 license: Apache-2.0
 status: draft
-version: 6
+version: 7
 notes: Command-line and registry-value baselines are attacker-chosen strings (attacker_influence high), so on their own they flag instead of closing.

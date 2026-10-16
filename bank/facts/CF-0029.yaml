@@ -1,0 +1,12 @@
+id: CF-0029
+name: server_assets
+description: Hosts that are servers (not user endpoints), from the asset inventory.
+fields:
+- host
+- role
+match_rule: host listed
+collected_by: customer
+example:
+  host: srv-app-01
+  role: application server
+version: 1

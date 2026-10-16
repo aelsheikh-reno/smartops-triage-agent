@@ -33,13 +33,32 @@ fingerprint:
 - dest
 - process_hash
 - process
+fingerprint_influence:
+  dest:
+    rating: low
+    reason: Host that reported the event.
+  process_hash:
+    rating: low
+    reason: Computed by the sensor; reproducing it means running the same binary.
+  process:
+    rating: high
+    reason: Command line the attacker writes.
+precedent_entity: dest
 precedent_validity: 72h
 flow:
 - step: 1
   question: Q-0000
+  bind:
+    entity: value:dest
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce dest, process_hash in the fingerprint.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
 - step: 2
   question: Q-0013
   on_yes: close:benign_true_positive:sanctioned_management_tool
@@ -68,4 +87,4 @@ source:
   title: Process Execution via WMI
 license: Apache-2.0
 status: draft
-version: 6
+version: 7

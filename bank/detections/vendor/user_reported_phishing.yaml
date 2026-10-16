@@ -13,24 +13,50 @@ required_alert_fields:
 - message_id
 - user
 - src_user
+- sender_domain
 - recipient
 - subject
 - url
+- indicator_count
 - _time
+derived_fields:
+  url_domain:
+    from: url
+    pattern: https?://([^/\s:]+)
+    note: domain of the first URL in the message; empty when there is none
+  campaign_key:
+    from:
+    - sender_domain
+    - url_domain
+    join: '|'
+    note: 'secondary campaign key: sender domain plus URL domain, for alert.history'
 intent: 'Generic: a user reports an email as phishing through the report button or a reporting mailbox.'
 fp_quality: generic
-notes: 'Repeat reports of the same message attach to the open case through the fingerprint. A clean scanning verdict is not used to close: it is the easiest signal for an attacker to game.'
+notes: The message id is sender-chosen, so a precedent only flags. A message with no URL and no attachment flags as possible business-email compromise. Simulation and approved-sender closes need an aligned
+  DMARC pass. Repeat reports of one campaign (sender domain plus URL domain) flag.
 explanations:
 - BE-0023
 - BE-0024
 - BE-0030
+- BE-0035
+- BE-0037
 fingerprint:
 - message_id
 precedent_validity: 7d
+precedent_entity: message_id
+fingerprint_influence:
+  message_id:
+    rating: high
+    reason: Set by the sending server.
 flow:
 - step: 1
   question: Q-0000
-  on_yes: close:inherit:precedent_match
+  bind:
+    entity: value:message_id
+  attacker_influence:
+    rating: high
+    reason: Every fingerprint field is attacker-chosen, so a precedent only flags.
+  on_yes: flag
   on_no: next
   on_unknown: next
 - step: 2
@@ -38,25 +64,50 @@ flow:
   on_yes: close:benign_true_positive:authorized_phishing_simulation
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0070
+    when:
+    - 'no'
+    then: flag
 - step: 3
-  question: Q-0034
-  on_yes: escalate
+  question: Q-0072
+  on_yes: flag
   on_no: next
   on_unknown: next
 - step: 4
-  question: Q-0035
-  on_yes: next
-  on_no: flag
-  on_unknown: flag
+  question: Q-0071
+  on_yes: close:false_positive:false_report
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0070
+    when:
+    - 'no'
+    then: flag
+  - question: Q-0034
+    then: escalate
+  - question: Q-0046
+    then: flag
+    bind:
+      key: value:campaign_key
 - step: 5
   question: Q-0036
   on_yes: close:mitigated_true_positive:contained_without_interaction
   on_no: escalate
   on_unknown: flag
+  guards:
+  - question: Q-0035
+    when:
+    - 'no'
+    then: flag
+  - question: Q-0046
+    then: flag
+    bind:
+      key: value:campaign_key
 source:
   repo: internal
   path: bank/use_cases.yaml#UC-014
   title: User-reported phishing email
 license: internal
 status: draft
-version: 1
+version: 2

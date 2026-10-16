@@ -36,22 +36,24 @@ def main():
         db.execute("INSERT INTO reason_codes VALUES (?,?,?)", (r["code"], r["disposition"], r["description"]))
     for q in b["questions"].values():
         cap = q["capability"]
-        db.execute("INSERT INTO questions VALUES (?,?,?,?,?,?,?,?,?,?)",
+        db.execute("INSERT INTO questions VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
                    (q["id"], q["text"], q["tests"], cap["name"], J(cap.get("inputs", {})), J(cap.get("params", {})),
-                    J(q["source"]), J(q["license"]), q["status"], q["version"]))
+                    J(q["source"]), J(q["license"]), q["status"], q["version"],
+                    q["attacker_influence"]["rating"], J(q["attacker_influence"].get("by_source") or {})))
         needs = {("context", x) for x in B.list_refs(q)}
         needs |= {("alert_field", f) for _, f in B.walk_refs(cap.get("inputs", {}))}
         needs |= {("param", p["param"]) for p in (cap.get("params") or {}).values() if isinstance(p, dict)}
         db.executemany("INSERT INTO question_needs VALUES (?,?,?)", [(q["id"], t, r) for t, r in sorted(needs)])
     n_steps = 0
     for level, d in B.flows(b):
-        db.execute("INSERT INTO detections VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        db.execute("INSERT INTO detections VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                    (d["id"], level, d["name"], J(d.get("techniques", [d["id"]])), J(d.get("data_source", [])), J(d.get("sigma_logsource", [])), J(d.get("sigma_refs", [])),
                     J(d.get("required_alert_fields") or d.get("assumed_alert_fields")), d.get("intent"), d.get("fp_quality"),
-                    J(d["fingerprint"]), d["precedent_validity"], d.get("max_mode"), d["status"], d["version"]))
+                    J(d["fingerprint"]), J(d.get("fingerprint_influence") or {}), d.get("precedent_entity"), d["precedent_validity"], d.get("max_mode"), d["status"], d["version"]))
         for st in d["flow"]:
-            db.execute("INSERT INTO flow_steps VALUES (?,?,?,?,?,?,?)",
-                       (d["id"], st["step"], st["question"], st["on_yes"], st["on_no"], st["on_unknown"], J(st.get("bind") or {})))
+            db.execute("INSERT INTO flow_steps VALUES (?,?,?,?,?,?,?,?,?)",
+                       (d["id"], st["step"], st["question"], st["on_yes"], st["on_no"], st["on_unknown"], J(st.get("bind") or {}),
+                        (st.get("attacker_influence") or {}).get("rating"), J(st.get("guards") or [])))
             n_steps += 1
     db.commit()
     counts = {t: db.execute(f"SELECT count(*) FROM {t}").fetchone()[0]

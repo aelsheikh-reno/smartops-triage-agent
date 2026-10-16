@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Rank what each closure depends on, grouped by capability.
 
-A close at step k needs that step's capability to answer, plus every earlier gate step
-(one whose no and unknown edges both stop the flow). A detection is "unblocked" by a fact
+A close needs the capability of its closing step, of every step answered yes on the way, and of
+every guard on the closing step that needs a yes (guards that fire on no). A detection is "unblocked" by a fact
 if at least one of its non-precedent close paths needs it; "sole" means every one does.
 Facts are context lists for lookups, and the question itself for baselines and prevalence.
 
@@ -37,22 +37,31 @@ def main():
     esc_only = {r[0] for r in db.execute("SELECT name FROM capabilities WHERE escalate_only=1")}
     stat = collections.defaultdict(lambda: {"rule": set(), "sole": set(), "technique": set(), "escalates": set()})
     no_close = []
-    for did, level in db.execute("SELECT id, level FROM detections").fetchall():
-        steps = db.execute("SELECT step, question_id, on_yes, on_no, on_unknown FROM flow_steps WHERE detection_id=? ORDER BY step", (did,)).fetchall()
-        paths, gates = [], []
-        for step, qid, y, n, u in steps[1:]:
-            keys = fact_keys(db, qid, qcap[qid])
-            if qcap[qid] in esc_only:
-                for k in keys:
-                    stat[k]["escalates"].add(did)
-            if y.startswith("close") or n.startswith("close"):
-                paths.append(set(keys) | set(gates))
-            if y == "next" and n != "next" and u != "next":
-                gates.extend(keys)
+    b = B.load()
+    for level, d in B.flows(b):
+        did = d["id"]
+        level = "technique" if level == "technique" else "rule"
+        paths = []
+        for path, outcome, guards in B.enumerate_paths(d["flow"]):
+            for st, _ in path:
+                if qcap[st["question"]] in esc_only:
+                    for k in fact_keys(db, st["question"], qcap[st["question"]]):
+                        stat[k]["escalates"].add(did)
+            if not outcome.startswith("close") or path[-1][0]["step"] == 1:
+                continue
+            last = path[-1][0]
+            need = set()
+            for st, a in path:
+                if a == "yes" or st is last:
+                    need |= set(fact_keys(db, st["question"], qcap[st["question"]]))
+            for g in guards:
+                if B.guard_requires_yes(g):
+                    need |= set(fact_keys(db, g["question"], qcap[g["question"]]))
+            paths.append(need)
         if not paths and level == "rule":
             no_close.append(did)
         for k in set().union(*paths) if paths else set():
-            stat[k]["technique" if level == "technique" else "rule"].add(did)
+            stat[k][level].add(did)
             if level == "rule" and all(k in p for p in paths):
                 stat[k]["sole"].add(did)
     by_cap = collections.defaultdict(list)
@@ -75,12 +84,11 @@ def main():
     print("Top 15 overall:")
     for i, (r, s, t, cap, ref) in enumerate(flat[:15], 1):
         print(f"  {i:>2}. {cap:<16} {ref:<8} {names.get(ref, '')}  rules {r}, sole {s}, tech {t}")
-    b = B.load()
     print("\nCloses that flag until onboarding verifies seed data (taint propagates through gates):")
     for _, d in B.flows(b):
         t = B.tainted_closes(b, d["flow"])
         if t:
-            total_closes = len(B.close_paths(b, d["flow"]))
+            total_closes = len(B.close_edges(d["flow"]))
             print(f"  {d['id']}: {len(t)} of {total_closes} closes, via step(s) {sorted({s for _, _, bad in t for s in bad})}")
     if no_close:
         print("\nRule-level detections with no close outside Q0:", ", ".join(no_close))

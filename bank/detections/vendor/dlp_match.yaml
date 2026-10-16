@@ -17,15 +17,20 @@ required_alert_fields:
 - object
 - action
 - severity
+- record_count
+- object_hash
 - _time
 intent: 'Generic: a DLP control reports regulated data leaving through email, web, cloud storage or print (normalized DLP alert, any product).'
 fp_quality: generic
-notes: 'The user''s own sending history can only flag, never close: an insider builds that baseline.'
+notes: 'Held, quarantined and pending-release actions answer unknown and flag: a later release would undo them. High severity or a large record count flags even to approved destinations. The user-to-destination
+  baseline (Q-0040) was removed to stay within five steps.'
 explanations:
+- BE-0007
 - BE-0019
 - BE-0025
 - BE-0026
-- BE-0007
+- BE-0034
+- BE-0037
 derived_fields:
   recipient_domain:
     from: dest
@@ -36,36 +41,75 @@ fingerprint:
 - signature
 - recipient_domain
 precedent_validity: 24h
+precedent_entity: src_user
+fingerprint_influence:
+  src_user:
+    rating: low
+    reason: Authenticated sender account.
+  signature:
+    rating: low
+    reason: Policy name assigned by the DLP control.
+  recipient_domain:
+    rating: high
+    reason: Destination chosen by the sender.
 flow:
 - step: 1
   question: Q-0000
+  bind:
+    entity: value:src_user
+    current_action: value:action
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce src_user, signature in the fingerprint.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+  - question: Q-0063
+    then: flag
+  - question: Q-0064
+    then: flag
 - step: 2
-  question: Q-0027
-  on_yes: close:mitigated_true_positive:blocked_by_control
+  question: Q-0061
+  on_yes: close:false_positive:known_test_data
   on_no: next
   on_unknown: next
 - step: 3
+  question: Q-0062
+  on_yes: close:mitigated_true_positive:blocked_by_control
+  on_no: next
+  on_unknown: flag
+  guards:
+  - question: Q-0046
+    then: flag
+    bind:
+      key: value:src_user
+- step: 4
   question: Q-0038
   on_yes: close:benign_true_positive:approved_business_exception
   on_no: next
   on_unknown: next
-- step: 4
+  guards:
+  - question: Q-0063
+    then: flag
+  - question: Q-0064
+    then: flag
+- step: 5
   question: Q-0039
   on_yes: close:benign_true_positive:approved_recipient
-  on_no: next
-  on_unknown: next
-- step: 5
-  question: Q-0040
-  on_yes: flag
   on_no: escalate
   on_unknown: flag
+  guards:
+  - question: Q-0063
+    then: flag
+  - question: Q-0064
+    then: flag
 source:
   repo: internal
   path: bank/use_cases.yaml#UC-010
   title: DLP policy match
 license: internal
 status: draft
-version: 1
+version: 2

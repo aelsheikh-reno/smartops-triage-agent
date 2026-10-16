@@ -31,48 +31,87 @@ required_alert_fields:
 - file_name
 - file_path
 - _time
+derived_fields:
+  av_class:
+    from:
+    - category
+    - signature
+    join: ' '
+    note: detection class and name together, so subfamilies filed under a low-risk class are still seen
 intent: 'Generic: an antivirus or EDR product reports a malware detection on a host (normalized malware alert, any product).'
 fp_quality: generic
-notes: 'A blocked detection outside the low-risk classes flags rather than closes: the analyst checks where it came from. High-risk classes escalate even when blocked.'
+notes: High-risk families escalate even when blocked. Only a block before execution can close, and only for low-risk classes; post-execution remediation, pending reboot and partial remediation flag. Test
+  files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail.
 explanations:
 - BE-0019
 - BE-0020
 - BE-0030
+- BE-0031
+- BE-0037
 fingerprint:
 - dest
 - signature
 - file_hash
 precedent_validity: 24h
+precedent_entity: dest
+fingerprint_influence:
+  dest:
+    rating: low
+    reason: Host that reported the event.
+  signature:
+    rating: low
+    reason: Detection name assigned by the product.
+  file_hash:
+    rating: low
+    reason: Hash of the file already judged; reproducing it reproduces that file.
 flow:
 - step: 1
   question: Q-0000
+  bind:
+    entity: value:dest
+    current_action: value:action
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce dest, signature, file_hash in the fingerprint.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+  - question: Q-0029
+    then: escalate
 - step: 2
-  question: Q-0027
-  on_yes: next
-  on_no: escalate
-  on_unknown: flag
+  question: Q-0048
+  on_yes: close:benign_true_positive:approved_security_tooling
+  on_no: next
+  on_unknown: next
 - step: 3
   question: Q-0029
   on_yes: escalate
   on_no: next
   on_unknown: next
 - step: 4
+  question: Q-0049
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 5
   question: Q-0028
   on_yes: close:mitigated_true_positive:blocked_low_risk_detection
-  on_no: next
-  on_unknown: next
-- step: 5
-  question: Q-0030
-  on_yes: escalate
   on_no: flag
   on_unknown: flag
+  guards:
+  - question: Q-0046
+    then: flag
+    bind:
+      key: value:dest
+  - question: Q-0030
+    then: escalate
 source:
   repo: internal
   path: bank/use_cases.yaml#UC-001
   title: Antivirus or EDR malware detection
 license: internal
 status: draft
-version: 1
+version: 2

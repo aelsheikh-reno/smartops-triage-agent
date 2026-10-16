@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Write a review packet for an external reviewer: each detection's name, intent, flow table,
-question texts, capability and attacker influence, plus the gate results.
+question texts, capability and attacker influence, guards, plus the gate results. If
+review/changes/<batch-name>.md exists, it is included as "Changes since review".
 
 Usage: tools/review_packet.py <batch-name> <id-prefix> [<id-prefix> ...]
    e.g. tools/review_packet.py batch-1-vendor-alerts vendor:
@@ -22,6 +23,19 @@ def outcome(v):
     return OUT.get(v, v)
 
 
+def influence(b, item):
+    ai = item.get("attacker_influence") or b["questions"][item["question"]]["attacker_influence"]
+    extra = "".join(f", {k} {v}" for k, v in (ai.get("by_source") or {}).items())
+    return ai["rating"] + extra
+
+
+def guard_text(b, st):
+    out = []
+    for g in st.get("guards") or []:
+        out.append(f"{g['question']} {'/'.join(g.get('when', ['yes']))} → {g['then']}")
+    return "; ".join(out) or "–"
+
+
 def gate(cmd):
     r = subprocess.run([sys.executable] + cmd, cwd=B.ROOT, capture_output=True, text=True)
     lines = [l for l in r.stdout.strip().splitlines() if l.strip()]
@@ -35,16 +49,25 @@ def main():
     used = []
     for d in dets:
         for st in d["flow"]:
-            if st["question"] not in used:
-                used.append(st["question"])
+            for qid in [st["question"]] + [g["question"] for g in st.get("guards") or []]:
+                if qid not in used:
+                    used.append(qid)
     caps_used = sorted({b["questions"][q]["capability"]["name"] for q in used})
     L = [f"# Review packet: {name}", "",
          f"{len(dets)} detections, {len(used)} distinct questions, {len(caps_used)} capabilities. Everything is `status: draft`.", "",
          "How to read a flow: steps run top to bottom; each answer leads to the next step, a close (with disposition and reason code), "
          "an escalation, or a flag to an analyst with no verdict. An unknown answer never closes. Q-0000 (precedent) runs first everywhere.", "",
+         "Guards run only when a step would close: each names a question and the answers that turn the close into a flag or an escalation "
+         "(an unknown guard answer always flags, so the table lists only the triggering answers). A guard that fires on no means the close needs a yes from it.", "",
          "Attacker influence rates how easily the activity under triage could produce a yes: **none** (records the attacker cannot touch, such as change tickets), "
-         "**low** (OS-verified or control-recorded facts), **high** (attacker-chosen strings such as process names or command lines). "
-         "Every path to a close must rest on at least one yes rated none or low.", "", "## Gate results", ""]
+         "**low** (OS-verified or control-recorded facts), **medium** (control-recorded facts that can be forged in transit, such as alerts forwarded over syslog), "
+         "**high** (attacker-chosen strings such as process names, sender addresses or command lines). "
+         "Every path to a close must rest on at least one yes rated none or low. Q-0000's rating is set per detection from its fingerprint fields.", ""]
+    changes = os.path.join(B.ROOT, "review", "changes", f"{name}.md")
+    if os.path.exists(changes):
+        with open(changes) as fh:
+            L += ["## Changes since review", "", fh.read().strip(), ""]
+    L += ["## Gate results", ""]
     for label, cmd in (("validate", ["tools/validate.py"]), ("attacker influence", ["tools/redteam_paths.py"]), ("replay", ["tools/replay.py"] + prefixes)):
         status, line = gate(cmd)
         L.append(f"- {label}: {status} ({line})")
@@ -53,17 +76,20 @@ def main():
         L += [f"### {d['name']} (`{d['id']}`)", "", d["intent"], ""]
         if d.get("notes"):
             L += [f"Note: {d['notes']}", ""]
-        L += [f"Alert fields: {', '.join(d.get('required_alert_fields', []))}. Fingerprint: {', '.join(d['fingerprint'])}. Precedent valid for {d['precedent_validity']}.", "",
-              "| Step | Question | Capability | Influence | Yes | No | Unknown |", "|---|---|---|---|---|---|---|"]
+        fi = d.get("fingerprint_influence") or {}
+        fps = ", ".join(f"{f} ({fi[f]['rating']})" if f in fi else f for f in d["fingerprint"])
+        L += [f"Alert fields: {', '.join(d.get('required_alert_fields', []))}. Fingerprint: {fps}. Precedent entity: {d.get('precedent_entity')}. "
+              f"Precedent valid for {d['precedent_validity']}.", "",
+              "| Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |", "|---|---|---|---|---|---|---|---|"]
         for st in d["flow"]:
             q = b["questions"][st["question"]]
-            L.append(f"| {st['step']} | {q['id']}: {q['text']} | `{q['capability']['name']}` | {q['attacker_influence']['rating']} | "
-                     f"{outcome(st['on_yes'])} | {outcome(st['on_no'])} | {outcome(st['on_unknown'])} |")
+            L.append(f"| {st['step']} | {q['id']}: {q['text']} | `{q['capability']['name']}` | {influence(b, st)} | "
+                     f"{outcome(st['on_yes'])} | {outcome(st['on_no'])} | {outcome(st['on_unknown'])} | {guard_text(b, st)} |")
         L.append("")
     L += ["## Questions used", "", "| Question | Text | Capability | Influence | Why |", "|---|---|---|---|---|"]
     for qid in sorted(used):
         q = b["questions"][qid]
-        L.append(f"| {qid} | {q['text']} | `{q['capability']['name']}` | {q['attacker_influence']['rating']} | {q['attacker_influence']['reason']} |")
+        L.append(f"| {qid} | {q['text']} | `{q['capability']['name']}` | {influence(b, {'question': qid})} | {q['attacker_influence']['reason']} |")
     L += ["", "## Capabilities used", "", "| Capability | Yes means | Escalate only |", "|---|---|---|"]
     for c in caps_used:
         cap = b["capability_by_name"][c]

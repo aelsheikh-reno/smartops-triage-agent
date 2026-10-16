@@ -1,0 +1,21 @@
+id: Q-0060
+text: Has this host requested this domain on at least 3 distinct days in the 30 days before the alert window?
+tests: BE-0036
+capability:
+  name: entity.baseline
+  inputs:
+    entity: value:src
+    behavior: requested the domain value:dest
+  params:
+    min_days: 3
+    lookback: 30d
+attacker_influence:
+  rating: high
+  reason: Beaconing malware builds this history; the block and browser checks carry the close.
+source:
+- external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

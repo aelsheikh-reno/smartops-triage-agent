@@ -8,18 +8,6 @@ parameters:
   org_prevalence_of_weeks:
     default: 4
     description: Weeks examined before the alert window
-  blocked_action_values:
-    default:
-    - blocked
-    - quarantined
-    - cleaned
-    - deleted
-    - dropped
-    - denied
-    - rejected
-    - prevented
-    - reset
-    description: Normalized action values meaning the control stopped the item
   av_low_risk_categories:
     default:
     - pua
@@ -43,13 +31,169 @@ parameters:
   web_low_risk_categories:
     default:
     - advertising
+    - web ads
     - streaming media
     - social networking
     - games
     - shopping
-    - personal storage
     - entertainment
-    description: Web categories treated as low risk once blocked
+    - sports
+    - travel
+    - news and media
+    description: Normalized web categories treated as low risk once blocked
   vuln_data_max_age:
     default: 30d
     description: Oldest vulnerability data vuln.not_applicable may rely on
+  blocked_action_values:
+    default:
+    - blocked
+    - dropped
+    - denied
+    - rejected
+    - prevented
+    - reset
+    description: Normalized action values meaning the control stopped the item before it took effect
+  av_pre_execution_block_values:
+    default:
+    - blocked
+    - prevented
+    - blocked_pre_execution
+    - deleted_pre_execution
+    description: Normalized antivirus action values meaning the file was stopped before it ran
+  av_post_execution_values:
+    default:
+    - quarantined_post_execution
+    - cleaned_post_execution
+    - pending_reboot
+    - partially_remediated
+    - remediation_failed
+    - quarantined
+    - cleaned
+    description: 'Antivirus states the bank refuses to judge: the file may have run, or remediation is not final. These answer unknown and flag.'
+  av_high_risk_pattern:
+    default: hacktool|hack tool|password ?dump|credential|mimikatz|ransom|web ?shell|exploit|remote ?access|\brat\b|backdoor|remoteadmin|remote ?admin|miner|coin ?min|proxy|crack|keygen
+    description: Detection class or name fragments that always escalate, blocked or not
+  av_low_risk_pattern:
+    default: \b(pua|potentially unwanted|adware|grayware|greyware)\b
+    description: Detection classes treated as low risk once blocked before execution
+  av_test_file_pattern:
+    default: eicar|test[ _-]?file|testfile
+    description: 'Test files never close: attackers drop them to provoke antivirus actions'
+  alert_history_min_count:
+    default: 3
+    description: Earlier alerts with the same key in the triage window that turn a close into a flag
+  ids_history_min_count:
+    default: 5
+    description: Earlier IDS alerts from the same source in the triage window that flag
+  waf_distinct_signatures_min:
+    default: 5
+    description: Distinct WAF rules hit by one client in the triage window that flag
+  internal_networks:
+    default:
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10
+    - fc00::/7
+    description: Customer internal address ranges; internal sources never close on denied, blocked or patched
+  ids_exploit_class_values:
+    default:
+    - attempted-admin
+    - attempted-user
+    - successful-admin
+    - successful-user
+    - web-application-attack
+    - shellcode-detect
+    - trojan-activity
+    - exploit-kit
+    - command-and-control
+    - malware-cnc
+    - exploit
+    description: IDS signature classes for which a block flags instead of closing (only recon and policy classes close on block)
+  web_success_status_pattern:
+    default: ^2\d\d$
+    description: HTTP status meaning the request succeeded
+  web_high_risk_categories:
+    default:
+    - malware
+    - malicious
+    - phishing
+    - command and control
+    - botnet
+    - spyware
+    - cryptomining
+    - newly registered
+    - dynamic dns
+    - parked
+    description: Web categories that escalate even when blocked
+  web_uncategorized_values:
+    default:
+    - uncategorized
+    - unknown
+    - unrated
+    - not rated
+    description: Values meaning the filtering service has not categorised the site
+  browser_user_agent_pattern:
+    default: ^Mozilla/5\.0 \(.+\) .*(Chrome|Firefox|Safari|Edg)/\d+
+    description: Mainstream browser user agents; anything else (scripts, tools, empty) flags
+  dlp_final_block_values:
+    default:
+    - blocked
+    - denied
+    - deleted
+    - prevented
+    description: DLP actions that are final
+  dlp_pending_values:
+    default:
+    - quarantined
+    - held
+    - pending
+    - pending release
+    - encrypted pending
+    - justification pending
+    description: 'DLP states that are not final: unknown unless a later status confirms them'
+  dlp_high_severity_values:
+    default:
+    - critical
+    - high
+    description: DLP severities that flag even to approved destinations
+  dlp_record_count_flag:
+    default: 1000
+    description: Records or matches in one DLP event that flag even to approved destinations
+  usb_connect_event_values:
+    default:
+    - connect
+    - connected
+    - insert
+    - inserted
+    - mount
+    - mounted
+    - plugged
+    description: Device-control event types meaning a device was connected
+  usb_write_event_values:
+    default:
+    - write
+    - file write
+    - copy
+    - file copied
+    description: Device-control event types meaning data was written to the device
+  usb_non_storage_classes:
+    default:
+    - hid
+    - keyboard
+    - mouse
+    - composite
+    - human interface device
+    - network adapter
+    description: Device classes that are not storage; a non-storage device in a storage alert flags (possible keystroke injector)
+  usb_files_written_flag:
+    default: 50
+    description: Files written in one event that flag even with an approved exception
+  email_blocked_action_values:
+    default:
+    - blocked
+    - rejected
+    - quarantined
+    - deleted
+    - dropped
+    description: Email gateway actions meaning the message was stopped before delivery (quarantine at the gateway counts; every-mailbox status is checked separately)

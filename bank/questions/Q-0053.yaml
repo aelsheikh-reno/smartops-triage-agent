@@ -1,0 +1,23 @@
+id: Q-0053
+text: Is the signature in an exploit, intrusion or malware class?
+tests: BE-0019
+capability:
+  name: alert.field
+  inputs:
+    field: value:category
+    op: in
+    values:
+      param: ids_exploit_class_values
+attacker_influence:
+  rating: low
+  reason: Class assigned by the signature vendor.
+  by_source:
+    forwarded: medium
+notes: 'Guard on the block close: for these classes a block flags; only reconnaissance and policy classes close on block.'
+source:
+- external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

@@ -32,13 +32,32 @@ fingerprint:
 - dest
 - parent_process_name
 - process
+fingerprint_influence:
+  dest:
+    rating: low
+    reason: Host that reported the event.
+  parent_process_name:
+    rating: high
+    reason: File name the attacker can choose.
+  process:
+    rating: high
+    reason: Command line the attacker writes.
+precedent_entity: dest
 precedent_validity: 7d
 flow:
 - step: 1
   question: Q-0000
+  bind:
+    entity: value:dest
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce dest in the fingerprint.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
 - step: 2
   question: Q-0001
   on_yes: close:benign_true_positive:sanctioned_deployment_tool
@@ -67,4 +86,4 @@ source:
   title: Windows Schtasks Create Run As System
 license: Apache-2.0
 status: draft
-version: 6
+version: 7

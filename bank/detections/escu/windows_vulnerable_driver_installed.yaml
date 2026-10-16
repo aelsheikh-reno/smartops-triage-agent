@@ -28,13 +28,32 @@ fingerprint:
 - dest
 - ImagePath
 - driver_hash
+fingerprint_influence:
+  dest:
+    rating: low
+    reason: Host that reported the event.
+  ImagePath:
+    rating: high
+    reason: Path the attacker can choose.
+  driver_hash:
+    rating: low
+    reason: Computed by the sensor.
+precedent_entity: dest
 precedent_validity: 7d
 flow:
 - step: 1
   question: Q-0000
+  bind:
+    entity: value:dest
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce dest, driver_hash in the fingerprint.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
 - step: 2
   question: Q-0025
   on_yes: close:benign_true_positive:approved_driver_exception
@@ -58,6 +77,6 @@ source:
   title: Windows Vulnerable Driver Installed
 license: Apache-2.0
 status: draft
-version: 5
+version: 6
 notes: The source rule matches the driver catalogue on file name only. A hash miss in the driver catalogue plus a trusted signer is not enough to call it a name collision (vulnerable drivers are trusted-signed
   and the catalogue is incomplete), so that case flags.

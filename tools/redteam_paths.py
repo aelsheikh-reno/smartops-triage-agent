@@ -2,10 +2,15 @@
 """Attacker-influence gate: every path to a close must rest on at least one yes the attacker
 cannot easily produce.
 
-Enumerates every answer sequence (yes / no / unknown at each step) that reaches a close. A path
-passes if at least one question answered yes on it has attacker_influence none or low. A path whose
-only yes answers are rated high (or that closes with no yes at all) fails: an attacker who controls
-those values could steer the alert to a close.
+Enumerates every answer sequence (yes / no / unknown at each step) that reaches a close. A close
+rests on the yes answers along its path, plus every guard on the closing step that needs a yes
+(a guard that fires on no). Q-0000 uses its step-level rating, which follows the detection's
+fingerprint fields. A path passes if at least one of those yes answers is rated none or low.
+
+Each path is checked under the direct source profile (alert read from the product's API), where a
+failure fails the gate. It is checked again under the forwarded profile (alert relayed over syslog),
+where questions with by_source ratings may drop to medium: closes that fail there are reported as
+closes that become flags for customers whose alerts arrive forwarded.
 
 Usage: tools/redteam_paths.py [--quiet] [ids...]   exit 1 on any failing path
 """
@@ -15,32 +20,16 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bank as B  # noqa: E402
 
-ANSWERS = (("yes", "on_yes"), ("no", "on_no"), ("unknown", "on_unknown"))
+OK = ("none", "low")
 
 
-def close_paths(flow):
-    """Yield (path, outcome); path is a list of (step, question, answer)."""
-    def walk(i, path):
-        if i >= len(flow):
-            return
-        st = flow[i]
-        for ans, edge in ANSWERS:
-            out = st[edge]
-            here = path + [(st["step"], st["question"], ans)]
-            if out == "next":
-                yield from walk(i + 1, here)
-            elif out.startswith("close"):
-                yield here, out
-    yield from walk(0, [])
-
-
-def check(b, d):
-    q = b["questions"]
+def check(b, d, profile="direct"):
     results = []
-    for path, outcome in close_paths(d["flow"]):
-        yes = [(s, qid, q[qid]["attacker_influence"]["rating"]) for s, qid, a in path if a == "yes"]
-        ok = any(r in ("none", "low") for _, _, r in yes)
-        results.append((ok, path, outcome, yes))
+    for path, outcome, guards in B.enumerate_paths(d["flow"]):
+        if not outcome.startswith("close"):
+            continue
+        yes = B.yes_ratings(b, path, outcome, guards, profile)
+        results.append((any(r in OK for _, r in yes), path, outcome, yes))
     return results
 
 
@@ -49,7 +38,7 @@ def main():
     only = [a for a in sys.argv[1:] if not a.startswith("--")]
     b = B.load()
     n_paths = n_fail = 0
-    failing = {}
+    failing, forwarded = {}, {}
     for level, d in B.flows(b):
         if only and not any(d["id"].startswith(o) for o in only):
             continue
@@ -58,14 +47,22 @@ def main():
             if not ok:
                 n_fail += 1
                 failing.setdefault(d["id"], []).append((path, outcome, yes))
+        n_fwd = sum(1 for ok, *_ in check(b, d, "forwarded") if not ok)
+        if n_fwd:
+            forwarded[d["id"]] = n_fwd
     for did, items in failing.items():
         print(f"FAIL {did}")
         for path, outcome, yes in items:
-            trail = " > ".join(f"{s}:{qid}={a}" for s, qid, a in path)
-            rated = ", ".join(f"{qid}={r}" for _, qid, r in yes) or "no yes answers"
+            trail = " > ".join(f"{st['step']}:{st['question']}={a}" for st, a in path)
+            rated = ", ".join(f"{qid}={r}" for qid, r in yes) or "no yes answers"
             print(f"  {trail} -> {outcome}   [yes: {rated}]")
+    if forwarded and not quiet:
+        print("Closes that become flags when the family's alerts arrive forwarded (no none/low yes left):")
+        for did, n in sorted(forwarded.items()):
+            print(f"  {did}: {n}")
     if not quiet or failing:
-        print(f"\n{n_paths} close paths checked, {n_fail} failing, in {len(failing)} flows")
+        print(f"\n{n_paths} close paths checked, {n_fail} failing, in {len(failing)} flows; "
+              f"{sum(forwarded.values())} closes flag under the forwarded profile")
     return 1 if n_fail else 0
 
 

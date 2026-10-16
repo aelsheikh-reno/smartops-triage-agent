@@ -9,12 +9,16 @@ Telemetry in the dataset itself (alert fields, connection outcomes) is used as-i
 
 A close with disposition false_positive, benign_true_positive or inherit on a true-positive event
 FAILS. A close as mitigated_true_positive (the control stopped it) is reported separately; with
---strict it fails too.
+--strict it fails too. Guards run as the bank defines them; alert.history counts the earlier
+true-positive events of the same detection in the replay (the alerts that would already have fired).
+Vulnerability lookups report why they answered unknown: no_cve_mapping when the signature names no
+CVE, otherwise no_data (the clean room holds no vulnerability data).
 
 This is a test harness, not bank content: it names source formats and products.
 Usage: tools/replay.py [--strict] [ids...]
 """
 import csv
+import ipaddress
 import glob
 import json
 import os
@@ -118,11 +122,23 @@ def norm_windows(e):
     elif eid == "7045":
         n.update(ImagePath=e.get("ImagePath"), ServiceName=e.get("ServiceName"), ServiceType=e.get("ServiceType"), _kind="service")
     elif eid in ("1116", "1117"):
+        act = (e.get("Action Name") or "").lower()
         n.update(signature=e.get("Threat Name"), category=(e.get("Category Name") or "").lower(), file_path=e.get("Path"),
                  file_name=base((e.get("Path") or "").split("->")[-1]), file_hash=None, user=e.get("Detection User"),
-                 action="blocked" if eid == "1117" and (e.get("Action Name") or "").lower() in ("quarantine", "remove", "clean", "block") else (e.get("Action Name") or "").lower(),
-                 _kind="av")
+                 action=DEFENDER_ACTION.get(act, act) if eid == "1117" else "detected", _kind="av")
     return n
+
+
+# Vendor value mapping (docs/normalization.md). The Defender event does not say whether the file ran
+# before it was quarantined, removed or cleaned, so those map to post-execution states (unknown).
+DEFENDER_ACTION = {"block": "blocked", "quarantine": "quarantined", "remove": "removed", "clean": "cleaned", "allow": "allowed", "no action": "detected"}
+# Snort classification descriptions to class types (the bank's ids_exploit_class_values use class types).
+SNORT_CLASS = {"attempted administrator privilege gain": "attempted-admin", "attempted user privilege gain": "attempted-user",
+               "successful administrator privilege gain": "successful-admin", "successful user privilege gain": "successful-user",
+               "web application attack": "web-application-attack", "a network trojan was detected": "trojan-activity",
+               "executable code was detected": "shellcode-detect", "potential corporate policy violation": "policy-violation",
+               "potential corporate privacy violation": "policy-violation", "misc activity": "misc-activity",
+               "attempted information leak": "attempted-recon", "detection of a network scan": "network-scan"}
 
 
 def norm_crowdstrike(e):
@@ -140,6 +156,7 @@ def norm_estreamer(e):
         blocked = (e.get("InlineResult") or "").lower() in ("blocked", "dropped")
         return {"src": e.get("InitiatorIP"), "dest": e.get("ResponderIP"), "dest_port": e.get("ResponderPort"), "signature": e.get("IntrusionRuleMessage"),
                 "signature_id": e.get("SignatureID"), "severity": e.get("PriorityID"), "action": "blocked" if blocked else "allowed", "_kind": "ids",
+                "category": SNORT_CLASS.get((e.get("Classification") or "").lower(), (e.get("Classification") or "").lower()),
                 "_time": e.get("EventSecond")}
     if e.get("EventType") == "ConnectionEvent":
         return {"src": e.get("InitiatorIP"), "dest": e.get("ResponderIP"), "dest_port": e.get("ResponderPort"), "transport": e.get("Protocol"),
@@ -214,26 +231,72 @@ NOT_REPLAYABLE = {
  "vendor:dlp_match": "no DLP event dataset ships with any ESCU test",
  "vendor:proxy_block": "ESCU proxy datasets hold allowed requests only, no URL-filter blocks",
  "vendor:removable_media": "no device-control event dataset ships with any ESCU test",
+ "vendor:removable_media_write": "no device-control event dataset ships with any ESCU test",
 }
 
 
+# ---------- derived fields ----------
+def derive(d, n):
+    for name, spec in (d.get("derived_fields") or {}).items():
+        src = spec["from"] if isinstance(spec["from"], list) else [spec["from"]]
+        vals = [str(n.get(f)) for f in src if n.get(f) not in (None, "")]
+        if "pattern" in spec:
+            hits = re.findall(spec["pattern"], vals[0], re.I) if vals else []
+            n[name] = (",".join(hits) if spec.get("all") else hits[0]) if hits else None
+        elif spec.get("first"):
+            n[name] = vals[0] if vals else None
+        else:
+            n[name] = spec.get("join", " ").join(vals) if vals else None
+    n["fingerprint"] = "|".join(str(n.get(f)) for f in d["fingerprint"])
+    return n
+
+
 # ---------- clean-room customer ----------
+def param(v, ctx):
+    return ctx["params"][v["param"]]["default"] if isinstance(v, dict) and "param" in v else v
+
+
+def op_test(op, val, vals):
+    if op == "in":
+        return str(val).lower() in {str(v).lower() for v in vals}
+    if op == "not_in":
+        return str(val).lower() not in {str(v).lower() for v in vals}
+    if op == "gte":
+        return float(val) >= float(vals)
+    if op == "matches":
+        return re.search(vals, str(val), re.I) is not None
+    if op == "cidr":
+        try:
+            ip = ipaddress.ip_address(str(val))
+        except ValueError:
+            return False
+        return any(ip in ipaddress.ip_network(c) for c in vals)
+    raise ValueError(op)
+
+
 def answer(cap, inputs, n, ctx):
     fields = [f for _, f in B.walk_refs(inputs)]
-    if any(f not in ("fingerprint",) and n.get(f) in (None, "") for f in fields):
+    if any(n.get(f) in (None, "") for f in fields):
         return "unknown"
     if cap == "alert.field":
-        field = inputs["field"].split(":", 1)[1]
-        allowed = inputs["in"]
-        if isinstance(allowed, dict):
-            allowed = ctx["params"][allowed["param"]]["default"]
-        return "yes" if str(n.get(field)).lower() in {str(v).lower() for v in allowed} else "no"
+        val = n.get(inputs["field"].split(":", 1)[1])
+        if "unknown_op" in inputs and op_test(inputs["unknown_op"], val, param(inputs["unknown_values"], ctx)):
+            return "unknown"
+        return "yes" if op_test(inputs["op"], val, param(inputs["values"], ctx)) else "no"
     if cap == "traffic.denied_only":
         conns = [x for x in ctx["conns"] if x.get("src") == n.get("src")]
         return "unknown" if not conns else "yes" if all(x.get("action") == "blocked" for x in conns) else "no"
-    if cap in ("entity.baseline", "org.prevalence", "vuln.not_applicable", "email.message_status", "email.no_interaction", "file.signer"):
+    if cap == "alert.history":
+        key = inputs["key"].split(":", 1)[1]
+        earlier = [x for x in ctx["alerts"][:n["_idx"]] if x.get(key) == n.get(key)]
+        count = len({x.get(inputs["distinct"]) for x in earlier}) if inputs.get("distinct") else len(earlier)
+        return "yes" if count >= int(param(inputs["min_count"], ctx)) else "no"
+    if cap == "vuln.not_applicable":
+        ctx["vuln_unknown"][("no_cve_mapping" if not re.search(r"CVE-\d{4}-\d+", str(n.get("signature")), re.I) else "no_data")] += 1
         return "unknown"
-    return "no"   # case.precedent, list.lookup, identity.groups, change.window, *.reputation: empty in a clean room
+    if cap in ("entity.baseline", "org.prevalence", "email.message_status", "email.no_interaction", "email.auth", "file.signer"):
+        return "unknown"
+    return "no"   # case.precedent, list.lookup, identity.groups, change.window, scan.job_active, *.reputation: empty in a clean room
 
 
 def run_flow(b, d, n, ctx):
@@ -243,6 +306,14 @@ def run_flow(b, d, n, ctx):
         a = answer(q["capability"]["name"], B.step_inputs(q, st), n, ctx)
         out = st["on_" + a]
         trail.append(f"{st['question']}={a}")
+        if out.startswith("close"):
+            for gd in st.get("guards") or []:
+                gq = b["questions"][gd["question"]]
+                ga = answer(gq["capability"]["name"], B.step_inputs(gq, gd), n, ctx)
+                if ga == "unknown" or ga in gd.get("when", ["yes"]):
+                    trail.append(f"guard {gd['question']}={ga}")
+                    out = "flag" if ga == "unknown" else gd["then"]
+                    break
         if out != "next":
             return out, trail
     return "flag", trail
@@ -252,7 +323,7 @@ def main():
     strict = "--strict" in sys.argv
     only = [a for a in sys.argv[1:] if not a.startswith("--")]
     b = B.load()
-    ctx = {"params": b["parameters"]}
+    ctx = {"params": b["parameters"], "vuln_unknown": Counter()}
     rows, cannot, fails, mitigated = [], [], [], []
     for did, d in sorted(b["detections"].items()):
         if only and not any(did.startswith(o) for o in only):
@@ -281,7 +352,10 @@ def main():
                 notes.append(f"{t.get('sourcetype')} not used by this flow's fields")
             evs += [x for x in norm if x]
         ctx["conns"] = [x for x in evs if x.get("_kind") == "conn"]
-        tp = [x for x in evs if P[did](x)]
+        tp = [derive(d, x) for x in evs if P[did](x)]
+        for i, x in enumerate(tp):
+            x["_idx"] = i
+        ctx["alerts"] = tp
         if not tp:
             cannot.append((did, "no event in the datasets matches the source rule" + (f" ({'; '.join(sorted(set(notes)))})" if notes else "")))
             continue
@@ -309,6 +383,8 @@ def main():
         print(f"\nFAIL: {len(fails)} true-positive events closed")
         for did, out, trail in fails[:20]:
             print(f"  {did}: {out}  [{' > '.join(trail)}]")
+    if ctx["vuln_unknown"]:
+        print("\nVulnerability step answered unknown (never closes): " + ", ".join(f"{k} {v}" for k, v in sorted(ctx["vuln_unknown"].items())))
     bad = fails or (strict and mitigated)
     print(f"\nreplay: {sum(r[2] for r in rows)} TP events in {len(rows)} detections; {len(fails)} benign/FP closes, {len(mitigated)} mitigated closes"
           f" -> {'FAIL' if bad else 'PASS'}{' (strict)' if strict else ''}")

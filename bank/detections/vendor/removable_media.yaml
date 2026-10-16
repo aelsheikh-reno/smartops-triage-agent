@@ -15,46 +15,113 @@ required_alert_fields:
 - user
 - device_id
 - device_class
+- event_type
 - action
 - files_written
 - _time
-intent: 'Generic: an endpoint device-control or DLP product reports removable storage connected or used (any product).'
+intent: 'Generic: an endpoint device-control or DLP product reports removable storage connected (any product). File writes have their own detection.'
 fp_quality: generic
-notes: Device serial numbers can be spoofed by programmable USB devices, so an approved-device list is not used to close.
+notes: Connection events only; a write event flags here and belongs to vendor:removable_media_write. A non-storage device class flags first (possible keystroke injector). Servers and crown jewels escalate.
+  A missing file count answers unknown and flags. Device serial numbers can be spoofed, so no approved-device list closes.
 explanations:
 - BE-0019
 - BE-0025
 - BE-0029
+- BE-0037
 fingerprint:
 - dest
 - user
 - device_id
+- event_type
 precedent_validity: 7d
+precedent_entity: dest
+fingerprint_influence:
+  dest:
+    rating: low
+    reason: Host that reported the event.
+  user:
+    rating: low
+    reason: Account recorded by the OS.
+  device_id:
+    rating: high
+    reason: Reported by the device; programmable devices can spoof it.
+  event_type:
+    rating: low
+    reason: Recorded by the endpoint control.
 flow:
 - step: 1
   question: Q-0000
+  bind:
+    entity: value:dest
+    current_action: value:action
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce dest, user, event_type in the fingerprint.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+  - question: Q-0065
+    when:
+    - 'no'
+    then: flag
+  - question: Q-0066
+    then: flag
+  - question: Q-0067
+    then: escalate
 - step: 2
+  question: Q-0066
+  on_yes: flag
+  on_no: next
+  on_unknown: flag
+- step: 3
   question: Q-0027
   on_yes: close:mitigated_true_positive:blocked_by_control
   on_no: next
   on_unknown: next
-- step: 3
+  guards:
+  - question: Q-0065
+    when:
+    - 'no'
+    then: flag
+  - question: Q-0067
+    then: escalate
+  - question: Q-0046
+    then: flag
+    bind:
+      key: value:user
+- step: 4
   question: Q-0043
   on_yes: close:benign_true_positive:approved_business_exception
   on_no: next
   on_unknown: next
-- step: 4
+  guards:
+  - question: Q-0065
+    when:
+    - 'no'
+    then: flag
+  - question: Q-0067
+    then: escalate
+  - question: Q-0068
+    then: flag
+- step: 5
   question: Q-0044
   on_yes: close:benign_true_positive:no_data_transferred
   on_no: escalate
   on_unknown: flag
+  guards:
+  - question: Q-0065
+    when:
+    - 'no'
+    then: flag
+  - question: Q-0067
+    then: escalate
 source:
   repo: internal
   path: bank/use_cases.yaml#UC-016
   title: Removable media (device control) alert
 license: internal
 status: draft
-version: 1
+version: 2

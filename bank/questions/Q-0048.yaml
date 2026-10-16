@@ -1,0 +1,24 @@
+id: Q-0048
+text: Is the detected file approved security tooling on this host (by hash, or signer plus path), or is the host an approved sandbox or analysis host?
+tests: BE-0031
+capability:
+  name: list.lookup
+  inputs:
+    list: CF-0023
+    entity:
+    - value:file_hash
+    - value:file_path
+    host: value:dest
+attacker_influence:
+  rating: low
+  reason: Matched on hash or signer plus path and host-scoped; analysis hosts are a deliberate, listed exception.
+needs:
+  context:
+  - CF-0023
+source:
+- external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

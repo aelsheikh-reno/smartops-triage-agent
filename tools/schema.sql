@@ -37,7 +37,9 @@ CREATE TABLE questions (
     source_json  TEXT NOT NULL,
     license_json TEXT NOT NULL,
     status       TEXT NOT NULL,
-    version      INTEGER NOT NULL
+    version      INTEGER NOT NULL,
+    influence    TEXT NOT NULL,       -- none | low | medium | high
+    influence_by_source_json TEXT NOT NULL
 );
 CREATE TABLE question_needs (
     question_id TEXT NOT NULL REFERENCES questions(id),
@@ -57,6 +59,8 @@ CREATE TABLE detections (
     intent             TEXT,
     fp_quality         TEXT,
     fingerprint_json   TEXT NOT NULL,
+    fingerprint_influence_json TEXT NOT NULL,   -- per-field attacker influence; sets Q0's rating
+    precedent_entity   TEXT NOT NULL,
     precedent_validity TEXT NOT NULL,
     max_mode           TEXT,            -- recommend for technique fallbacks
     status             TEXT NOT NULL,
@@ -70,5 +74,7 @@ CREATE TABLE flow_steps (
     on_no        TEXT NOT NULL,
     on_unknown   TEXT NOT NULL,
     bind_json    TEXT NOT NULL,
+    influence_override TEXT,          -- step-level attacker influence (Q0 only)
+    guards_json  TEXT NOT NULL,       -- [{question, when, then, bind}], run only when the step would close
     PRIMARY KEY (detection_id, step)
 );

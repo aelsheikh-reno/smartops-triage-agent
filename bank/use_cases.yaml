@@ -5,7 +5,8 @@
 # SigmaHQ rules/) by name and story matching; 'shown' is capped at 8, 'total' counts all matches.
 # Matches are leads for batch selection, not curated mappings.
 # coverage: rule-level-full = every linked detection has a bank flow; rule-level-partial = some do;
-#   technique-only = none do, but a technique has a bank fallback; none = neither.
+#   technique-only = none do, but a technique has a bank fallback; none = neither;
+#   generic = a vendor-alert family covered only by the bank's generic vendor: detections (product-specific rules are leads, not gaps).
 # covered_detections = linked detections with a bank flow; linked_detections = all linked leads (all sources, not only 'shown').
 attack_version: '20.0'
 use_cases:
@@ -75,7 +76,7 @@ use_cases:
       shown:
       - id: vendor:av_detection
         name: Antivirus or EDR malware detection
-  coverage: rule-level-partial
+  coverage: generic
   covered_detections: 1
   linked_detections: 34
   covered_by:
@@ -150,7 +151,7 @@ use_cases:
       shown:
       - id: vendor:ids_alert
         name: IDS or IPS signature alert
-  coverage: rule-level-partial
+  coverage: generic
   covered_detections: 1
   linked_detections: 16
   covered_by:
@@ -223,7 +224,7 @@ use_cases:
       shown:
       - id: vendor:firewall_deny
         name: Firewall deny or port-scan alert
-  coverage: rule-level-partial
+  coverage: generic
   covered_detections: 1
   linked_detections: 17
   covered_by:
@@ -286,7 +287,7 @@ use_cases:
       shown:
       - id: vendor:proxy_block
         name: Web proxy or URL-filter block
-  coverage: rule-level-partial
+  coverage: generic
   covered_detections: 1
   linked_detections: 12
   covered_by:
@@ -454,7 +455,7 @@ use_cases:
       shown:
       - id: vendor:waf_alert
         name: Web application firewall alert
-  coverage: rule-level-partial
+  coverage: generic
   covered_detections: 1
   linked_detections: 15
   covered_by:
@@ -630,7 +631,7 @@ use_cases:
         name: Web application firewall alert
       - id: vendor:firewall_deny
         name: Firewall deny or port-scan alert
-  coverage: rule-level-partial
+  coverage: generic
   covered_detections: 3
   linked_detections: 27
   covered_by:
@@ -693,7 +694,7 @@ use_cases:
       shown:
       - id: vendor:dlp_match
         name: DLP policy match
-  coverage: rule-level-partial
+  coverage: generic
   covered_detections: 1
   linked_detections: 10
   covered_by:
@@ -930,7 +931,7 @@ use_cases:
       shown:
       - id: vendor:user_reported_phishing
         name: User-reported phishing email
-  coverage: rule-level-partial
+  coverage: generic
   covered_detections: 1
   linked_detections: 2
   covered_by:
@@ -1062,15 +1063,18 @@ use_cases:
       - id: sigma:1a4bd6e3-4c6e-405d-a9a3-53a116e341d4
         name: USB Device Plugged
     vendor:
-      total: 1
+      total: 2
       shown:
       - id: vendor:removable_media
         name: Removable media (device control) alert
-  coverage: rule-level-partial
-  covered_detections: 1
-  linked_detections: 10
+      - id: vendor:removable_media_write
+        name: Removable media file write (device control) alert
+  coverage: generic
+  covered_detections: 2
+  linked_detections: 11
   covered_by:
   - vendor:removable_media
+  - vendor:removable_media_write
 - id: UC-017
   name: Living-off-the-land binaries
   domain: endpoint_windows

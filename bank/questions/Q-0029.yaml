@@ -1,16 +1,19 @@
 id: Q-0029
-text: Is the detection in a high-risk class (hacktool, credential theft, ransomware, web shell, exploit, remote access trojan, backdoor)?
+text: Is the detection in a high-risk family (hack tool, credential dumper, ransomware, web shell, exploit framework, remote access trojan or remote-admin tool, miner, proxyware, crack)?
 tests: BE-0020
 capability:
   name: alert.field
   inputs:
-    field: value:category
-    in:
-      param: av_high_risk_categories
+    field: value:av_class
+    op: matches
+    values:
+      param: av_high_risk_pattern
 attacker_influence:
   rating: low
-  reason: Class assigned by the product.
-notes: 'A yes rules out the low-risk explanation and escalates, blocked or not: these classes mean a person is likely at the keyboard.'
+  reason: Class and name assigned by the product.
+  by_source:
+    forwarded: medium
+notes: Matched on the detection class and name together, so subfamilies such as remote-admin or miner variants filed under potentially unwanted software are caught.
 source:
 - bank/use_cases.yaml triage_hints
 - 'SigmaHQ/sigma rules/category/antivirus (high-risk signature classes: hacktool, password dumper, ransomware, web shell, exploit framework, remote access tool)'
@@ -20,4 +23,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

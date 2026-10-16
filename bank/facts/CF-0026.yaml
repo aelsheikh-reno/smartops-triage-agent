@@ -1,0 +1,15 @@
+id: CF-0026
+name: approved_senders
+description: Senders whose mail users often report by mistake (payroll, HR, IT notices), matched on authenticated domain.
+fields:
+- sender_domain
+- sender_address
+- purpose
+- owner
+match_rule: From domain equals sender_domain (and address when given); only counts with an aligned DMARC pass
+collected_by: customer
+example:
+  sender_domain: notices.example-payroll.com
+  purpose: Monthly payslip notices
+  owner: HR
+version: 1

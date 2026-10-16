@@ -1,0 +1,17 @@
+id: Q-0070
+text: Did the message pass DMARC with an aligned SPF or DKIM pass for its From domain?
+tests: BE-0035
+capability:
+  name: email.auth
+  inputs:
+    message_id: value:message_id
+attacker_influence:
+  rating: low
+  reason: Authentication is checked by the receiving mail system; a compromised legitimate sender still passes.
+source:
+- external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

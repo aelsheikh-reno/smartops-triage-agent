@@ -1,0 +1,14 @@
+id: CF-0027
+name: dlp_test_data
+description: Known DLP test files and document templates, by content hash.
+fields:
+- sha256
+- description
+- owner
+match_rule: content sha256 equal
+collected_by: customer
+example:
+  sha256: <hash>
+  description: DLP policy test file with synthetic card numbers
+  owner: Data protection
+version: 1

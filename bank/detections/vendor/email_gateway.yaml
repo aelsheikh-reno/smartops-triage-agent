@@ -30,31 +30,63 @@ fingerprint:
 - subject
 - file_hash
 precedent_validity: 24h
+notes: Every fingerprint field is sender-chosen, so a precedent only flags. A block closes only when the message is out of every mailbox and no reputation source marks its URL or attachment. Delivered-then-removed
+  closes only with no recorded click or open.
+precedent_entity: recipient
+fingerprint_influence:
+  src_user:
+    rating: high
+    reason: Sender address set by the sender.
+  subject:
+    rating: high
+    reason: Written by the sender.
+  file_hash:
+    rating: high
+    reason: Attachment chosen by the sender.
 flow:
 - step: 1
   question: Q-0000
-  on_yes: close:inherit:precedent_match
+  bind:
+    entity: value:recipient
+    current_action: value:action
+  attacker_influence:
+    rating: high
+    reason: Every fingerprint field is attacker-chosen, so a precedent only flags.
+  on_yes: flag
   on_no: next
   on_unknown: next
 - step: 2
+  question: Q-0037
+  on_yes: close:benign_true_positive:authorized_phishing_simulation
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0070
+    when:
+    - 'no'
+    then: flag
+- step: 3
+  question: Q-0035
+  on_yes: next
+  on_no: flag
+  on_unknown: flag
+- step: 4
   question: Q-0027
+  bind:
+    values:
+      param: email_blocked_action_values
   on_yes: close:mitigated_true_positive:blocked_by_control
   on_no: next
   on_unknown: next
-- step: 3
-  question: Q-0034
-  on_yes: escalate
-  on_no: next
-  on_unknown: next
-- step: 4
-  question: Q-0030
-  on_yes: escalate
-  on_no: next
-  on_unknown: next
+  guards:
+  - question: Q-0034
+    then: flag
+  - question: Q-0030
+    then: flag
 - step: 5
-  question: Q-0035
-  on_yes: close:mitigated_true_positive:removed_after_delivery
-  on_no: flag
+  question: Q-0036
+  on_yes: close:mitigated_true_positive:contained_without_interaction
+  on_no: escalate
   on_unknown: flag
 source:
   repo: internal
@@ -62,4 +94,4 @@ source:
   title: Email gateway threat alert
 license: internal
 status: draft
-version: 1
+version: 2

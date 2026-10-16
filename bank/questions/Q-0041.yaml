@@ -1,19 +1,22 @@
 id: Q-0041
-text: Is the blocked site in a low-risk web category (advertising, streaming, social and similar)?
+text: Is the blocked site in a low-risk web category (advertising, streaming media, social networking, games, shopping, entertainment, sports, travel, news and media)?
 tests: BE-0027
 capability:
   name: alert.field
   inputs:
     field: value:category
-    in:
+    op: in
+    values:
       param: web_low_risk_categories
 attacker_influence:
   rating: low
-  reason: Category assigned by the filtering service; an attacker can host on a low-risk-categorised site, which is why a block is required first.
+  reason: Category assigned by the filtering service; the block is checked first.
+  by_source:
+    forwarded: medium
 source:
 - bank/use_cases.yaml triage_hints
 license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

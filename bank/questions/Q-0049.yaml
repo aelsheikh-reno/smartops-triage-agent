@@ -1,0 +1,26 @@
+id: Q-0049
+text: Was the file blocked before it executed?
+tests: BE-0019
+capability:
+  name: alert.field
+  inputs:
+    field: value:action
+    op: in
+    values:
+      param: av_pre_execution_block_values
+    unknown_op: in
+    unknown_values:
+      param: av_post_execution_values
+attacker_influence:
+  rating: low
+  reason: Recorded by the endpoint product.
+  by_source:
+    forwarded: medium
+notes: Post-execution quarantine or cleaning, pending reboot and partial remediation answer unknown and flag. The normalised values come from the per-vendor mapping in docs/normalization.md.
+source:
+- external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

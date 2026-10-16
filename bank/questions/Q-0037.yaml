@@ -1,5 +1,5 @@
 id: Q-0037
-text: Is the message part of an approved phishing-simulation campaign, matched on sending address and campaign marker?
+text: Is the message part of an approved phishing-simulation campaign, matched on sending address and campaign marker inside the campaign window?
 tests: BE-0023
 capability:
   name: list.lookup
@@ -19,4 +19,4 @@ license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

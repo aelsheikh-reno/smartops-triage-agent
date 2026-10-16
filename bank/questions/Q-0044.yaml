@@ -5,7 +5,8 @@ capability:
   name: alert.field
   inputs:
     field: value:files_written
-    in:
+    op: in
+    values:
     - 0
     - '0'
 attacker_influence:
@@ -17,4 +18,4 @@ license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

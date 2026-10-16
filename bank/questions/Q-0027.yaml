@@ -1,19 +1,23 @@
 id: Q-0027
-text: Did the control that raised the alert block, quarantine, clean or drop the item?
+text: Did the control that raised the alert stop the item (the file, connection, request or message) before it took effect?
 tests: BE-0019
 capability:
   name: alert.field
   inputs:
     field: value:action
-    in:
+    op: in
+    values:
       param: blocked_action_values
 attacker_influence:
   rating: low
-  reason: Set by the security control, not by the activity; a product that misreports its action would mislead it.
+  reason: Set by the security control, not by the activity.
+  by_source:
+    forwarded: medium
 source:
 - bank/use_cases.yaml triage_hints
 license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 3
+notes: For email the item is the message, stopped before delivery; whether it is out of every mailbox is checked separately. Post-execution antivirus states use Q-0049 instead.

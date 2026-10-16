@@ -7,7 +7,7 @@ fields:
 - marker_header
 - start
 - end
-match_rule: message sent from a listed address AND carrying the campaign marker, inside start..end; sender domain alone never matches
+match_rule: message sent from a listed address AND carrying the campaign marker, inside start..end; sender domain alone never matches; the close also needs an aligned DMARC pass (email.auth)
 collected_by: customer
 example:
   campaign_id: SIM-2026-10
@@ -16,4 +16,4 @@ example:
   marker_header: 'X-Campaign-Token: <secret>'
   start: '2026-10-01'
   end: '2026-10-31'
-version: 1
+version: 2

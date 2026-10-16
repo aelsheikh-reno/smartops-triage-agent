@@ -21,39 +21,89 @@ required_alert_fields:
 intent: 'Generic: a firewall reports denied connections or a scan pattern from a source (normalized network-traffic alert, any product).'
 fp_quality: generic
 explanations:
+- BE-0003
 - BE-0021
 - BE-0028
 - BE-0030
+- BE-0033
+- BE-0037
 fingerprint:
 - src
+- dest
 - dest_port
 - rule
 precedent_validity: 24h
+notes: 'Internal sources never close on denied traffic; they flag. The denied check covers every connection from the source, to any destination. An approved scanner closes only while a scan job targeting
+  the destination was running. Allowed connections elsewhere from the source flag rather than escalate: they show the source is not only probing, not that the denied connection got through.'
+precedent_entity: src
+fingerprint_influence:
+  src:
+    rating: medium
+    reason: 'Spoofable in denied traffic: no handshake completes.'
+  dest:
+    rating: high
+    reason: Target chosen by the initiator.
+  dest_port:
+    rating: high
+    reason: Chosen by the initiator.
+  rule:
+    rating: high
+    reason: Selected by the firewall from the initiator's traffic.
 flow:
 - step: 1
   question: Q-0000
+  bind:
+    entity: value:src
+    current_action: value:action
+  attacker_influence:
+    rating: medium
+    reason: The least attacker-chosen fingerprint field (src) can still be forged; the close also needs a low-rated yes from a guard.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+  - question: Q-0050
+    then: flag
+  - question: Q-0042
+    when:
+    - 'no'
+    then: flag
 - step: 2
   question: Q-0031
   on_yes: close:benign_true_positive:approved_scanner_activity
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0052
+    when:
+    - 'no'
+    then: flag
 - step: 3
-  question: Q-0032
-  on_yes: escalate
+  question: Q-0056
+  on_yes: close:benign_true_positive:approved_infrastructure
   on_no: next
   on_unknown: next
 - step: 4
+  question: Q-0055
+  on_yes: close:benign_true_positive:approved_change
+  on_no: next
+  on_unknown: next
+- step: 5
   question: Q-0042
   on_yes: close:mitigated_true_positive:denied_no_successful_connection
-  on_no: escalate
+  on_no: flag
   on_unknown: flag
+  guards:
+  - question: Q-0050
+    then: flag
+  - question: Q-0032
+    then: escalate
 source:
   repo: internal
   path: bank/use_cases.yaml#UC-003
   title: Firewall deny or port-scan alert
 license: internal
 status: draft
-version: 1
+version: 2

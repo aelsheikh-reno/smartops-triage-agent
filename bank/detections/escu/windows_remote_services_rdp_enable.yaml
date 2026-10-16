@@ -27,13 +27,29 @@ explanations:
 fingerprint:
 - dest
 - writer_hash
+fingerprint_influence:
+  dest:
+    rating: low
+    reason: Host that reported the event.
+  writer_hash:
+    rating: low
+    reason: Computed by the sensor.
+precedent_entity: dest
 precedent_validity: 7d
 flow:
 - step: 1
   question: Q-0000
+  bind:
+    entity: value:dest
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce dest, writer_hash in the fingerprint.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
 - step: 2
   question: Q-0013
   on_yes: close:benign_true_positive:sanctioned_management_tool
@@ -62,4 +78,4 @@ source:
   title: Windows Remote Services Rdp Enable
 license: Apache-2.0
 status: draft
-version: 5
+version: 6

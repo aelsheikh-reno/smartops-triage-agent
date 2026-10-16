@@ -1,19 +1,25 @@
 id: Q-0028
-text: Is the detection in a low-risk class (potentially unwanted software, adware, grayware)?
+text: Is the detection in a low-risk class (potentially unwanted software, adware, grayware), and not a test file?
 tests: BE-0020
 capability:
   name: alert.field
   inputs:
-    field: value:category
-    in:
-      param: av_low_risk_categories
+    field: value:av_class
+    op: matches
+    values:
+      param: av_low_risk_pattern
+    unknown_op: matches
+    unknown_values:
+      param: av_test_file_pattern
 attacker_influence:
   rating: low
-  reason: Class assigned by the product; an attacker can pick tooling the product classes as unwanted software, which is why a block is required first.
+  reason: Class assigned by the product; high-risk families are excluded by the earlier step.
+  by_source:
+    forwarded: medium
 source:
 - bank/use_cases.yaml triage_hints
 license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

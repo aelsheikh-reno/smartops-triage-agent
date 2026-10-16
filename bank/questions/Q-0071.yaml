@@ -1,0 +1,21 @@
+id: Q-0071
+text: Is the From domain on the customer's approved-sender list?
+tests: BE-0035
+capability:
+  name: list.lookup
+  inputs:
+    list: CF-0026
+    entity: value:sender_domain
+attacker_influence:
+  rating: high
+  reason: The From domain is chosen by the sender; only the authentication guard makes it trustworthy.
+needs:
+  context:
+  - CF-0026
+source:
+- external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

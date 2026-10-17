@@ -1,0 +1,25 @@
+id: C-06
+text: Is the asset a crown jewel?
+kind: context
+inputs:
+  entity: role:host.asset_id
+feeds:
+- q0
+- priority
+- crown_jewel_guardrail
+attacker_influence:
+  rating: none
+  reason: The customer's crown-jewel list.
+when_not_answered: 'Unknown or source unavailable: every close depends on it (Q0 needs a known non-crown-jewel; no auto-close on crown jewels, §19), so every close becomes a flag with reason context_unknown
+  (C-06), and Q-0067 flags. It never escalates.'
+on_unknown: flag
+unknown_reason: context_unknown
+derived_from:
+  source:
+  - docs/intake/context-questions.md
+  - docs/design-decisions.md §5
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

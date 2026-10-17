@@ -1,0 +1,18 @@
+id: Q-0031
+text: Is the source address an approved scanner or authorised tester, inside its scheduled window?
+tests: BE-0021
+attacker_influence:
+  rating: low
+  reason: Source address of an established session is hard to spoof; single-packet (UDP or ICMP) signatures can be spoofed, and a compromised scanner would match.
+derived_from:
+  source:
+  - bank/intake/use_cases.yaml triage_hints
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 2
+kind: triage
+inputs:
+  entity: role:src.ip
+  at_time: role:event.time

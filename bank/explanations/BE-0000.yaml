@@ -1,7 +1,0 @@
-id: BE-0000
-name: Precedent
-description: 'The same fingerprint already has a qualifying close with a recorded reason, recently enough that the reason still holds: a close that passed audit, or at least two independent analyst closes.'
-source:
-- design-decisions.md §14 (Q0)
-license: internal
-version: 2

@@ -1,0 +1,79 @@
+id: D-0021
+name: Windows Remote Services Rdp Enable
+family: endpoint
+alert_type: analytic
+techniques:
+- T1021.001
+required_roles:
+- event
+- host
+- process
+- user
+intent: Detects fDenyTSConnections set to 0 (RDP enabled) on an endpoint from registry events.
+fp_quality: vague
+explanations:
+- BE-0002
+- BE-0009
+- BE-0001
+- BE-0003
+fingerprint:
+- role:host.name
+- role:process.sha256
+fingerprint_influence:
+  role:host.name:
+    rating: low
+    reason: Host that reported the event.
+  role:process.sha256:
+    rating: low
+    reason: Computed by the sensor.
+precedent_entity: role:host.name
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: role:host.name
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce the fingerprint's host, writer process hash.
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
+- step: 2
+  question: Q-0013
+  bind:
+    entity: entity:process
+  on_yes: close:benign_true_positive:sanctioned_management_tool
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0016
+  on_yes: close:benign_true_positive:rdp_expected_on_host
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0002
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 5
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+status: draft
+version: 6
+parameters:
+  precedent_validity_hours: 72
+derived_from:
+  library: escu
+  rule: escu:windows_remote_services_rdp_enable
+  title: Windows Remote Services Rdp Enable
+  path: detections/endpoint/windows_remote_services_rdp_enable.yml
+  repo: splunk/security_content
+  license: Apache-2.0

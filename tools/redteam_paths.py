@@ -20,7 +20,7 @@ It is also checked under the fingerprint_fallback profile: a detection whose fin
 fall back (for example asset ID to hostname) rates Q0 at its fallback rating; precedent closes that
 lose their none/low yes are reported as closes that flag when the fallback is used.
 
-Usage: tools/redteam_paths.py [--quiet] [batch ...]   exit 1 on any failing path, an unknown batch, or 0 flows loaded
+Usage: tools/redteam_paths.py [--quiet] [family ...]   exit 1 on any failing path, an unknown family, or 0 flows loaded
 """
 import os
 import sys
@@ -50,7 +50,7 @@ def main():
     n_flows = n_paths = n_fail = 0
     failing, forwarded, fallback = {}, {}, {}
     for level, d in B.flows(b):
-        if B.batch_of(level, d["id"]) not in batches:
+        if B.batch_of(level, d) not in batches:
             continue
         n_flows += 1
         for ok, path, outcome, yes in check(b, d):

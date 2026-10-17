@@ -61,3 +61,15 @@ def find(text):
 def where_phrase(text):
     m = SOURCE_PATTERN.search(text) or WHERE_PATTERN.search(text)
     return m.group(0) if m else None
+
+# Rule libraries a detection may be derived from. They belong to intake (the rule map) and to derived_from metadata,
+# never to the triage layer or the contract.
+LIBRARIES = ["ESCU", "Enterprise Security Content Update", "Splunk Security Content", "security_content", "SigmaHQ", "Sigma",
+             "Sentinel Analytics", "Azure-Sentinel", "Elastic detection-rules", "detection-rules", "LOLBAS", "LOLDrivers",
+             "GTFOBins", "attack_data", "Atomic Red Team", "MITRE CAR"]
+LIBRARY_PATTERN = re.compile(r"(?<![A-Za-z0-9])(" + "|".join(re.escape(n) for n in LIBRARIES) + r")(?![A-Za-z0-9])", re.I)
+
+
+def find_library(text):
+    m = LIBRARY_PATTERN.search(text)
+    return m.group(0) if m else None

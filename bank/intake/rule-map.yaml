@@ -1,0 +1,987 @@
+# Matching table: source rule IDs (rule libraries, product alerts) -> the bank's neutral detection IDs.
+# Used only by the normalizer and the Detection Engineer; never by the Triage agent. Several source IDs may map to one D-ID.
+# Offline metadata per detection (data sources, log-source taxonomy, use case, source rule) lives here too.
+rules:
+- d_id: D-0001
+  name: Add or Set Antivirus Exclusion via MpPreference
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:add_or_set_windows_defender_exclusion
+    uuid: 773b66fe-4dd9-11ec-8289-acde48001122
+    path: detections/endpoint/add_or_set_windows_defender_exclusion.yml
+  - library: sigma
+    id: sigma:17769c90-230e-488b-a463-e05c08e9d48f
+    title: Powershell Defender Exclusion
+    relation: equivalent
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: 17769c90-230e-488b-a463-e05c08e9d48f
+    title: Powershell Defender Exclusion
+    relation: equivalent
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/add_or_set_windows_defender_exclusion.yml
+    title: Add or Set Windows Defender Exclusion
+  escu_uuid: 773b66fe-4dd9-11ec-8289-acde48001122
+  legacy_id: escu:add_or_set_antivirus_exclusion
+- d_id: D-0002
+  name: BITSAdmin Download File
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:bitsadmin_download_file
+    uuid: 80630ff4-8e4c-11eb-aab5-acde48001122
+    path: detections/endpoint/bitsadmin_download_file.yml
+  - library: sigma
+    id: sigma:d059842b-6b9d-4ed1-b5c3-5b89143c6ede
+    title: File Download Via Bitsadmin
+    relation: equivalent
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: d059842b-6b9d-4ed1-b5c3-5b89143c6ede
+    title: File Download Via Bitsadmin
+    relation: equivalent
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/bitsadmin_download_file.yml
+    title: BITSAdmin Download File
+  escu_uuid: 80630ff4-8e4c-11eb-aab5-acde48001122
+  legacy_id: escu:bitsadmin_download_file
+- d_id: D-0003
+  name: Creation of Shadow Copy
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:creation_of_shadow_copy
+    uuid: eb120f5f-b879-4a63-97c1-93352b5df844
+    path: detections/endpoint/creation_of_shadow_copy.yml
+  - library: sigma
+    id: sigma:b17ea6f7-6e90-447e-a799-e6c0a493d6ce
+    title: Shadow Copies Creation Using Operating Systems Utilities
+    relation: equivalent
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: b17ea6f7-6e90-447e-a799-e6c0a493d6ce
+    title: Shadow Copies Creation Using Operating Systems Utilities
+    relation: equivalent
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/creation_of_shadow_copy.yml
+    title: Creation of Shadow Copy
+  escu_uuid: eb120f5f-b879-4a63-97c1-93352b5df844
+  legacy_id: escu:creation_of_shadow_copy
+- d_id: D-0004
+  name: Deleting Shadow Copies
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:deleting_shadow_copies
+    uuid: b89919ed-ee5f-492c-b139-95dbb162039e
+    path: detections/endpoint/deleting_shadow_copies.yml
+  - library: sigma
+    id: sigma:c947b146-0abc-4c87-9c64-b17e9d7274a2
+    title: Shadow Copies Deletion Using Operating Systems Utilities
+    relation: equivalent
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: c947b146-0abc-4c87-9c64-b17e9d7274a2
+    title: Shadow Copies Deletion Using Operating Systems Utilities
+    relation: equivalent
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/deleting_shadow_copies.yml
+    title: Deleting Shadow Copies
+  escu_uuid: b89919ed-ee5f-492c-b139-95dbb162039e
+  legacy_id: escu:deleting_shadow_copies
+- d_id: D-0005
+  name: Detect MSHTA Url in Command Line
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:detect_mshta_url_in_command_line
+    uuid: 9b3af1e6-5b68-11eb-ae93-0242ac130002
+    path: detections/endpoint/detect_mshta_url_in_command_line.yml
+  - library: sigma
+    id: sigma:b98d0db6-511d-45de-ad02-e82a98729620
+    title: Remotely Hosted HTA File Executed Via Mshta.EXE
+    relation: closest
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  - Cisco Network Visibility Module Flow Data
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  - product: windows
+    category: network_connection
+  sigma_refs:
+  - id: b98d0db6-511d-45de-ad02-e82a98729620
+    title: Remotely Hosted HTA File Executed Via Mshta.EXE
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/detect_mshta_url_in_command_line.yml
+    title: Detect MSHTA Url in Command Line
+  escu_uuid: 9b3af1e6-5b68-11eb-ae93-0242ac130002
+  legacy_id: escu:detect_mshta_url_in_command_line
+- d_id: D-0006
+  name: Detect PsExec With accepteula Flag
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:detect_psexec_with_accepteula_flag
+    uuid: 27c3a83d-cada-47c6-9042-67baf19d2574
+    path: detections/endpoint/detect_psexec_with_accepteula_flag.yml
+  - library: sigma
+    id: sigma:ea011323-7045-460b-b2d7-0f7442ea6b38
+    title: Potential PsExec Remote Execution
+    relation: closest
+  - library: sigma
+    id: sigma:7cccd811-7ae9-4ebe-9afd-cb5c406b824b
+    title: Potential Execution of Sysinternals Tools
+    relation: closest
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: ea011323-7045-460b-b2d7-0f7442ea6b38
+    title: Potential PsExec Remote Execution
+    relation: closest
+  - id: 7cccd811-7ae9-4ebe-9afd-cb5c406b824b
+    title: Potential Execution of Sysinternals Tools
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/detect_psexec_with_accepteula_flag.yml
+    title: Detect PsExec With accepteula Flag
+  escu_uuid: 27c3a83d-cada-47c6-9042-67baf19d2574
+  legacy_id: escu:detect_psexec_with_accepteula_flag
+- d_id: D-0007
+  name: Detect Remote Access Software Usage Process
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:detect_remote_access_software_usage_process
+    uuid: ffd5e001-2e34-48f4-97a2-26dc4bb08178
+    path: detections/endpoint/detect_remote_access_software_usage_process.yml
+  - library: sigma
+    id: sigma:b52e84a3-029e-4529-b09b-71d19dd27e94
+    title: Remote Access Tool - AnyDesk Execution
+    relation: closest
+  - library: sigma
+    id: sigma:57bff678-25d1-4d6c-8211-8ca106d12053
+    title: Remote Access Tool - ScreenConnect Execution
+    relation: closest
+  - library: sigma
+    id: sigma:d85873ef-a0f8-4c48-a53a-6b621f11729d
+    title: Remote Access Tool - LogMeIn Execution
+    relation: closest
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: b52e84a3-029e-4529-b09b-71d19dd27e94
+    title: Remote Access Tool - AnyDesk Execution
+    relation: closest
+  - id: 57bff678-25d1-4d6c-8211-8ca106d12053
+    title: Remote Access Tool - ScreenConnect Execution
+    relation: closest
+  - id: d85873ef-a0f8-4c48-a53a-6b621f11729d
+    title: Remote Access Tool - LogMeIn Execution
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/detect_remote_access_software_usage_process.yml
+    title: Detect Remote Access Software Usage Process
+  escu_uuid: ffd5e001-2e34-48f4-97a2-26dc4bb08178
+  legacy_id: escu:detect_remote_access_software_usage_process
+- d_id: D-0008
+  name: Detect SharpHound Usage
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:detect_sharphound_usage
+    uuid: dd04b29a-beed-11eb-87bc-acde48001122
+    path: detections/endpoint/detect_sharphound_usage.yml
+  - library: sigma
+    id: sigma:f376c8a7-a2d0-4ddc-aa0c-16c17236d962
+    title: HackTool - Bloodhound/Sharphound Execution
+    relation: closest
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: f376c8a7-a2d0-4ddc-aa0c-16c17236d962
+    title: HackTool - Bloodhound/Sharphound Execution
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/detect_sharphound_usage.yml
+    title: Detect SharpHound Usage
+  escu_uuid: dd04b29a-beed-11eb-87bc-acde48001122
+  legacy_id: escu:detect_sharphound_usage
+- d_id: D-0009
+  name: Malicious PowerShell Process - Execution Policy Bypass
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:malicious_powershell_process___execution_policy_bypass
+    uuid: 9be56c82-b1cc-4318-87eb-d138afaaca39
+    path: detections/endpoint/malicious_powershell_process___execution_policy_bypass.yml
+  - library: sigma
+    id: sigma:36210e0d-5b19-485d-a087-c096088885f0
+    title: Suspicious PowerShell Parameter Substring
+    relation: closest
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: 36210e0d-5b19-485d-a087-c096088885f0
+    title: Suspicious PowerShell Parameter Substring
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/malicious_powershell_process___execution_policy_bypass.yml
+    title: Malicious PowerShell Process - Execution Policy Bypass
+  escu_uuid: 9be56c82-b1cc-4318-87eb-d138afaaca39
+  legacy_id: escu:malicious_powershell_process___execution_policy_bypass
+- d_id: D-0010
+  name: Process Execution via WMI
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:process_execution_via_wmi
+    uuid: 24869767-8579-485d-9a4f-d9ddfd8f0cac
+    path: detections/endpoint/process_execution_via_wmi.yml
+  - library: sigma
+    id: sigma:d21374ff-f574-44a7-9998-4a8c8bf33d7d
+    title: WmiPrvSE Spawned A Process
+    relation: equivalent
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: d21374ff-f574-44a7-9998-4a8c8bf33d7d
+    title: WmiPrvSE Spawned A Process
+    relation: equivalent
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/process_execution_via_wmi.yml
+    title: Process Execution via WMI
+  escu_uuid: 24869767-8579-485d-9a4f-d9ddfd8f0cac
+  legacy_id: escu:process_execution_via_wmi
+- d_id: D-0011
+  name: Registry Keys Used For Persistence
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:registry_keys_used_for_persistence
+    uuid: f5f6af30-7aa7-4295-bfe9-07fe87c01a4b
+    path: detections/endpoint/registry_keys_used_for_persistence.yml
+  - library: sigma
+    id: sigma:20f0ee37-5942-4e45-b7d5-c5b5db9df5cd
+    title: CurrentVersion Autorun Keys Modification
+    relation: closest
+  data_source:
+  - Sysmon EventID 13
+  sigma_logsource:
+  - product: windows
+    category: registry_set
+  sigma_refs:
+  - id: 20f0ee37-5942-4e45-b7d5-c5b5db9df5cd
+    title: CurrentVersion Autorun Keys Modification
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/registry_keys_used_for_persistence.yml
+    title: Registry Keys Used For Persistence
+  escu_uuid: f5f6af30-7aa7-4295-bfe9-07fe87c01a4b
+  legacy_id: escu:registry_keys_used_for_persistence
+- d_id: D-0012
+  name: Remote Process Instantiation via WinRM and PowerShell
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:remote_process_instantiation_via_winrm_and_powershell
+    uuid: ba24cda8-4716-11ec-8009-3e22fbd008af
+    path: detections/endpoint/remote_process_instantiation_via_winrm_and_powershell.yml
+  - library: sigma
+    id: sigma:7b836d7f-179c-4ba4-90a7-a7e60afb48e6
+    title: Execute Invoke-command on Remote Host
+    relation: closest
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: 7b836d7f-179c-4ba4-90a7-a7e60afb48e6
+    title: Execute Invoke-command on Remote Host
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/remote_process_instantiation_via_winrm_and_powershell.yml
+    title: Remote Process Instantiation via WinRM and PowerShell
+  escu_uuid: ba24cda8-4716-11ec-8009-3e22fbd008af
+  legacy_id: escu:remote_process_instantiation_via_winrm_and_powershell
+- d_id: D-0013
+  name: Suspicious Regsvr32 Register Suspicious Path
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:suspicious_regsvr32_register_suspicious_path
+    uuid: 62732736-6250-11eb-ae93-0242ac130002
+    path: detections/endpoint/suspicious_regsvr32_register_suspicious_path.yml
+  - library: sigma
+    id: sigma:9525dc73-0327-438c-8c04-13c0e037e9da
+    title: Regsvr32 Execution From Potential Suspicious Location
+    relation: closest
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: 9525dc73-0327-438c-8c04-13c0e037e9da
+    title: Regsvr32 Execution From Potential Suspicious Location
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/suspicious_regsvr32_register_suspicious_path.yml
+    title: Suspicious Regsvr32 Register Suspicious Path
+  escu_uuid: 62732736-6250-11eb-ae93-0242ac130002
+  legacy_id: escu:suspicious_regsvr32_register_suspicious_path
+- d_id: D-0014
+  name: Suspicious Rundll32 no Command Line Arguments
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:suspicious_rundll32_no_command_line_arguments
+    uuid: e451bd16-e4c5-4109-8eb1-c4c6ecf048b4
+    path: detections/endpoint/suspicious_rundll32_no_command_line_arguments.yml
+  - library: sigma
+    id: sigma:1775e15e-b61b-4d14-a1a3-80981298085a
+    title: Rundll32 Execution Without CommandLine Parameters
+    relation: equivalent
+  - library: sigma
+    id: sigma:5bb68627-3198-40ca-b458-49f973db8752
+    title: Rundll32 Execution Without Parameters
+    relation: closest
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: 1775e15e-b61b-4d14-a1a3-80981298085a
+    title: Rundll32 Execution Without CommandLine Parameters
+    relation: equivalent
+  - id: 5bb68627-3198-40ca-b458-49f973db8752
+    title: Rundll32 Execution Without Parameters
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/suspicious_rundll32_no_command_line_arguments.yml
+    title: Suspicious Rundll32 no Command Line Arguments
+  escu_uuid: e451bd16-e4c5-4109-8eb1-c4c6ecf048b4
+  legacy_id: escu:suspicious_rundll32_no_command_line_arguments
+- d_id: D-0015
+  name: Suspicious Scheduled Task from Public Directory
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:suspicious_scheduled_task_from_public_directory
+    uuid: 7feb7972-7ac3-11eb-bac8-acde48001122
+    path: detections/endpoint/suspicious_scheduled_task_from_public_directory.yml
+  - library: sigma
+    id: sigma:81325ce1-be01-4250-944f-b4789644556f
+    title: Schedule Task Creation From Env Variable Or Potentially Suspicious Path Via Schtasks.EXE
+    relation: closest
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: 81325ce1-be01-4250-944f-b4789644556f
+    title: Schedule Task Creation From Env Variable Or Potentially Suspicious Path Via Schtasks.EXE
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/suspicious_scheduled_task_from_public_directory.yml
+    title: Suspicious Scheduled Task from Public Directory
+  escu_uuid: 7feb7972-7ac3-11eb-bac8-acde48001122
+  legacy_id: escu:suspicious_scheduled_task_from_public_directory
+- d_id: D-0016
+  name: Windows Event Log Cleared
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:windows_event_log_cleared
+    uuid: ad517544-aff9-4c96-bd99-d6eb43bfbb6a
+    path: detections/endpoint/windows_event_log_cleared.yml
+  - library: sigma
+    id: sigma:d99b79d2-0a6f-4f46-ad8b-260b6e17f982
+    title: Security Eventlog Cleared
+    relation: equivalent
+  - library: sigma
+    id: sigma:a62b37e0-45d3-48d9-a517-90c1a1b0186b
+    title: Eventlog Cleared
+    relation: equivalent
+  data_source:
+  - Windows Event Log Security 1102
+  - Windows Event Log System 104
+  sigma_logsource:
+  - product: windows
+    service: security
+  - product: windows
+    service: system
+  sigma_refs:
+  - id: d99b79d2-0a6f-4f46-ad8b-260b6e17f982
+    title: Security Eventlog Cleared
+    relation: equivalent
+  - id: a62b37e0-45d3-48d9-a517-90c1a1b0186b
+    title: Eventlog Cleared
+    relation: equivalent
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/windows_event_log_cleared.yml
+    title: Windows Event Log Cleared
+  escu_uuid: ad517544-aff9-4c96-bd99-d6eb43bfbb6a
+  legacy_id: escu:windows_event_log_cleared
+- d_id: D-0017
+  name: Windows File Download Via CertUtil
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:windows_file_download_via_certutil
+    uuid: 7fac8d40-e370-45ea-a4a3-031bbcc18b02
+    path: detections/endpoint/windows_file_download_via_certutil.yml
+  - library: sigma
+    id: sigma:19b08b1c-861d-4e75-a1ef-ea0c1baf202b
+    title: Suspicious Download Via Certutil.EXE
+    relation: closest
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  - Cisco Network Visibility Module Flow Data
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  - product: windows
+    category: network_connection
+  sigma_refs:
+  - id: 19b08b1c-861d-4e75-a1ef-ea0c1baf202b
+    title: Suspicious Download Via Certutil.EXE
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/windows_file_download_via_certutil.yml
+    title: Windows File Download Via CertUtil
+  escu_uuid: 7fac8d40-e370-45ea-a4a3-031bbcc18b02
+  legacy_id: escu:windows_file_download_via_certutil
+- d_id: D-0018
+  name: Windows File Download Via PowerShell
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:windows_file_download_via_powershell
+    uuid: 58c4e56c-b5b8-46a3-b5fb-6537dca3c6de
+    path: detections/endpoint/windows_file_download_via_powershell.yml
+  - library: sigma
+    id: sigma:85b0b087-eddf-4a2b-b033-d771fa2b9775
+    title: PowerShell Download and Execution Cradles
+    relation: closest
+  - library: sigma
+    id: sigma:5e3cc4d8-3e68-43db-8656-eaaeefdec9cc
+    title: Suspicious Invoke-WebRequest Execution
+    relation: closest
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  - Cisco Network Visibility Module Flow Data
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  - product: windows
+    category: network_connection
+  sigma_refs:
+  - id: 85b0b087-eddf-4a2b-b033-d771fa2b9775
+    title: PowerShell Download and Execution Cradles
+    relation: closest
+  - id: 5e3cc4d8-3e68-43db-8656-eaaeefdec9cc
+    title: Suspicious Invoke-WebRequest Execution
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/windows_file_download_via_powershell.yml
+    title: Windows File Download Via PowerShell
+  escu_uuid: 58c4e56c-b5b8-46a3-b5fb-6537dca3c6de
+  legacy_id: escu:windows_file_download_via_powershell
+- d_id: D-0019
+  name: Windows Office Product Spawned Uncommon Process
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:windows_office_product_spawned_uncommon_process
+    uuid: 55d8741c-fa32-4692-8109-410304961eb8
+    path: detections/endpoint/windows_office_product_spawned_uncommon_process.yml
+  - library: sigma
+    id: sigma:438025f9-5856-4663-83f7-52f878a70a50
+    title: Suspicious Microsoft Office Child Process
+    relation: equivalent
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: 438025f9-5856-4663-83f7-52f878a70a50
+    title: Suspicious Microsoft Office Child Process
+    relation: equivalent
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/windows_office_product_spawned_uncommon_process.yml
+    title: Windows Office Product Spawned Uncommon Process
+  escu_uuid: 55d8741c-fa32-4692-8109-410304961eb8
+  legacy_id: escu:windows_office_product_spawned_uncommon_process
+- d_id: D-0020
+  name: Windows Possible Credential Dumping
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:windows_possible_credential_dumping
+    uuid: e4723b92-7266-11ec-af45-acde48001122
+    path: detections/endpoint/windows_possible_credential_dumping.yml
+  - library: sigma
+    id: sigma:a18dd26b-6450-46de-8c91-9659150cf088
+    title: Potentially Suspicious GrantedAccess Flags On LSASS
+    relation: closest
+  data_source:
+  - Sysmon EventID 10
+  sigma_logsource:
+  - product: windows
+    category: process_access
+  sigma_refs:
+  - id: a18dd26b-6450-46de-8c91-9659150cf088
+    title: Potentially Suspicious GrantedAccess Flags On LSASS
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/windows_possible_credential_dumping.yml
+    title: Windows Possible Credential Dumping
+  escu_uuid: e4723b92-7266-11ec-af45-acde48001122
+  legacy_id: escu:windows_possible_credential_dumping
+- d_id: D-0021
+  name: Windows Remote Services Rdp Enable
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:windows_remote_services_rdp_enable
+    uuid: 8fbd2e88-4ea5-40b9-9217-fd0855e08cc0
+    path: detections/endpoint/windows_remote_services_rdp_enable.yml
+  - library: sigma
+    id: sigma:a2863fbc-d5cb-48d5-83fb-d976d4b1743b
+    title: RDP Sensitive Settings Changed to Zero
+    relation: closest
+  data_source:
+  - Sysmon EventID 13
+  sigma_logsource:
+  - product: windows
+    category: registry_set
+  sigma_refs:
+  - id: a2863fbc-d5cb-48d5-83fb-d976d4b1743b
+    title: RDP Sensitive Settings Changed to Zero
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/windows_remote_services_rdp_enable.yml
+    title: Windows Remote Services Rdp Enable
+  escu_uuid: 8fbd2e88-4ea5-40b9-9217-fd0855e08cc0
+  legacy_id: escu:windows_remote_services_rdp_enable
+- d_id: D-0022
+  name: Windows Schtasks Create Run As System
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:windows_schtasks_create_run_as_system
+    uuid: 41a0e58e-884c-11ec-9976-acde48001122
+    path: detections/endpoint/windows_schtasks_create_run_as_system.yml
+  - library: sigma
+    id: sigma:89ca78fd-b37c-4310-b3d3-81a023f83936
+    title: Schtasks Creation Or Modification With SYSTEM Privileges
+    relation: equivalent
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: 89ca78fd-b37c-4310-b3d3-81a023f83936
+    title: Schtasks Creation Or Modification With SYSTEM Privileges
+    relation: equivalent
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/windows_schtasks_create_run_as_system.yml
+    title: Windows Schtasks Create Run As System
+  escu_uuid: 41a0e58e-884c-11ec-9976-acde48001122
+  legacy_id: escu:windows_schtasks_create_run_as_system
+- d_id: D-0023
+  name: Windows Service Creation on Remote Endpoint
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:windows_service_creation_on_remote_endpoint
+    uuid: e0eea4fa-4274-11ec-882b-3e22fbd008af
+    path: detections/endpoint/windows_service_creation_on_remote_endpoint.yml
+  - library: sigma
+    id: sigma:85ff530b-261d-48c6-a441-facaa2e81e48
+    title: New Service Creation Using Sc.EXE
+    relation: closest
+  data_source:
+  - Sysmon EventID 1
+  - Windows Event Log Security 4688
+  - CrowdStrike ProcessRollup2
+  sigma_logsource:
+  - product: windows
+    category: process_creation
+  sigma_refs:
+  - id: 85ff530b-261d-48c6-a441-facaa2e81e48
+    title: New Service Creation Using Sc.EXE
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/windows_service_creation_on_remote_endpoint.yml
+    title: Windows Service Creation on Remote Endpoint
+  escu_uuid: e0eea4fa-4274-11ec-882b-3e22fbd008af
+  legacy_id: escu:windows_service_creation_on_remote_endpoint
+- d_id: D-0024
+  name: Windows Vulnerable Driver Installed
+  family: endpoint
+  sources:
+  - library: escu
+    id: escu:windows_vulnerable_driver_installed
+    uuid: 1dda7586-57be-4a1b-8de1-a9ad802b9a7f
+    path: detections/endpoint/windows_vulnerable_driver_installed.yml
+  - library: sigma
+    id: sigma:72cd00d6-490c-4650-86ff-1d11f491daa1
+    title: Vulnerable Driver Load By Name
+    relation: equivalent
+  - library: sigma
+    id: sigma:7aaaf4b8-e47c-4295-92ee-6ed40a6f60c8
+    title: Vulnerable Driver Load
+    relation: closest
+  data_source:
+  - Windows Event Log System 7045
+  sigma_logsource:
+  - product: windows
+    service: system
+  sigma_refs:
+  - id: 72cd00d6-490c-4650-86ff-1d11f491daa1
+    title: Vulnerable Driver Load By Name
+    relation: equivalent
+  - id: 7aaaf4b8-e47c-4295-92ee-6ed40a6f60c8
+    title: Vulnerable Driver Load
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/windows_vulnerable_driver_installed.yml
+    title: Windows Vulnerable Driver Installed
+  escu_uuid: 1dda7586-57be-4a1b-8de1-a9ad802b9a7f
+  legacy_id: escu:windows_vulnerable_driver_installed
+- d_id: D-0025
+  name: Detect New Local Admin account
+  family: identity
+  sources:
+  - library: escu
+    id: escu:detect_new_local_admin_account
+    uuid: b25f6f62-0712-43c1-b203-083231ffd97d
+    path: detections/endpoint/detect_new_local_admin_account.yml
+  - library: sigma
+    id: sigma:c265cf08-3f99-46c1-8d59-328247057d57
+    title: User Added to Local Administrator Group
+    relation: closest
+  data_source:
+  - Windows Event Log Security 4732
+  - Windows Event Log Security 4720
+  sigma_logsource:
+  - product: windows
+    service: security
+  sigma_refs:
+  - id: c265cf08-3f99-46c1-8d59-328247057d57
+    title: User Added to Local Administrator Group
+    relation: closest
+  source:
+    repo: splunk/security_content
+    path: detections/endpoint/detect_new_local_admin_account.yml
+    title: Detect New Local Admin account
+  escu_uuid: b25f6f62-0712-43c1-b203-083231ffd97d
+  legacy_id: escu:detect_new_local_admin_account
+- d_id: D-0026
+  name: Antivirus or EDR malware detection
+  family: endpoint_malware
+  sources:
+  - library: product_alert
+    id: product_alert:av_edr_malware
+    note: any product's alert of this kind, normalized to the detection's roles
+  - library: sigma
+    id: sigma:fa0c05b6-8ad3-468d-8231-c1cbccb64fba
+    title: Antivirus - Hacktool Signature
+    relation: closest
+  - library: sigma
+    id: sigma:78cc2dd2-7d20-4d32-93ff-057084c38b93
+    title: Antivirus - Password Dumper Signature
+    relation: closest
+  - library: sigma
+    id: sigma:4c6ca276-d4d0-4a8c-9e4c-d69832f8671f
+    title: Antivirus - Ransomware Signature
+    relation: closest
+  - library: sigma
+    id: sigma:238527ad-3c2c-4e4f-a1f6-92fd63adb864
+    title: Antivirus - Exploitation Framework Signature
+    relation: closest
+  data_source:
+  - Any antivirus or EDR alert, normalized to the reporting_control and file roles (no data model required)
+  sigma_logsource:
+  - category: antivirus
+  sigma_refs:
+  - id: fa0c05b6-8ad3-468d-8231-c1cbccb64fba
+    title: Antivirus - Hacktool Signature
+    relation: closest
+  - id: 78cc2dd2-7d20-4d32-93ff-057084c38b93
+    title: Antivirus - Password Dumper Signature
+    relation: closest
+  - id: 4c6ca276-d4d0-4a8c-9e4c-d69832f8671f
+    title: Antivirus - Ransomware Signature
+    relation: closest
+  - id: 238527ad-3c2c-4e4f-a1f6-92fd63adb864
+    title: Antivirus - Exploitation Framework Signature
+    relation: closest
+  use_case: UC-001
+  source:
+    repo: internal
+    path: bank/intake/use_cases.yaml#UC-001
+    title: Antivirus or EDR malware detection
+  legacy_id: vendor:av_detection
+- d_id: D-0027
+  name: Firewall deny or port-scan alert
+  family: network
+  sources:
+  - library: product_alert
+    id: product_alert:firewall_deny
+    note: any product's alert of this kind, normalized to the detection's roles
+  data_source:
+  - Splunk CIM Network_Traffic data model
+  sigma_logsource:
+  - category: firewall
+  sigma_refs: []
+  use_case: UC-003
+  source:
+    repo: internal
+    path: bank/intake/use_cases.yaml#UC-003
+    title: Firewall deny or port-scan alert
+  legacy_id: vendor:firewall_deny
+- d_id: D-0028
+  name: IDS or IPS signature alert
+  family: network
+  sources:
+  - library: product_alert
+    id: product_alert:ids_signature
+    note: any product's alert of this kind, normalized to the detection's roles
+  data_source:
+  - Splunk CIM Intrusion_Detection data model
+  sigma_logsource: []
+  sigma_logsource_none: Sigma has no log-source category for this alert type.
+  sigma_refs: []
+  use_case: UC-002
+  source:
+    repo: internal
+    path: bank/intake/use_cases.yaml#UC-002
+    title: IDS or IPS signature alert
+  legacy_id: vendor:ids_alert
+- d_id: D-0029
+  name: Web proxy or URL-filter block
+  family: network
+  sources:
+  - library: product_alert
+    id: product_alert:proxy_url_block
+    note: any product's alert of this kind, normalized to the detection's roles
+  data_source:
+  - Splunk CIM Web data model (proxy events)
+  sigma_logsource:
+  - category: proxy
+  sigma_refs: []
+  use_case: UC-004
+  source:
+    repo: internal
+    path: bank/intake/use_cases.yaml#UC-004
+    title: Web proxy or URL-filter block
+  legacy_id: vendor:proxy_block
+- d_id: D-0030
+  name: Web application firewall alert
+  family: network
+  sources:
+  - library: product_alert
+    id: product_alert:waf_block
+    note: any product's alert of this kind, normalized to the detection's roles
+  data_source:
+  - Splunk CIM Web data model (WAF events)
+  sigma_logsource: []
+  sigma_logsource_none: Sigma has no WAF category; its webserver category covers access logs, not WAF events.
+  sigma_refs: []
+  use_case: UC-007
+  source:
+    repo: internal
+    path: bank/intake/use_cases.yaml#UC-007
+    title: Web application firewall alert
+  legacy_id: vendor:waf_alert
+- d_id: D-0031
+  name: Email gateway threat alert
+  family: email
+  sources:
+  - library: product_alert
+    id: product_alert:email_gateway_threat
+    note: any product's alert of this kind, normalized to the detection's roles
+  data_source:
+  - Splunk CIM Email data model
+  sigma_logsource: []
+  sigma_logsource_none: Sigma has no log-source category for this alert type.
+  sigma_refs: []
+  use_case: UC-008
+  source:
+    repo: internal
+    path: bank/intake/use_cases.yaml#UC-008
+    title: Email gateway threat alert
+  legacy_id: vendor:email_gateway
+- d_id: D-0032
+  name: User-reported phishing email
+  family: email
+  sources:
+  - library: product_alert
+    id: product_alert:user_reported_email
+    note: any product's alert of this kind, normalized to the detection's roles
+  data_source:
+  - Splunk CIM Email data model (user-reported message)
+  sigma_logsource: []
+  sigma_logsource_none: Sigma has no log-source category for this alert type.
+  sigma_refs: []
+  use_case: UC-014
+  source:
+    repo: internal
+    path: bank/intake/use_cases.yaml#UC-014
+    title: User-reported phishing email
+  legacy_id: vendor:user_reported_phishing
+- d_id: D-0033
+  name: DLP policy match
+  family: data_protection
+  sources:
+  - library: product_alert
+    id: product_alert:dlp_policy_match
+    note: any product's alert of this kind, normalized to the detection's roles
+  data_source:
+  - Splunk CIM Data Loss Prevention data model
+  sigma_logsource: []
+  sigma_logsource_none: Sigma has no log-source category for this alert type.
+  sigma_refs: []
+  use_case: UC-010
+  source:
+    repo: internal
+    path: bank/intake/use_cases.yaml#UC-010
+    title: DLP policy match
+  legacy_id: vendor:dlp_match
+- d_id: D-0034
+  name: Removable media (device control) alert
+  family: data_protection
+  sources:
+  - library: product_alert
+    id: product_alert:device_control_connect
+    note: any product's alert of this kind, normalized to the detection's roles
+  data_source:
+  - Normalized device-control alert (endpoint or DLP product)
+  sigma_logsource: []
+  sigma_logsource_none: Sigma has no log-source category for this alert type.
+  sigma_refs: []
+  use_case: UC-016
+  source:
+    repo: internal
+    path: bank/intake/use_cases.yaml#UC-016
+    title: Removable media (device control) alert
+  legacy_id: vendor:removable_media
+- d_id: D-0035
+  name: Removable media file write (device control) alert
+  family: data_protection
+  sources:
+  - library: product_alert
+    id: product_alert:device_control_write
+    note: any product's alert of this kind, normalized to the detection's roles
+  data_source:
+  - Normalized device-control alert (endpoint or DLP product)
+  sigma_logsource: []
+  sigma_logsource_none: Sigma has no log-source category for this alert type.
+  sigma_refs: []
+  use_case: UC-016
+  source:
+    repo: internal
+    path: bank/intake/use_cases.yaml#UC-016
+    title: Removable media file write (device control) alert
+  legacy_id: vendor:removable_media_write

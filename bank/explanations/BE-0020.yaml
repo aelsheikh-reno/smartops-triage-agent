@@ -1,7 +1,0 @@
-id: BE-0020
-name: Low-risk detection class
-description: 'The product classed the item as low risk (potentially unwanted software, adware, grayware). Test files are excluded by default: attackers drop them to provoke antivirus actions.'
-source:
-- bank/use_cases.yaml triage_hints
-license: internal
-version: 2

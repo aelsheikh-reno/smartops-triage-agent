@@ -1,8 +1,0 @@
-id: BE-0034
-name: Known test data
-description: The flagged content is a known DLP test file or template.
-source:
-- bank/use_cases.yaml triage_hints
-- external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
-license: internal
-version: 1

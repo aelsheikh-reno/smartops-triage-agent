@@ -1,0 +1,20 @@
+id: Q-0017
+text: Is every URL host in the command line an internal or approved download domain?
+tests: BE-0010
+attacker_influence:
+  rating: low
+  reason: The attacker chooses the URL but must host content on an approved domain; keep the list to customer-controlled domains.
+notes: url_hosts is derived from the command line by the detection. No URL parsed means unknown, not yes.
+derived_from:
+  source:
+  - splunk/security_content detections/endpoint/windows_file_download_via_certutil.yml
+  - splunk/security_content detections/endpoint/bitsadmin_download_file.yml
+  license:
+  - Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+kind: triage
+inputs:
+  entity: derived:url_hosts

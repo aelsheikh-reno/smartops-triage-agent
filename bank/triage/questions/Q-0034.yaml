@@ -1,0 +1,18 @@
+id: Q-0034
+text: Is any URL or domain in the alert known bad in a reputation source?
+tests: BE-0030
+attacker_influence:
+  rating: low
+  reason: URL comes from the alert record.
+notes: 'escalate_only: a hit escalates; a miss is not benign evidence.'
+derived_from:
+  source:
+  - bank/intake/use_cases.yaml triage_hints
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  entity: role:web.url

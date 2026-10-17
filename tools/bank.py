@@ -28,62 +28,150 @@ def _by_id(pattern):
     return out
 
 
+# Layout (docs/design-decisions.md §9): contract/ is the interface both sides share (question IDs, answer types, status,
+# trust, message envelope); triage/ is what the Triage agent uses (detections, flows, questions, context questions,
+# parameters, reason codes, modes); broker/ is what the Tool Broker uses (capabilities, sources, translations,
+# verifications, context lists); intake/ is what the normalizer and the Detection Engineer use (rule map, use cases, pilot).
+CONTRACT, TRIAGE, BROKER, INTAKE = (os.path.join(BANK, x) for x in ("contract", "triage", "broker", "intake"))
+
+
+def _provenance(doc):
+    """Flatten a triage file's derived_from (source, license) into the in-memory keys the gates read."""
+    df = doc.get("derived_from") or {}
+    if "source" in df and "source" not in doc:
+        doc["source"] = df["source"]
+    if "license" in df and "license" not in doc:
+        doc["license"] = df["license"]
+    return doc
+
+
+def _with_broker_side(questions, qmap):
+    """Rebuild each question's capability from its triage inputs and the broker's question map."""
+    for qid, q in questions.items():
+        m = qmap.get(qid) or {}
+        cap = {"name": m.get("capability"), "inputs": dict(q.get("inputs") or {}, **(m.get("inputs") or {}))}
+        if q.get("optional_inputs"):
+            cap["optional_inputs"] = q["optional_inputs"]
+        q["capability"] = cap
+        needs = dict(q.get("needs") or {}, **(m.get("needs") or {}))
+        if needs:
+            q["needs"] = needs
+        _provenance(q)
+    return questions
+
+
 def load():
-    caps = _load(os.path.join(BANK, "capabilities.yaml"))
-    facts = _by_id("facts/CF-*.yaml")
+    caps = _load(os.path.join(BROKER, "capabilities.yaml"))
+    # the triage semantics (step rules, guards, influence scale, source profiles) and the answer contract are read by the
+    # gates alongside the capabilities, so they are merged in memory; on disk they live in triage/ and contract/
+    caps.update(_load(os.path.join(TRIAGE, "semantics.yaml")) or {})
+    facts = _by_id("broker/facts/CF-*.yaml")
     seeds = {}
-    for path in sorted(glob.glob(os.path.join(BANK, "seeds", "*.yaml"))):
+    for path in sorted(glob.glob(os.path.join(BROKER, "seeds", "*.yaml"))):
         doc = _load(path)
         doc["_file"] = os.path.relpath(path, ROOT)
         seeds[doc["fact"]] = doc
         if doc["fact"] in facts:
             facts[doc["fact"]]["seed"] = doc.get("entries", doc.get("data"))
     tables = {}
-    for path in sorted(glob.glob(os.path.join(BANK, "recipes", "value_tables", "*.yaml"))):
+    for path in sorted(glob.glob(os.path.join(BROKER, "translations", "*.yaml"))):
         doc = _load(path)
         doc["_file"] = os.path.relpath(path, ROOT)
         tables[os.path.basename(path)[:-5]] = doc
     overlays = {}
-    for path in sorted(glob.glob(os.path.join(BANK, "overlays", "customer", "*", "parameters.yaml"))):
+    for path in sorted(glob.glob(os.path.join(TRIAGE, "customers", "*", "parameters.yaml"))):
         overlays[os.path.basename(os.path.dirname(path))] = dict(_load(path) or {}, _file=os.path.relpath(path, ROOT))
-    customers = {}   # the customer layer: product versions, per-customer row verifications, detection modes
-    for path in sorted(glob.glob(os.path.join(BANK, "overlays", "customer", "*", "verifications.yaml"))):
+    customers = {}   # the customer layer: product versions and verifications (broker), detection modes (triage)
+    for path in sorted(glob.glob(os.path.join(BROKER, "customers", "*", "verifications.yaml"))):
         customers[os.path.basename(os.path.dirname(path))] = dict(_load(path) or {}, _file=os.path.relpath(path, ROOT))
-    params_doc = _load(os.path.join(BANK, "parameters.yaml"))
+    for path in sorted(glob.glob(os.path.join(TRIAGE, "customers", "*", "modes.yaml"))):
+        c = customers.setdefault(os.path.basename(os.path.dirname(path)), {"_file": os.path.relpath(path, ROOT)})
+        c["modes"] = (_load(path) or {}).get("modes") or {}
+        c["_modes_file"] = os.path.relpath(path, ROOT)
+    params_doc = _load(os.path.join(TRIAGE, "parameters.yaml"))
+    broker_params = (_load(os.path.join(BROKER, "parameters.yaml")) or {}).get("parameters") or {}
+    for name, p in broker_params.items():
+        p["layer"] = "broker"
+    qmap = (_load(os.path.join(BROKER, "question_map.yaml")) or {}).get("questions") or {}
+    rule_map = (_load(os.path.join(INTAKE, "rule-map.yaml")) or {}).get("rules") or []
+    detections = _by_id("triage/detections/*/*.yaml")
+    for r in rule_map:   # offline metadata from intake, for the gates that check it; never part of the triage files
+        d = detections.get(r["d_id"])
+        if d:
+            for k in ("data_source", "sigma_logsource", "sigma_logsource_none", "sigma_refs", "use_case", "source", "escu_uuid"):
+                if k in r:
+                    d[k] = r[k]
+            _provenance(d)
+    use_cases_path = os.path.join(INTAKE, "use_cases.yaml")
     return {
         "seeds": seeds,
         "value_tables": tables,
         "overlays": overlays,
         "customers": customers,
-        "context_questions": _by_id("context/C-*.yaml"),
-        "context_rules": _load(os.path.join(BANK, "context_rules.yaml")),
+        "contract": {"questions": {q["id"]: q for q in (_load(os.path.join(CONTRACT, "questions.yaml")) or {}).get("questions") or []},
+                     "answer": _load(os.path.join(CONTRACT, "answer.yaml")) if os.path.exists(os.path.join(CONTRACT, "answer.yaml")) else {},
+                     "envelope": _load(os.path.join(CONTRACT, "envelope.yaml")) if os.path.exists(os.path.join(CONTRACT, "envelope.yaml")) else {},
+                     "examples": _load(os.path.join(CONTRACT, "envelope_examples.yaml")) if os.path.exists(os.path.join(CONTRACT, "envelope_examples.yaml")) else {}},
+        "question_map": qmap,
+        "rule_map": rule_map,
+        "context_questions": _with_broker_side(_by_id("triage/context/C-*.yaml"), qmap),
+        "context_rules": _load(os.path.join(TRIAGE, "context_rules.yaml")),
         "precedence": params_doc.get("precedence"),
         "capabilities": caps,
         "capability_by_name": {c["name"]: c for c in caps["capabilities"]},
-        "parameters": params_doc["parameters"],
-        "reason_codes": {r["code"]: r for r in _load(os.path.join(BANK, "reason_codes.yaml"))["reason_codes"]},
-        "questions": _by_id("questions/Q-*.yaml"),
-        "explanations": _by_id("explanations/BE-*.yaml"),
+        "parameters": dict(params_doc["parameters"], **broker_params),
+        "reason_codes": {r["code"]: r for r in _load(os.path.join(TRIAGE, "reason_codes.yaml"))["reason_codes"]},
+        "questions": _with_broker_side(_by_id("triage/questions/Q-*.yaml"), qmap),
+        "explanations": {k: _provenance(v) for k, v in _by_id("triage/explanations/BE-*.yaml").items()},
         "facts": facts,
-        "detections": _by_id("detections/*/*.yaml"),
-        "techniques": _by_id("techniques/T*.yaml"),
-        "pilot": _load(os.path.join(BANK, "pilot.yaml")),
-        "use_cases": (_load(os.path.join(BANK, "use_cases.yaml")) or {}).get("use_cases", []) if os.path.exists(os.path.join(BANK, "use_cases.yaml")) else [],
+        "detections": detections,
+        "techniques": {k: _provenance(v) for k, v in _by_id("triage/techniques/T*.yaml").items()},
+        "pilot": _load(os.path.join(INTAKE, "pilot.yaml")),
+        "use_cases": (_load(use_cases_path) or {}).get("use_cases", []) if os.path.exists(use_cases_path) else [],
     }
 
 
-def source_ids(b):
-    """Map each rule-level detection's source-library id (e.g. escu:<file stem>) to its bank id."""
-    out = {}
-    for did, d in b["detections"].items():
-        if did.startswith("vendor:"):
-            out[did] = did
-            continue
-        src = d.get("source")
-        if isinstance(src, dict) and src.get("path"):
-            stem = os.path.splitext(os.path.basename(src["path"]))[0]
-            out[did.split(":", 1)[0] + ":" + stem] = did
+ENVELOPE_REQUEST = ("request_id", "question_id", "scope_profile", "deadline")
+ENVELOPE_ANSWER = ("request_id", "measurement_id", "answer", "status", "trust", "provenance")
+
+
+def envelope_missing(msg, kind):
+    """Required envelope fields a request or answer lacks (contract/envelope.yaml), with run_or_window: exactly one of
+    run_id or entity_window_id."""
+    need = ENVELOPE_REQUEST if kind == "request" else ENVELOPE_ANSWER
+    out = [k for k in need if k not in msg or msg[k] in (None, "")]
+    if ("run_id" in msg) == ("entity_window_id" in msg):
+        out.append("run_id or entity_window_id (exactly one)")
     return out
+
+
+def accept_answer(pending, msg, received_at):
+    """The Triage agent's acceptance rule for one broker answer (contract/envelope.yaml). pending: {request_id: request}.
+    Returns (accepted, reason). Rejected answers are logged; a late answer is logged and discarded, never applied."""
+    missing = envelope_missing(msg, "answer")
+    if missing:
+        return False, f"missing {', '.join(missing)}"
+    req = pending.get(msg["request_id"])
+    if not req:
+        return False, "no pending request"
+    for k in ("run_id", "entity_window_id"):
+        if req.get(k) != msg.get(k):
+            return False, f"{k.replace('_', ' ').replace('entity window id', 'entity_window_id').replace('run id', 'run_id')} does not match the pending request"
+    if str(received_at) > str(req["deadline"]):
+        return False, "late"
+    return True, "accepted"
+
+
+def source_ids(b, libraries=None):
+    """Map source rule IDs in the intake rule map (escu:<rule file>, sigma:<uuid>, product_alert:<kind>) to their D-IDs.
+    libraries limits it to those libraries (the use-case catalog counts escu and product_alert matches as coverage;
+    sigma references are closest-match leads)."""
+    return {s["id"]: r["d_id"] for r in b["rule_map"] for s in r.get("sources") or [] if not libraries or s["library"] in libraries}
+
+
+def legacy_ids(b):
+    """The bank's own pre-round-5 detection IDs (escu:<name>, vendor:<family>) to D-IDs, for reports that compare rounds."""
+    return {r["legacy_id"]: r["d_id"] for r in b["rule_map"] if r.get("legacy_id")}
 
 
 def flows(b):
@@ -95,20 +183,22 @@ def flows(b):
 
 
 # Batches the gates run over. No batch argument means every batch; an unknown name is an error, never "nothing to check".
-BATCHES = {"escu": "rule-level detections from the public rule library (escu:)",
-           "vendor": "generic vendor-alert families (vendor:)",
-           "technique": "technique fallbacks (ATT&CK technique IDs)"}
+BATCHES = {"endpoint": "endpoint behaviour detections", "identity": "identity and account detections",
+           "endpoint_malware": "endpoint malware alerts (AV/EDR)", "network": "network control alerts (firewall, IDS, WAF, proxy)",
+           "email": "email alerts", "data_protection": "data-protection alerts (DLP, removable media)",
+           "technique_fallback": "technique fallbacks (ATT&CK technique IDs)"}   # batches are detection families
 
 
-def batch_of(level, flow_id):
-    return "technique" if level == "technique" else flow_id.split(":", 1)[0]
+def batch_of(level, d):
+    """The family a flow belongs to: the detection's family, or technique_fallback."""
+    return "technique_fallback" if level == "technique" else d["family"]
 
 
 def select_batches(args):
     """Batch names from the command line: none means all; an unknown name exits 2 naming the known ones."""
     unknown = [a for a in args if a not in BATCHES]
     if unknown:
-        sys.exit(f"unknown batch {', '.join(unknown)}: expected one of {', '.join(BATCHES)} (or none for all)")
+        sys.exit(f"unknown family {', '.join(unknown)}: expected one of {', '.join(BATCHES)} (or none for all)")
     return set(args) or set(BATCHES)
 
 
@@ -394,10 +484,11 @@ def context_rule(b, rule, answers):
     return got == want
 
 
-def classify(b, cls, values, product_tables=(), answers=None):
-    """Map raw alert values to an alert-class value through value tables. A product table that defines the class
-    is authoritative (no row matched gives the class default); otherwise the generic table applies.
+def classify(b, cls, values, product_tables=(), answers=None, question=None):
+    """Map raw alert values to a class value through the broker's translations. A product translation that defines the class
+    is authoritative (no row matched gives the class default); otherwise the generic translation applies.
     values: ordered dict of the raw properties or role values the class reads ("value" in a row means the first one).
+    A row that lists the questions it serves (questions: [...]) is skipped for any other question.
     Returns (class value, matching row with its table, or None)."""
     first = str(next(iter(values.values()), "") or "")
     joined = " ".join(str(v or "") for v in values.values()).strip()
@@ -412,6 +503,8 @@ def classify(b, cls, values, product_tables=(), answers=None):
         if not spec:
             continue
         for r in spec["rows"]:
+            if r.get("questions") and question not in r["questions"]:
+                continue
             m, ok = r["match"], True
             if "pattern" in m:
                 ok = bool(joined) and re.search(m["pattern"], joined, re.I) is not None
@@ -436,7 +529,7 @@ def kth_lowest_weekly_hosts(weekly_hosts, of_weeks, min_weeks):
 
 
 def class_values(b, cls, answers=None):
-    """(values, raise_only) of an alert class, or of the enum a value table answers (endpoint.run_status)."""
+    """(values, set()) of an alert class, or of the enum a translation answers (endpoint.run_status)."""
     spec = b["capability_by_name"][answers]["answer"] if answers else b["capabilities"]["alert_classes"][cls]
     return spec["values"], set(spec.get("raise_only") or [])
 
@@ -475,41 +568,42 @@ def row_verified(b, customer, table, row_id, today):
     return False
 
 
+TRUST = ("checked", "not_checked")
+
+
 def row_answer(b, cls, value, row, answers=None, ctx=None):
-    """The value a matched row may give, by row kind and mode. ctx: {"mode", "customer", "today", "marks": [...]}.
-    - ambiguous: always None (status unknown), in every mode: it never supports a close.
-    - verified for the customer (and not read from a fallback source): the value, in every mode.
-    - unverified, or any non-ambiguous fallback-source answer: in Shadow and Recommend the value, marked
-      "unverified mapping: <table>/<row>" for the explanation and decision log; in Auto only a raise-only value
-      (ran, high risk, malicious) stands, anything that could support a close is None.
-    A class default (no row matched) is the bank's own value and stands."""
+    """The broker's answer and trust from a matched translation row (contract: answer, status, trust).
+    Returns (value or None for status unknown, trust, provenance). ctx: {"customer", "today"}.
+    - ambiguous row: status unknown, in every mode (it never supports a close).
+    - standards-defined row (for example HTTP status codes, RFC 9110): checked, once, in the shared broker layer.
+    - row verified for this customer, read from the authoritative source: checked.
+    - anything else (unverified row, model-proposed row, any fallback-source answer): not_checked.
+    A class default (no row matched) is the bank's own value: checked.
+    The Triage agent sees only the answer, status and trust; the provenance (<translation>/<row>) stays in the broker's log."""
     if row is None:
-        return value
+        return value, "checked", None
+    prov = f"{row.get('table')}/{row.get('id')}"
     if row.get("kind") == "ambiguous":
-        return None
+        return None, "not_checked", prov
     ctx = ctx if ctx is not None else {}
     table = b["value_tables"].get(row.get("table"), {})
-    if not table.get("fallback") and row_verified(b, ctx.get("customer"), row.get("table"), row.get("id"), ctx.get("today", "")):
-        return value
-    mode = ctx.get("mode", "recommend")
-    _, ro = class_values(b, cls, answers)
-    if mode == "auto" and value not in ro:
-        return None
-    if value not in ro:
-        ctx.setdefault("marks", []).append(f"unverified mapping: {row.get('table')}/{row.get('id')}")
-    return value
+    if table.get("fallback"):
+        return value, "not_checked", prov
+    if row.get("kind") == "standards_defined" or row_verified(b, ctx.get("customer"), row.get("table"), row.get("id"), ctx.get("today", "")):
+        return value, "checked", prov
+    return value, "not_checked", prov
 
 
-def close_path_rows(b, path, guards, customer=None):
-    """(table, row id) pairs a close path may rest on: every non-ambiguous row whose value could support a close (not
-    raise-only), in the tables that answer a class read by a step or yes-guard on the path. With a customer, only the
-    product tables the customer runs (customer layer products) plus the generic tables; without one, every table.
-    Fallback-source tables are left out: their answers are treated as unverified and never support an Auto close, so in
-    Auto a fallback answer flags rather than closes."""
-    items = [st for st, a in path if a in ("yes", "no")] + [g for g in guards if guard_requires_yes(g)]
+def close_path_rows(b, path, guards, customer=None, detection=None):
+    """(translation, row id) pairs a close path may rest on, for Auto eligibility: the rows whose value, through the step's own
+    rule, gives the answer the path takes (or, for a guard, an answer that lets the close stand). Ambiguous rows never do;
+    standards-defined rows are checked in the shared layer and are left out. With a customer, only the product translations
+    the customer runs plus the generic ones. Fallback-source translations are left out: their answers are always not_checked,
+    so in Auto they flag rather than close and can never be what an Auto close rests on."""
+    items = [(st, a) for st, a in path if a in ("yes", "no")] + [(g, None) for g in guards]
     runs = set(((b["customers"].get(customer) or {}).get("products") or {})) if customer else None
     out = set()
-    for it in items:
+    for it, taken in items:
         q = b["questions"][it["question"]]
         name = q["capability"]["name"]
         if name == "alert.class":
@@ -518,33 +612,40 @@ def close_path_rows(b, path, guards, customer=None):
             cls, answers = "run_status", name
         else:
             continue
-        _, ro = class_values(b, cls, answers)
         for tname, t in b["value_tables"].items():
             if t.get("answers") != answers or t.get("fallback") or (runs is not None and tname not in runs and t.get("scope") != "generic"):
                 continue
             for r in ((t.get("classes") or {}).get(cls) or {}).get("rows") or []:
-                if r.get("kind") != "ambiguous" and r.get("value") not in ro:
+                if r.get("kind") in ("ambiguous", "standards_defined"):
+                    continue
+                try:
+                    got = apply_rule(b, it.get("rule"), r.get("value"), "enum", detection)
+                except ValueError:
+                    got = None
+                stands = got == taken if taken else (got not in (it.get("when") or ["yes"]) and got != "unknown")
+                if stands:
                     out.add((tname, r["id"]))
     return out
 
 
-def classify_effective(b, cls, values, product_tables=(), answers=None, ctx=None):
-    v, row = classify(b, cls, values, product_tables, answers=answers)
-    return row_answer(b, cls, v, row, answers, ctx), row
+def classify_effective(b, cls, values, product_tables=(), answers=None, ctx=None, question=None):
+    """classify, then the row's answer and trust (row_answer). question limits rows that declare the questions they serve."""
+    v, row = classify(b, cls, values, product_tables, answers=answers, question=question)
+    return row_answer(b, cls, v, row, answers, ctx)
 
 
 def run_status(b, api, siem_copy, ctx=None):
     """endpoint.run_status as the Tool Broker answers it.
     api: None when the endpoint API is unavailable or not granted; otherwise {"tables": [...], "matches": [raw evidence dicts]}
          (an empty or multiple match list answers unknown). siem_copy: {"tables": [...], "raw": {...}} or None.
-    Returns (value, source). The API is authoritative; the SIEM copy is a fallback. Both go through row_answer: an ambiguous
-    row is unknown in every mode; a fallback answer is treated as unverified (never supports an Auto close)."""
+    Returns (value, trust, provenance). The API is authoritative; the SIEM copy is a fallback (always not_checked).
+    No match, several matches or an ambiguous row answer unknown."""
     if api is not None:
         if len(api.get("matches") or []) != 1:
-            return "unknown", "edr_api"
-        v, _ = classify_effective(b, "run_status", api["matches"][0], api.get("tables") or [], answers="endpoint.run_status", ctx=ctx)
-        return v or "unknown", "edr_api"
+            return "unknown", "checked", "edr_api: no single matching alert"
+        v, trust, prov = classify_effective(b, "run_status", api["matches"][0], api.get("tables") or [], answers="endpoint.run_status", ctx=ctx)
+        return v or "unknown", trust, prov
     if siem_copy:
-        v, _ = classify_effective(b, "run_status", siem_copy.get("raw") or {}, siem_copy.get("tables") or [], answers="endpoint.run_status", ctx=ctx)
-        return v or "unknown", "siem_copy"
-    return None, None
+        v, trust, prov = classify_effective(b, "run_status", siem_copy.get("raw") or {}, siem_copy.get("tables") or [], answers="endpoint.run_status", ctx=ctx)
+        return v or "unknown", "not_checked", prov
+    return None, "not_checked", None

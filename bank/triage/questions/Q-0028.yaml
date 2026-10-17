@@ -1,0 +1,17 @@
+id: Q-0028
+text: Is the detection in a low-risk class (potentially unwanted software, adware, grayware), and not a test file?
+tests: BE-0020
+attacker_influence:
+  rating: low
+  reason: Class assigned by the product; high-risk families are excluded by the earlier step.
+  by_source:
+    forwarded: medium
+derived_from:
+  source:
+  - bank/intake/use_cases.yaml triage_hints
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+kind: triage

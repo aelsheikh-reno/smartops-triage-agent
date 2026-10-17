@@ -1,0 +1,19 @@
+id: Q-0023
+text: Is the host in a rebuilding or decommissioning state in the asset inventory at the alert time?
+tests: BE-0013
+attacker_influence:
+  rating: none
+  reason: Asset lifecycle record maintained by IT.
+derived_from:
+  source:
+  - splunk/security_content detections/endpoint/windows_event_log_cleared.yml
+  license:
+  - Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+kind: triage
+inputs:
+  entity: role:host.name
+  at_time: role:event.time

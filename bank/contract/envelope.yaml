@@ -1,0 +1,21 @@
+# Message envelope for parallel triage runs and asynchronous broker answers. (designed, not built)
+# Many alerts are triaged at once and the broker answers asynchronously, so every message is tied to one run.
+ids:
+  alert_id: 'the SIEM plus the source alert ID (<siem>:<source alert id>); the same alert arriving twice is deduplicated, not triaged twice'
+  run_id: 'a UUID, unique per triage run of one alert; a re-triage gets a new run_id linked to the same alert_id'
+  entity_window_id: 'one per entity grouping window; the context questions for that window carry it'
+  request_id: '<run_id or entity_window_id>:<step>:<question id>:<attempt>; unique per question sent. A retry of the same request reuses it; attempt grows only when the Triage agent deliberately asks again'
+  measurement_id: 'one per broker measurement; a cached answer reused by several runs keeps its measurement_id, and each answer records which measurement it came from'
+request:
+  required: [request_id, run_or_window, question_id, scope_profile, deadline]
+  run_or_window: exactly one of run_id (triage questions) or entity_window_id (context questions)
+answer:
+  required: [request_id, run_or_window, measurement_id, answer, status, trust, provenance]
+  run_or_window: echoes the request's run_id or entity_window_id
+rules:
+- The Triage agent accepts an answer only if it matches a pending request_id for that run (or window). Mismatches are rejected and logged.
+- Each question has a timeout (parameter question_timeout_seconds, bounded). No answer by the deadline gives status unknown, and the flow continues.
+- A late answer is logged and discarded, never applied.
+- Retries reuse the request_id. The broker treats a repeated request_id as the same request (idempotent) and never measures twice.
+- The decision log is keyed by run_id and lists every request_id and measurement_id. The SIEM write-back carries run_id.
+- Context answers are shared through entity_window_id. Each run records which context measurements it used.

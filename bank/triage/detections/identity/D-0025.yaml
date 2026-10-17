@@ -1,0 +1,79 @@
+id: D-0025
+name: Detect New Local Admin account
+family: identity
+alert_type: analytic
+techniques:
+- T1136.001
+required_roles:
+- event
+- host
+- actor
+- user
+intent: Detects a new local account (4720) that is added to local Administrators (4732) within 180 minutes, from Windows Security logs.
+fp_quality: good
+explanations:
+- BE-0017
+- BE-0001
+- BE-0003
+fingerprint:
+- role:host.name
+- role:actor.name
+- role:user.name
+fingerprint_influence:
+  role:host.name:
+    rating: low
+    reason: Host that reported the event.
+  role:actor.name:
+    rating: low
+    reason: Acting account recorded by the OS.
+  role:user.name:
+    rating: low
+    reason: Account recorded by the OS.
+precedent_entity: role:host.name
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: role:host.name
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce the fingerprint's host, acting account, user.
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
+- step: 2
+  question: Q-0020
+  on_yes: close:benign_true_positive:provisioning_service_account
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0002
+  bind:
+    user: role:actor.name
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 4
+  question: Q-0004
+  bind:
+    user: role:actor.name
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+status: draft
+version: 6
+parameters:
+  precedent_validity_hours: 72
+derived_from:
+  library: escu
+  rule: escu:detect_new_local_admin_account
+  title: Detect New Local Admin account
+  path: detections/endpoint/detect_new_local_admin_account.yml
+  repo: splunk/security_content
+  license: Apache-2.0

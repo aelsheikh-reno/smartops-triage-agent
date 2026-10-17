@@ -3,8 +3,8 @@
 question texts, capability and attacker influence, guards, plus the gate results. If
 review/changes/<batch-name>.md exists, it is included as "Changes since review".
 
-Usage: tools/review_packet.py <packet-name> [batch ...]   batches: escu, vendor, technique; none means all
-   e.g. tools/review_packet.py batch-1-vendor-alerts vendor:
+Usage: tools/review_packet.py <packet-name> [family ...]   families: endpoint, identity, endpoint_malware, network, email, data_protection, technique_fallback; none means all
+   e.g. tools/review_packet.py batch-1-vendor-alerts endpoint_malware network email data_protection
 """
 import os
 import subprocess
@@ -58,7 +58,7 @@ def gate(cmd):
 def main():
     name, batches = sys.argv[1], B.select_batches(sys.argv[2:])
     b = B.load()
-    dets = [d for did, d in sorted(b["detections"].items()) if B.batch_of("rule", did) in batches]
+    dets = [d for did, d in sorted(b["detections"].items()) if B.batch_of("rule", d) in batches]
     B.require_loaded(f"review packet ({', '.join(sorted(batches))})", detections=len(dets))
     used = []
     for d in dets:

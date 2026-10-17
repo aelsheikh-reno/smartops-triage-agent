@@ -2,9 +2,9 @@
 
 The bank's vendor families never read a product's raw values. The normalizer fills the alert's roles
 (`docs/intake/normalized-alert-v1.md`), and the Tool Broker answers `alert.class` questions through
-**value tables**: one per vendor and product under `bank/recipes/value_tables/`, plus a generic table for
+**translations**: one per vendor and product under `bank/broker/translations/`, plus a generic one for
 vendor-neutral rows. Each table maps the product's raw values to the fixed values of an alert class
-(`alert_classes` in `bank/capabilities.yaml`), and every row is marked `verified: true` or `false`. The
+(`alert_classes` in `bank/broker/capabilities.yaml`), and every row is marked `verified: true` or `false`. The
 tables are recipe data: they may name products and never enter the runtime bundle.
 
 This page is the onboarding guide for those tables; the tables themselves are the source of truth.
@@ -12,9 +12,15 @@ This page is the onboarding guide for those tables; the tables themselves are th
 Rule (design-decisions §9, `docs/broker-questions.md`, enforced by `tools/validate.py`): every row has a
 kind, ambiguous or unverified; verified is per customer. A detection is Auto-eligible for a customer only
 when every row on its close paths is verified for that customer. The onboarding check "Check
-vendor alerts are normalized" records which products each customer runs and verifies their rows. No row is verified for any customer today, so no detection whose close paths read a value table is
-Auto-eligible yet; Shadow and Recommend closes on unverified rows are marked. Generic rows (vendor `any`)
-are unverified like product rows; onboarding confirms each product's wording against them.
+vendor alerts are normalized" records which products each customer runs and verifies their rows. No row is verified for any customer today, so no detection whose close paths read a translation is
+Auto-eligible yet; Shadow and Recommend closes on unverified rows are marked not_checked. Generic rows (vendor `any`)
+are unverified like product rows, except the HTTP status rows, which are standards-defined (RFC 9110, checked
+once in the shared broker layer); onboarding confirms each product's wording against them.
+
+Email and DLP quarantine (generic `control_action`): a quarantine before the user received the item
+(`email.delivery_stage: pre_delivery`) may support a close; after delivery (a purge of a delivered message) or
+with no delivery stage it is ambiguous. These rows serve only Q-0074 (email) and Q-0062 (DLP); an endpoint
+question never reads them.
 
 ## Whether the file ran (`endpoint.run_status`: pre_execution, ran, unknown)
 
@@ -61,4 +67,4 @@ Onboarding adds each product's category names to its own table; a category that 
 
 `control_action` (what the control did), `severity`, `http_status_class`, `user_agent_class`,
 `device_event` and `device_class` have generic
-rows only. `address_zone` is gone: the customer's address ranges are customer context (list CF-0031, Q-0050), not a vendor's meaning, so they never sit in a value table. Products whose wording differs get their own table at onboarding.
+rows only. `address_zone` is gone: the customer's address ranges are customer context (list CF-0031, Q-0050), not a vendor's meaning, so they never sit in a translation. Products whose wording differs get their own table at onboarding.

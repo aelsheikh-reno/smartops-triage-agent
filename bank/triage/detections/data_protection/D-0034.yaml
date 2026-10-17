@@ -1,0 +1,155 @@
+id: D-0034
+name: Removable media (device control) alert
+family: data_protection
+alert_type: control
+techniques:
+- T1052.001
+- T1091
+required_roles:
+- host
+- user
+- device
+- reporting_control
+- event
+intent: 'Generic: an endpoint device-control or DLP product reports removable storage connected (any product). File writes have their own detection.'
+fp_quality: generic
+notes: Connection events only; a write event flags here and belongs to vendor:removable_media_write. A non-storage device class flags first (possible keystroke injector). Servers and crown jewels escalate.
+  A missing file count answers unknown and flags. Device serial numbers can be spoofed, so no approved-device list closes. The zero-files-written close needs the customer's coverage report to show write
+  events from the same product; otherwise it flags.
+explanations:
+- BE-0019
+- BE-0025
+- BE-0029
+- BE-0037
+fingerprint:
+- role:host.name
+- role:user.name
+- role:device.id
+- role:device.event_type
+precedent_entity: role:host.name
+fingerprint_influence:
+  role:host.name:
+    rating: low
+    reason: Host that reported the event.
+  role:user.name:
+    rating: low
+    reason: Account recorded by the OS.
+  role:device.id:
+    rating: high
+    reason: Reported by the device; programmable devices can spoof it.
+  role:device.event_type:
+    rating: low
+    reason: Recorded by the endpoint control.
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: role:host.name
+    current_action: role:reporting_control.action
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce the fingerprint's host, user, event type.
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
+  - question: Q-0065
+    when:
+    - 'no'
+    then: flag
+    rule:
+      'yes':
+      - connect
+  - question: Q-0066
+    then: flag
+    rule:
+      'yes':
+        param: usb_non_storage_classes
+  - question: Q-0067
+    then: escalate
+- step: 2
+  question: Q-0066
+  rule:
+    'yes':
+      param: usb_non_storage_classes
+  on_yes: flag
+  on_no: next
+  on_unknown: flag
+- step: 3
+  question: Q-0027
+  rule:
+    'yes':
+      param: blocked_action_values
+  on_yes: close:mitigated_true_positive:blocked_by_control
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0065
+    when:
+    - 'no'
+    then: flag
+    rule:
+      'yes':
+      - connect
+  - question: Q-0067
+    then: escalate
+  - question: Q-0046
+    then: flag
+    bind:
+      key: role:user.name
+    rule:
+      gte:
+        param: alert_history_min_count
+- step: 4
+  question: Q-0043
+  on_yes: close:benign_true_positive:approved_business_exception
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0065
+    when:
+    - 'no'
+    then: flag
+    rule:
+      'yes':
+      - connect
+  - question: Q-0067
+    then: escalate
+  - question: Q-0068
+    then: flag
+    rule:
+      gte:
+        param: usb_files_written_flag
+- step: 5
+  question: Q-0044
+  rule:
+    lte: 0
+  on_yes: close:benign_true_positive:no_data_transferred
+  on_no: escalate
+  on_unknown: flag
+  guards:
+  - question: Q-0065
+    when:
+    - 'no'
+    then: flag
+    rule:
+      'yes':
+      - connect
+  - question: Q-0067
+    then: escalate
+status: draft
+version: 3
+parameters:
+  precedent_validity_hours: 72
+derived_from:
+  library: bank
+  rule: vendor:removable_media
+  title: Removable media (device control) alert
+  path: bank/intake/use_cases.yaml#UC-016
+  repo: internal
+  license: internal

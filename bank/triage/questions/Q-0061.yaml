@@ -1,0 +1,17 @@
+id: Q-0061
+text: Is the flagged content a known DLP test file or template, by content hash?
+tests: BE-0034
+attacker_influence:
+  rating: low
+  reason: Content hash; sending the exact test file gains nothing.
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  entity: role:dlp.object_hash

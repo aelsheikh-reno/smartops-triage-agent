@@ -1,0 +1,66 @@
+id: D-0016
+name: Windows Event Log Cleared
+family: endpoint
+alert_type: analytic
+techniques:
+- T1685.005
+required_roles:
+- event
+- host
+- user
+intent: Detects the Security log (1102) or System log (104) being cleared on an endpoint from Windows event logs.
+fp_quality: vague
+explanations:
+- BE-0013
+- BE-0003
+fingerprint:
+- role:host.name
+- role:user.name
+- role:event.code
+fingerprint_influence:
+  role:host.name:
+    rating: low
+    reason: Host that reported the event.
+  role:user.name:
+    rating: low
+    reason: Account recorded by the OS.
+  role:event.code:
+    rating: low
+    reason: Fixed by the OS for the event type.
+precedent_entity: role:host.name
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: role:host.name
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce the fingerprint's host, user, event code.
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
+- step: 2
+  question: Q-0023
+  on_yes: close:benign_true_positive:host_rebuild
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+status: draft
+version: 6
+derived_from:
+  library: escu
+  rule: escu:windows_event_log_cleared
+  title: Windows Event Log Cleared
+  path: detections/endpoint/windows_event_log_cleared.yml
+  repo: splunk/security_content
+  license: Apache-2.0

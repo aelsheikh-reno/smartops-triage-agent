@@ -1,0 +1,12 @@
+id: CF-0008
+name: trusted_code_signers
+description: Code-signing publishers the customer trusts for closure, plus binaries that never count as trusted even when Microsoft-signed (dump tools, LOLBins, script hosts).
+fields:
+- signer
+- excluded_binaries
+match_rule: valid signature AND signer on the list AND binary not in excluded_binaries. The exclusion list may match on name because it only blocks closure.
+collected_by: customer
+supply_effort: low
+supply_effort_reason: Short list of trusted publishers.
+version: 5
+seed_file: broker/seeds/CF-0008.yaml

@@ -1,0 +1,77 @@
+# Vendor value table (recipe layer). Maps one product's raw alert values to the bank's alert classes
+# (bank/broker/capabilities.yaml alert_classes). Rows are tried in order; the first match wins; no match gives the class default.
+# match: {<raw property>: <value or list>} compares case-insensitively; {pattern: <regex>} searches the class's role values joined by a space.
+# source: edr_api (the product's own API: authoritative for endpoint.run_status), siem_copy (the product's alert as copied into the SIEM: a fallback), or alert (values read from the normalized alert itself).
+# Each row has an id and a kind: ambiguous (the value does not say what happened: always unknown, in every mode) or
+# unverified (meaning from vendor docs, not confirmed at this customer: may support a close in Shadow and Recommend, marked
+# 'unverified mapping: <table>/<row>', never in Auto). Verified is per customer, recorded in bank/broker/customers/<c>/verifications.yaml.
+vendor: Cisco
+product: Secure Firewall (intrusion events)
+source: alert
+feed: Intrusion events, Classification description
+references:
+- tools/replay.py SNORT_CLASS (previous replay mapping)
+license: internal
+classes:
+  ids_class:
+    reads:
+    - Classification
+    rows:
+    - id: ids_class.classification_attempted_administrator_p
+      match:
+        Classification: Attempted Administrator Privilege Gain
+      value: attempted-admin
+      kind: unverified
+    - id: ids_class.classification_attempted_user_privilege
+      match:
+        Classification: Attempted User Privilege Gain
+      value: attempted-user
+      kind: unverified
+    - id: ids_class.classification_successful_administrator
+      match:
+        Classification: Successful Administrator Privilege Gain
+      value: successful-admin
+      kind: unverified
+    - id: ids_class.classification_successful_user_privilege
+      match:
+        Classification: Successful User Privilege Gain
+      value: successful-user
+      kind: unverified
+    - id: ids_class.classification_web_application_attack
+      match:
+        Classification: Web Application Attack
+      value: web-application-attack
+      kind: unverified
+    - id: ids_class.classification_a_network_trojan_was_dete
+      match:
+        Classification: A Network Trojan was Detected
+      value: trojan-activity
+      kind: unverified
+    - id: ids_class.classification_executable_code_was_detec
+      match:
+        Classification: Executable Code was Detected
+      value: shellcode-detect
+      kind: unverified
+    - id: ids_class.classification_potential_corporate_polic
+      match:
+        Classification:
+        - Potential Corporate Policy Violation
+        - Potential Corporate Privacy Violation
+      value: policy-violation
+      kind: unverified
+    - id: ids_class.classification_misc_activity
+      match:
+        Classification: Misc activity
+      value: misc-activity
+      kind: unverified
+    - id: ids_class.classification_attempted_information_lea
+      match:
+        Classification: Attempted Information Leak
+      value: attempted-recon
+      kind: unverified
+    - id: ids_class.classification_detection_of_a_network_sc
+      match:
+        Classification: Detection of a Network Scan
+      value: network-scan
+      kind: unverified
+    default: other

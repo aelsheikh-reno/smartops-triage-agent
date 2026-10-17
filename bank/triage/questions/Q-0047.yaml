@@ -1,0 +1,18 @@
+id: Q-0047
+text: Has this client hit at least the customer's threshold of distinct rules in the triage window?
+tests: BE-0037
+attacker_influence:
+  rating: none
+  reason: Counts alerts already raised.
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  key: derived:client_ip
+  distinct: role:reporting_control.signature

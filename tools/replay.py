@@ -17,7 +17,7 @@ CVE, otherwise no_data (the clean room holds no vulnerability data).
 This is a test harness, not bank content: it names source formats and products.
 Flows run on normalized alert v1 roles (the harness plays the normalizer) and typed broker answers turned into
 yes/no by each step's rule; alert classes go through the bank's value tables.
-Usage: tools/replay.py [--strict] [batch ...]   batches: escu, vendor; none means all; fails if it replays 0 detections or 0 events
+Usage: tools/replay.py [--strict] [family ...]   families as in tools/gates.sh; none means all; fails if it replays 0 detections or 0 events
 """
 import csv
 import ipaddress
@@ -133,7 +133,7 @@ def norm_windows(e):
 
 
 # The harness's normalized action for reporting_control.action. Whether the file ran is decided by the bank's
-# value table (bank/recipes/value_tables/), from the raw event ID and Action Name kept in _raw.
+# value table (bank/broker/translations/), from the raw event ID and Action Name kept in _raw.
 DEFENDER_ACTION = {"block": "blocked", "quarantine": "quarantined", "remove": "removed", "clean": "cleaned", "allow": "allowed", "no action": "detected"}
 def norm_crowdstrike(e):
     if e.get("event_simpleName") != "ProcessRollup2":
@@ -200,7 +200,7 @@ P = {
      and (int(n.get("granted_access") or "0", 16) & 0x1000 or int(n.get("granted_access") or "0", 16) & 0x40),
  "escu:creation_of_shadow_copy": lambda n: (pn(n) == "vssadmin.exe" and "create" in c(n) and "shadow" in c(n)) or (pn(n) == "wmic.exe" and "shadowcopy" in c(n) and "create" in c(n)),
  "escu:deleting_shadow_copies": lambda n: pn(n) in ("vssadmin.exe", "wmic.exe") and "delete" in c(n) and "shadow" in c(n),
- "escu:add_or_set_antivirus_exclusion": lambda n: re.search(r"(add|set)-mppreference ", c(n)) and re.search(r"-exclusion|-controlledfolderaccessallowedapplications|-attacksurfacereductiononlyexclusions", c(n)),
+ "escu:add_or_set_windows_defender_exclusion": lambda n: re.search(r"(add|set)-mppreference ", c(n)) and re.search(r"-exclusion|-controlledfolderaccessallowedapplications|-attacksurfacereductiononlyexclusions", c(n)),
  "escu:windows_event_log_cleared": lambda n: n.get("_kind") == "logclear",
  "escu:detect_remote_access_software_usage_process": lambda n: pn(n) in RMM,
  "escu:suspicious_rundll32_no_command_line_arguments": lambda n: pn(n) == "rundll32.exe" and re.search(r'rundll32(\.exe)?"?\s*$', c(n)),
@@ -208,24 +208,24 @@ P = {
  "escu:detect_mshta_url_in_command_line": lambda n: pn(n) == "mshta.exe" and re.search(r"https?://", c(n)),
  "escu:windows_vulnerable_driver_installed": lambda n: n.get("_kind") == "service" and "kernel" in (n.get("ServiceType") or "").lower() and base(n.get("ImagePath")) in LOLDRV,
  "escu:detect_sharphound_usage": lambda n: pn(n) == "sharphound.exe" or n.get("original_file_name") == "sharphound.exe",
- "vendor:ids_alert": lambda n: n.get("_kind") == "ids",
- "vendor:av_detection": lambda n: n.get("_kind") == "av",
- "vendor:firewall_deny": lambda n: n.get("_kind") == "conn" and n.get("action") == "blocked",
+ "product_alert:ids_signature": lambda n: n.get("_kind") == "ids",
+ "product_alert:av_edr_malware": lambda n: n.get("_kind") == "av",
+ "product_alert:firewall_deny": lambda n: n.get("_kind") == "conn" and n.get("action") == "blocked",
 }
 # Vendor families replayed on vendor telemetry that ESCU tests ship with.
 VENDOR = {
- "vendor:ids_alert": ["detections/network/cisco_secure_firewall___intrusion_events_by_threat_activity.yml", "detections/network/cisco_secure_firewall___high_priority_intrusion_classification.yml"],
- "vendor:av_detection": ["detections/endpoint/windows_defender_threat_detected_on_kernel_object_path.yml"],
- "vendor:firewall_deny": ["detections/network/cisco_secure_firewall___blocked_connection.yml"],
+ "product_alert:ids_signature": ["detections/network/cisco_secure_firewall___intrusion_events_by_threat_activity.yml", "detections/network/cisco_secure_firewall___high_priority_intrusion_classification.yml"],
+ "product_alert:av_edr_malware": ["detections/endpoint/windows_defender_threat_detected_on_kernel_object_path.yml"],
+ "product_alert:firewall_deny": ["detections/network/cisco_secure_firewall___blocked_connection.yml"],
 }
 NOT_REPLAYABLE = {
- "vendor:waf_alert": "no WAF event dataset ships with any ESCU test",
- "vendor:email_gateway": "no email-gateway event dataset ships with any ESCU test",
- "vendor:user_reported_phishing": "no user-report dataset exists in splunk/attack_data",
- "vendor:dlp_match": "no DLP event dataset ships with any ESCU test",
- "vendor:proxy_block": "ESCU proxy datasets hold allowed requests only, no URL-filter blocks",
- "vendor:removable_media": "no device-control event dataset ships with any ESCU test",
- "vendor:removable_media_write": "no device-control event dataset ships with any ESCU test",
+ "product_alert:waf_block": "no WAF event dataset ships with any ESCU test",
+ "product_alert:email_gateway_threat": "no email-gateway event dataset ships with any ESCU test",
+ "product_alert:user_reported_email": "no user-report dataset exists in splunk/attack_data",
+ "product_alert:dlp_policy_match": "no DLP event dataset ships with any ESCU test",
+ "product_alert:proxy_url_block": "ESCU proxy datasets hold allowed requests only, no URL-filter blocks",
+ "product_alert:device_control_connect": "no device-control event dataset ships with any ESCU test",
+ "product_alert:device_control_write": "no device-control event dataset ships with any ESCU test",
 }
 
 
@@ -299,6 +299,8 @@ def derive(d, n):
 def measure(b, q, inputs, n, ctx):
     """The broker's typed answer for one question on one alert, or None for status unknown."""
     cap = q["capability"]["name"]
+    if q["id"] in (ctx.get("overrides") or {}):
+        return ctx["overrides"][q["id"]]   # a regression case supplies a broker answer the clean room cannot give
     optional = set(q["capability"].get("optional_inputs") or [])
     for kind, name in B.walk_refs({k: v for k, v in inputs.items() if k not in optional}):
         if kind != "bind" and ref_value(f"{kind}:{name}", n) in (None, ""):
@@ -313,12 +315,17 @@ def measure(b, q, inputs, n, ctx):
             values = {r: n.get(r) for r in reads}
             if all(v in (None, "") for v in values.values()):
                 return None
-        return B.classify_effective(b, cls, values, tables, ctx=ctx)[0]
+            # further role inputs (for example the email delivery stage) are read by the translation too
+            values.update({str(v).split(":", 1)[1]: n.get(str(v).split(":", 1)[1]) for k, v in inputs.items()
+                           if k not in ("class", "of") and str(v).startswith("role:")})
+        v, ctx["_trust"], ctx["_prov"] = B.classify_effective(b, cls, values, tables, ctx=ctx, question=q["id"])
+        return v
     if cap == "endpoint.run_status":
         # The endpoint API is authoritative (_api: the vendor alerts it matched); without it the SIEM's copy of the alert
         # is the fallback (_raw read through the product's siem_copy table, else the generic one).
         copy = {"raw": n.get("_raw") or {"value": n.get("reporting_control.action_raw")}, "tables": n.get("_tables") or []}
-        return B.run_status(b, n.get("_api"), copy, ctx=ctx)[0]
+        v, ctx["_trust"], ctx["_prov"] = B.run_status(b, n.get("_api"), copy, ctx=ctx)
+        return v
     if cap == "list.lookup" and (b["facts"].get(inputs.get("list")) or {}).get("default_entries"):
         # A context list that starts from default entries (CF-0031 internal networks: the private ranges) holds them in the clean room.
         import ipaddress
@@ -349,19 +356,29 @@ def measure(b, q, inputs, n, ctx):
 
 
 def answer(b, q, item, n, ctx, d):
+    """The Triage side of one question: the broker's answer, status and trust, turned into yes / no / unknown by the step's rule.
+    Records (question, yes/no/unknown, trust, provenance) in ctx["answers"]; the triage side reads only the trust."""
     if set((q.get("needs") or {}).get("coverage") or []) - set(ctx.get("coverage") or []):
         return "unknown"   # clean room: no coverage report, so the question is no_capability
+    ctx["_trust"], ctx["_prov"] = "checked", None
     value = measure(b, q, B.step_inputs(q, item), n, ctx)
-    return B.apply_rule(b, item.get("rule"), value, B.answer_type(b, q["id"]), d)
+    a = B.apply_rule(b, item.get("rule"), value, B.answer_type(b, q["id"]), d)
+    ctx.setdefault("answers", []).append((q["id"], a, ctx["_trust"], ctx["_prov"]))
+    return a
 
 
 def run_flow(b, d, n, ctx):
-    """One alert through one flow in ctx["mode"] (shadow, recommend or auto; default recommend). A close that rests on an
-    unverified value-table mapping is marked in the trail, as the explanation and decision log would mark it."""
-    ctx["marks"] = []
+    """One alert through one flow in ctx["mode"] (shadow, recommend or auto; default recommend).
+    The Auto rule, in triage terms: a not_checked answer may support a close in Shadow and Recommend (the close is marked
+    "not_checked: <question>" in the explanation and decision log), never in Auto (the close becomes a flag). An answer of
+    unknown supports nothing. The provenance in brackets is the broker's, shown here for the gate report only."""
+    ctx["answers"] = []
     out, trail = _run_flow(b, d, n, ctx)
-    if out.startswith("close") and ctx["marks"]:
-        trail = trail + sorted(set(ctx["marks"]))
+    nc = sorted({f"{qid} [{prov}]" for qid, a, trust, prov in ctx["answers"] if trust == "not_checked" and a != "unknown"})
+    if out.startswith("close") and nc:
+        if ctx.get("mode") == "auto":
+            return "flag", trail + [f"not_checked answer in Auto: {', '.join(nc)} -> flag"]
+        trail = trail + [f"not_checked: {x}" for x in nc]
     return out, trail
 
 
@@ -410,57 +427,65 @@ def api(*evidence):
 VERIFIED = ["microsoft-defender-for-endpoint", "generic"]   # tables a synthetic customer has verified (as after #20 and onboarding)
 USB = {"_coverage": ["device_control_write_events"], "host.name": "srv-01", "user.name": "u1", "event.time": "2026-10-17T00:00:00Z", "device.event_type": "connect", "device.class": "storage",
        "reporting_control.action": "allowed", "device.files_written": 0}
+MAIL = {"_overrides": {"Q-0035": True}, "email.sender": "a@example.org", "email.subject": "invoice", "email.recipient": "u1@corp.example",
+        "email.url": "http://example.org/x", "file.sha256": "1" * 64, "event.time": "2026-10-17T00:00:00Z", "reporting_control.action": "quarantined"}
 API_PREVENTED = dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api({"detectionStatus": "prevented"})})
 BLOCK_1117 = dict(AV, **PUA, **{"file.sha256": "e" * 64, "reporting_control.action_raw": "Block", "_raw": {"EventID": "1117", "Action Name": "Block"}, "_tables": EVENT_LOG})
 
-# (detection, name, alert, required outcome). A required outcome ending in "+unverified" also requires the close to be marked
-# "unverified mapping: <table>/<row>". Alert keys starting with _ are harness inputs: _mode (shadow, recommend, auto; default
+# (detection, name, alert, required outcome). A required outcome ending in "+not_checked" also requires the close to be marked
+# "not_checked: <question>"; any other close must not be marked. Alert keys starting with _ are harness inputs: _mode (shadow, recommend, auto; default
 # recommend), _api (the endpoint API's matches), _raw/_tables (the SIEM copy), _coverage (coverage reports present),
-# _context (context answers; None = unknown or source unavailable), _verified (tables a synthetic customer has verified).
+# _context (context answers; None = unknown or source unavailable), _verified (tables a synthetic customer has verified),
+# _overrides (broker answers per question the clean room cannot give, for example the mailbox status).
 REGRESSION = [
- ("vendor:av_detection", "no hash, high-risk class, detected (not blocked) must escalate",
+ ("D-0026", "no hash, high-risk class, detected (not blocked) must escalate",
   dict(AV, **{"reporting_control.signature": "HackTool:Win32/Mimikatz", "reporting_control.category": "hacktool", "reporting_control.action_raw": "detected"}), "escalate"),
- ("vendor:av_detection", "no hash, high-risk class, blocked must escalate",
+ ("D-0026", "no hash, high-risk class, blocked must escalate",
   dict(AV, **{"reporting_control.signature": "HackTool:Win32/Mimikatz", "reporting_control.category": "hacktool", "reporting_control.action_raw": "blocked_pre_execution"}), "escalate"),
- ("vendor:av_detection", "Defender API detectionStatus blocked (remediated at run time), low-risk class: no close",
+ ("D-0026", "Defender API detectionStatus blocked (remediated at run time), low-risk class: no close",
   dict(AV, **PUA, **{"file.sha256": "a" * 64, "reporting_control.vendor_alert_id": "da-1", "_api": api({"detectionStatus": "blocked"})}), "escalate"),
- ("vendor:av_detection", "Defender API quarantine only (no detection status), low-risk class: flag",
+ ("D-0026", "Defender API quarantine only (no detection status), low-risk class: flag",
   dict(AV, **PUA, **{"file.sha256": "b" * 64, "reporting_control.vendor_alert_id": "da-2", "_api": api({"remediationStatus": "quarantined"})}), "flag"),
- ("vendor:av_detection", "any product, no API, SIEM copy quarantined only (ambiguous row), low-risk class: flag",
+ ("D-0026", "any product, no API, SIEM copy quarantined only (ambiguous row), low-risk class: flag",
   dict(AV, **{"file.sha256": "c" * 64, "reporting_control.signature": "Adware:Win32/X", "reporting_control.category": "adware",
               "reporting_control.action_raw": "quarantined"}), "flag"),
- ("vendor:av_detection", "Defender API prevented, low-risk, unverified rows, Recommend: recommended close, marked unverified",
-  dict(API_PREVENTED, _mode="recommend"), "close:mitigated_true_positive+unverified"),
- ("vendor:av_detection", "Defender API prevented, low-risk, unverified rows, Shadow: close shown, marked unverified",
-  dict(API_PREVENTED, _mode="shadow"), "close:mitigated_true_positive+unverified"),
- ("vendor:av_detection", "Defender API prevented, low-risk, unverified rows, Auto: not closed (flag)",
+ ("D-0026", "Defender API prevented, low-risk, unverified rows, Recommend: recommended close, marked not_checked",
+  dict(API_PREVENTED, _mode="recommend"), "close:mitigated_true_positive+not_checked"),
+ ("D-0026", "Defender API prevented, low-risk, unverified rows, Shadow: close shown, marked not_checked",
+  dict(API_PREVENTED, _mode="shadow"), "close:mitigated_true_positive+not_checked"),
+ ("D-0026", "Defender API prevented, low-risk, unverified rows, Auto: not closed (flag)",
   dict(API_PREVENTED, _mode="auto"), "flag"),
- ("vendor:av_detection", "Defender API prevented, low-risk, rows verified for the customer, Auto: mitigated close",
+ ("D-0026", "Defender API prevented, low-risk, rows verified for the customer, Auto: mitigated close",
   dict(API_PREVENTED, _mode="auto", _verified=VERIFIED), "close:mitigated_true_positive"),
- ("vendor:av_detection", "C-06 source unavailable: the same verified Auto close flags (context_unknown)",
+ ("D-0026", "C-06 source unavailable: the same verified Auto close flags (context_unknown)",
   dict(API_PREVENTED, _mode="auto", _verified=VERIFIED, _context={"C-06": None}), "flag"),
- ("vendor:av_detection", "event 1117 Block (ambiguous), Shadow: flag", dict(BLOCK_1117, _mode="shadow"), "flag"),
- ("vendor:av_detection", "event 1117 Block (ambiguous), Recommend: flag", dict(BLOCK_1117, _mode="recommend"), "flag"),
- ("vendor:av_detection", "event 1117 Block (ambiguous), Auto, other rows verified: flag", dict(BLOCK_1117, _mode="auto", _verified=VERIFIED), "flag"),
- ("vendor:av_detection", "Defender API unavailable, SIEM event-log copy 1116 (detected): ran stands from the fallback, escalate",
+ ("D-0026", "event 1117 Block (ambiguous), Shadow: flag", dict(BLOCK_1117, _mode="shadow"), "flag"),
+ ("D-0026", "event 1117 Block (ambiguous), Recommend: flag", dict(BLOCK_1117, _mode="recommend"), "flag"),
+ ("D-0026", "event 1117 Block (ambiguous), Auto, other rows verified: flag", dict(BLOCK_1117, _mode="auto", _verified=VERIFIED), "flag"),
+ ("D-0026", "Defender API unavailable, SIEM event-log copy 1116 (detected): ran stands from the fallback, escalate",
   dict(AV, **PUA, **{"file.sha256": "e" * 64, "reporting_control.action_raw": "detected", "_raw": {"EventID": "1116", "Action Name": "Not Applicable"},
                      "_tables": EVENT_LOG}), "escalate"),
- ("vendor:av_detection", "no vendor alert ID, fallback match finds two Defender alerts, low-risk class: flag",
+ ("D-0026", "no vendor alert ID, fallback match finds two Defender alerts, low-risk class: flag",
   dict(AV, **PUA, **{"file.sha256": "f" * 64, "reporting_control.endpoint_device": "dev-1",
                      "_api": api({"detectionStatus": "prevented"}, {"detectionStatus": "prevented"})}), "flag"),
- ("vendor:av_detection", "no vendor alert ID, fallback match finds no Defender alert, low-risk class: flag",
+ ("D-0026", "no vendor alert ID, fallback match finds no Defender alert, low-risk class: flag",
   dict(AV, **PUA, **{"file.sha256": "0" * 64, "reporting_control.endpoint_device": "dev-1", "_api": api()}), "flag"),
- ("vendor:removable_media", "removable media, C-08 unknown: flag (context_unknown), never escalate",
+ ("D-0031", "email quarantined before delivery, Recommend: close (blocked by the control), marked not_checked",
+  dict(MAIL, **{"email.delivery_stage": "pre_delivery"}), "close:mitigated_true_positive+not_checked"),
+ ("D-0031", "email quarantined after delivery (a purge of a delivered message): ambiguous, flag",
+  dict(MAIL, **{"email.delivery_stage": "post_delivery"}), "flag"),
+ ("D-0031", "email quarantined with no delivery stage: ambiguous, flag", dict(MAIL), "flag"),
+ ("D-0034", "removable media, C-08 unknown: flag (context_unknown), never escalate",
   dict(USB, _context={"C-06": False}), "flag"),
- ("vendor:removable_media", "removable media, C-08 server: Q-0067 escalates",
+ ("D-0034", "removable media, C-08 server: Q-0067 escalates",
   dict(USB, _context={"C-06": False, "C-08": "server"}), "escalate"),
- ("vendor:removable_media", "removable media, C-08 workstation, Recommend: close (no data transferred), marked unverified",
-  dict(USB, _context={"C-06": False, "C-08": "workstation"}), "close:benign_true_positive+unverified"),
- ("vendor:removable_media", "removable media, C-08 workstation, unverified rows, Auto: flag",
+ ("D-0034", "removable media, C-08 workstation, Recommend: close (no data transferred), marked not_checked",
+  dict(USB, _context={"C-06": False, "C-08": "workstation"}), "close:benign_true_positive+not_checked"),
+ ("D-0034", "removable media, C-08 workstation, unverified rows, Auto: flag",
   dict(USB, _mode="auto", _context={"C-06": False, "C-08": "workstation"}), "flag"),
- ("vendor:removable_media", "removable media, C-08 workstation, rows verified, Auto: close",
+ ("D-0034", "removable media, C-08 workstation, rows verified, Auto: close",
   dict(USB, _mode="auto", _verified=VERIFIED, _context={"C-06": False, "C-08": "workstation"}), "close:benign_true_positive"),
- ("vendor:removable_media", "removable media, C-06 unavailable and C-08 workstation: flag (context_unknown)",
+ ("D-0034", "removable media, C-06 unavailable and C-08 workstation: flag (context_unknown)",
   dict(USB, _context={"C-06": None, "C-08": "workstation"}), "flag"),
 ]
 
@@ -476,24 +501,27 @@ def synthetic_customer(b, tables):
     return {"customer": "regression", "products": {t: "1.0" for t in tables}, "verifications": recs, "modes": {}}
 
 
-def run_regression(b, ctx):
+def run_regression(b, ctx, batches):
     failures = []
     import copy
     for did, name, alert, want in REGRESSION:
+        if b["detections"][did]["family"] not in batches:
+            continue
         bb, customer = b, None
         if alert.get("_verified"):
             bb, customer = copy.deepcopy(b), "regression"
             bb["customers"][customer] = synthetic_customer(bb, alert["_verified"])
         n = derive(bb["detections"][did], dict(alert, _idx=0))
         c = dict(ctx, alerts=[n], conns=[], context=dict(ctx.get("context") or {}, **(alert.get("_context") or {})), coverage=alert.get("_coverage") or [],
+                 overrides=alert.get("_overrides") or {},
                  mode=alert.get("_mode", "recommend"), customer=customer, today=TODAY)
         out, trail = run_flow(bb, bb["detections"][did], n, c)
-        need_mark = want.endswith("+unverified")
-        want = want.replace("+unverified", "")
+        need_mark = want.endswith("+not_checked")
+        want = want.replace("+not_checked", "")
         got = out if want.startswith("close:") and out.startswith(want) else out.split(":")[0]
         ok = (got == want or (want.startswith("close:") and out.startswith(want))) and \
-            (not need_mark or any(t.startswith("unverified mapping:") for t in trail)) and \
-            (need_mark or not any(t.startswith("unverified mapping:") for t in trail))
+            (not need_mark or any(t.startswith("not_checked:") for t in trail)) and \
+            (need_mark or not any(t.startswith("not_checked:") for t in trail))
         print(f"  {'ok  ' if ok else 'FAIL'} {did}: {name} -> {out}  [{' > '.join(trail)}]")
         if not ok:
             failures.append(name)
@@ -507,14 +535,18 @@ def main():
     # Clean-room customer: no crown-jewel list entries (C-06 answered no) and no asset inventory (C-08 unknown: Q-0067 flags).
     ctx = {"vuln_unknown": Counter(), "context": {"C-06": False}, "mode": "recommend", "customer": None, "today": TODAY}
     rows, cannot, fails, mitigated = [], [], [], []
+    # The harness picks true-positive events by the source rule's logic, so it keys on the source rule ID from the intake
+    # rule map (escu:<rule file> or product_alert:<kind>); results are reported by D-ID.
+    rule_of = {d_id: sid for sid, d_id in B.source_ids(b, ("escu", "product_alert")).items()}
     for did, d in sorted(b["detections"].items()):
-        if B.batch_of("rule", did) not in batches:
+        if B.batch_of("rule", d) not in batches:
             continue
-        if did in NOT_REPLAYABLE:
-            cannot.append((did, NOT_REPLAYABLE[did]))
+        sid = rule_of.get(did)
+        if sid in NOT_REPLAYABLE:
+            cannot.append((did, NOT_REPLAYABLE[sid]))
             continue
         src = d.get("source") if isinstance(d.get("source"), dict) else {}
-        rules = VENDOR.get(did) or ([src["path"]] if src.get("repo") not in (None, "internal") else [])
+        rules = VENDOR.get(sid) or ([src["path"]] if src.get("repo") not in (None, "internal") else [])
         tests = []
         for r in rules:
             y = B._load(os.path.join(ESCU, r))
@@ -534,7 +566,7 @@ def main():
                 notes.append(f"{t.get('sourcetype')} not used by this flow's fields")
             evs += [x for x in norm if x]
         ctx["conns"] = [to_roles(x) for x in evs if x.get("_kind") == "conn"]
-        tp = [derive(d, to_roles(x)) for x in evs if P[did](x)]
+        tp = [derive(d, to_roles(x)) for x in evs if P[sid](x)]
         for i, x in enumerate(tp):
             x["_idx"] = i
         ctx["alerts"] = tp
@@ -568,8 +600,8 @@ def main():
     if ctx["vuln_unknown"]:
         print("\nVulnerability step answered unknown (never closes): " + ", ".join(f"{k} {v}" for k, v in sorted(ctx["vuln_unknown"].items())))
     print("\nRegression cases:")
-    reg_fail = run_regression(b, ctx) if "vendor" in batches else []
-    n_reg = len(REGRESSION) if "vendor" in batches else 0
+    reg_fail = run_regression(b, ctx, batches)
+    n_reg = sum(1 for did, *_ in REGRESSION if b["detections"][did]["family"] in batches)
     B.require_loaded(f"replay ({', '.join(sorted(batches))})", detections=len(rows), events=sum(r[2] for r in rows))
     bad = fails or reg_fail or (strict and mitigated)
     print(f"\nreplay: {sum(r[2] for r in rows)} TP events in {len(rows)} detections, {n_reg - len(reg_fail)}/{n_reg} regression cases; "

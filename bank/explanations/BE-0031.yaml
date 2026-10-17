@@ -1,8 +1,0 @@
-id: BE-0031
-name: Approved security tooling
-description: An approved security tool, or a sandbox or analysis host, triggered the antivirus as expected.
-source:
-- bank/use_cases.yaml triage_hints
-- external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
-license: internal
-version: 1

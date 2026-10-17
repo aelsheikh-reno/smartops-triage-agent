@@ -1,6 +1,6 @@
 # Context questions
 
-Status: in the bank as `bank/context/C-01.yaml`…`C-08.yaml` and `bank/context_rules.yaml` (draft); the runtime that asks them is (designed, not built). Design reference: `docs/design-decisions.md` §5. Rules every broker question follows: `docs/broker-questions.md`.
+Status: in the bank as `bank/triage/context/C-01.yaml`…`C-08.yaml` and `bank/triage/context_rules.yaml` (draft), with their answer types in `bank/contract/questions.yaml` and the capability and context list that answer each one on the broker side (`bank/broker/question_map.yaml`); the runtime that asks them is (designed, not built). Design reference: `docs/design-decisions.md` §5. Rules every broker question follows: `docs/broker-questions.md`.
 
 There is no separate context service. Context is a small fixed set of broker questions that the Triage agent asks once per entity per grouping window, at the "Group by entity" step (§6). The Tool Broker batches them, answers them from frozen recipes, and caches the answers per entity (§21). Every alert on the entity in the window reads the same cached answers.
 
@@ -24,6 +24,8 @@ C-03 deviates from a plain yes/no on purpose. "Higher than this alert" depends o
 C-04 is keyed on the fingerprint (rule plus entity plus key attributes, §14), so it is cached per fingerprint rather than per entity.
 
 ## Answers
+Context questions for one entity grouping window carry its `entity_window_id` (design-decisions §9, Parallel runs and asynchronous answers). Every alert run in the window reads the same cached answers, and each run records which context measurements (`measurement_id`) it used. Like every broker answer, a context answer carries a status and a trust (`bank/contract/answer.yaml`).
+
 Each answer follows the broker answer contract in `docs/broker-questions.md`:
 - `status`: `answered`, `unknown`, `source_unavailable` or `sources_disagree`
 - `provenance`: source, `observed_at`, time-to-live, recipe version, evidence link
@@ -41,7 +43,7 @@ Each answer follows the broker answer contract in `docs/broker-questions.md`:
 
 Before round 3 these were worst-case defaults (treat as critical, as a crown jewel, as privileged, as a server). A worst-case default could escalate on missing data; now missing data flags and an analyst decides.
 
-Q-0067 (removable media: is the host a server or crown jewel?) is not a broker call of its own: it is a Triage-side rule over the cached answers C-06 and C-08 (`bank/context_rules.yaml` `q0067`, capability `context.rule`). It answers yes when C-06 is yes or C-08 is server, and its guard escalates. If the answer depends on an unknown C-06 or C-08, it answers unknown and the guard flags (`context_unknown`); a known crown jewel or a known server answers yes even when the other is unknown. Before this it was a list lookup.
+Q-0067 (removable media: is the host a server or crown jewel?) is not a broker call of its own: it is a Triage-side rule over the cached answers C-06 and C-08 (`bank/triage/context_rules.yaml` `q0067`, capability `context.rule`). It answers yes when C-06 is yes or C-08 is server, and its guard escalates. If the answer depends on an unknown C-06 or C-08, it answers unknown and the guard flags (`context_unknown`); a known crown jewel or a known server answers yes even when the other is unknown. Before this it was a list lookup.
 
 ## What is not a context question
 Asked only when a flow step reaches it, as a triage question with its own bank ID: threat intel, baselines, prevalence, EDR detail (process tree, signer, hash).

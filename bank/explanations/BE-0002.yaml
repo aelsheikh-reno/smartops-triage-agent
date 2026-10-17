@@ -1,8 +1,0 @@
-id: BE-0002
-name: Software deployment or management tool
-description: A sanctioned deployment or endpoint management platform runs the tool or command on the customer's behalf.
-source:
-  - splunk/security_content detections/endpoint/windows_service_creation_on_remote_endpoint.yml (known_false_positives)
-  - elastic/detection-rules rules/windows/credential_access_lsass_openprocess_api.toml (investigation: planned patches, updates, software installations)
-license: [Apache-2.0, Elastic-2.0]
-version: 1

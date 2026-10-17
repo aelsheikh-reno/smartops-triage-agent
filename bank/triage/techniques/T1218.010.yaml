@@ -1,0 +1,76 @@
+id: T1218.010
+name: Regsvr32
+attack_version: '20.0'
+required_roles:
+- host
+- user
+- process
+- event
+template: proxy_exec
+covers: Signed-binary proxy execution
+max_mode: recommend
+max_mode_reason: technique fallback with no true-positive replay data (#14); capped at Recommend until it has some
+fingerprint:
+- role:host.name
+- role:user.name
+- role:process.sha256
+- role:process.parent_name
+fingerprint_influence:
+  role:host.name:
+    rating: low
+    reason: Host that reported the event.
+  role:user.name:
+    rating: low
+    reason: Account recorded by the OS.
+  role:process.sha256:
+    rating: low
+    reason: Computed by the sensor; reproducing it means running the same binary.
+  role:process.parent_name:
+    rating: high
+    reason: File name the attacker can choose.
+precedent_entity: role:host.name
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: role:host.name
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce the fingerprint's host, user, process hash.
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
+- step: 2
+  question: Q-0019
+  bind:
+    entity: entity:parent_process
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 3
+  question: Q-0014
+  rule:
+    gte:
+      param: entity_baseline_min_days
+  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0015
+  rule:
+    gte:
+      param: org_prevalence_min_hosts
+  on_yes: close:benign_true_positive:prevalent_in_org
+  on_no: escalate
+  on_unknown: flag
+derived_from:
+  source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
+  license: MITRE ATT&CK Terms of Use
+status: draft
+version: 3

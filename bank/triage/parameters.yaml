@@ -1,0 +1,427 @@
+# Triage-side parameters. Thresholds live only here, never in a question or in the broker; the Tool Broker returns
+# counts and classes, and the Triage agent applies these (docs/broker-questions.md).
+#
+# Every parameter has a default, bounds (min/max for numbers; min_items/max_items and the allowed values for lists)
+# and the direction that reduces scrutiny. Precedence: customer + detection > customer > detection > global (this file).
+# Detections set detection defaults under `parameters:`. Customer overrides live in bank/triage/customers/<customer>/
+# parameters.yaml; validate rejects any value outside its bounds, and any override in the reduce-scrutiny direction
+# without approved_by, owner and expiry (a human approves; the Use Case Manager only proposes).
+precedence:
+- customer_detection
+- customer
+- detection
+- global
+parameters:
+  precedent_validity_hours:
+    default: 24
+    bounds:
+      min: 1
+      max: 72
+    reduces_scrutiny_when: higher
+    description: How long a qualifying close of the same fingerprint stays a precedent (Q0). Detections may set a shorter or longer value up to the maximum.
+    unit: hours
+  q0_min_independent_closes:
+    default: 2
+    bounds:
+      min: 2
+      max: 5
+    reduces_scrutiny_when: lower
+    description: Independent analyst closes of the fingerprint (distinct analysts) that make a precedent when no close passed audit.
+  entity_grouping_window_minutes:
+    default: 10
+    bounds:
+      min: 5
+      max: 60
+    reduces_scrutiny_when: lower
+    description: Window over which intake groups alerts by entity; context questions are asked once per entity per window. Set per entity class (C-08) for the entity guard.
+    unit: minutes
+    by_entity_class:
+      server: 10
+      workstation: 10
+      network: 10
+      other: 10
+  entity_guard_min_alerts:
+    default: 3
+    bounds:
+      min: 2
+      max: 10
+    reduces_scrutiny_when: higher
+    description: Counted alerts on the entity in the grouping window (C-02) that, with entity_guard_min_detections, make the entity hot. Set per entity class (C-08); an unanswered class counts as server.
+    by_entity_class:
+      server: 3
+      workstation: 3
+      network: 3
+      other: 3
+  entity_guard_min_detections:
+    default: 2
+    bounds:
+      min: 2
+      max: 5
+    reduces_scrutiny_when: higher
+    description: Distinct detections among them (C-02) that, with entity_guard_min_alerts, make the entity hot.
+    by_entity_class:
+      server: 2
+      workstation: 2
+      network: 2
+      other: 2
+  triage_lookback_hours:
+    default: 24
+    bounds:
+      min: 24
+      max: 24
+    reduces_scrutiny_when: lower
+    description: 'The triage window: look-back only, ending at the alert time. Fixed at 24h (C-03 and event lookups).'
+    unit: hours
+  edr_alert_match_window_minutes:
+    default: 10
+    bounds:
+      min: 1
+      max: 60
+    reduces_scrutiny_when: higher
+    description: When the normalized alert carries no vendor alert ID, the Tool Broker matches the endpoint product's alert by device, file hash and this window around the alert time (endpoint.run_status).
+      A wider window risks matching another alert. No match, or more than one, answers unknown.
+    unit: minutes
+  alert_history_min_count:
+    default: 3
+    bounds:
+      min: 2
+      max: 20
+    reduces_scrutiny_when: higher
+    description: Earlier alerts with the same key in the triage window that turn a close into a flag (a burst is not noise)
+  ids_history_min_count:
+    default: 5
+    bounds:
+      min: 2
+      max: 50
+    reduces_scrutiny_when: higher
+    description: Earlier IDS alerts from the same source in the triage window that flag
+  proxy_history_min_count:
+    default: 10
+    bounds:
+      min: 3
+      max: 50
+    reduces_scrutiny_when: higher
+    description: Earlier proxy blocks with the same fingerprint, or from one host to one domain, in the triage window that turn a close into a flag (proxy alerts repeat more than other families)
+  waf_distinct_signatures_min:
+    default: 5
+    bounds:
+      min: 2
+      max: 50
+    reduces_scrutiny_when: higher
+    description: Distinct WAF rules hit by one client in the triage window that flag
+  entity_baseline_min_days:
+    default: 3
+    bounds:
+      min: 3
+      max: 30
+    reduces_scrutiny_when: lower
+    description: Distinct days in the lookback the entity must have shown the same behavior for a baseline yes
+  entity_baseline_lookback_days:
+    default: 30
+    bounds:
+      min: 14
+      max: 90
+    reduces_scrutiny_when: higher
+    description: Lookback for entity.baseline, ending before the triage window (a window sent to the broker, not a threshold)
+    unit: days
+  org_prevalence_min_hosts:
+    default: 5
+    bounds:
+      min: 3
+      max: 50
+    reduces_scrutiny_when: lower
+    description: Hosts the pattern must reach in at least org_prevalence_min_weeks of the org_prevalence_of_weeks weeks for a prevalence yes (the Triage side compares the broker's k-th lowest weekly count with it)
+  org_prevalence_of_weeks:
+    default: 4
+    bounds:
+      min: 3
+      max: 12
+    reduces_scrutiny_when: higher
+    category: statistic_setting
+    description: 'Weeks before the alert window the org.prevalence statistic examines. A setting of the broker''s statistic (k-th lowest weekly host count, k = of_weeks - min_weeks + 1), not a threshold:
+      the threshold stays org_prevalence_min_hosts on the Triage side. More weeks with the same min_weeks is easier to meet, so raising it reduces scrutiny.'
+    unit: weeks
+  org_prevalence_min_weeks:
+    default: 3
+    bounds:
+      min: 2
+      max: 12
+    reduces_scrutiny_when: lower
+    category: statistic_setting
+    description: How many of the of_weeks weeks must reach org_prevalence_min_hosts. Sets which weekly count the broker returns (k = of_weeks - min_weeks + 1); must not exceed org_prevalence_of_weeks.
+    unit: weeks
+  question_timeout_seconds:
+    default: 10
+    bounds:
+      min: 1
+      max: 60
+    reduces_scrutiny_when: higher
+    description: Deadline for one broker answer. No answer by the deadline gives status unknown and the flow continues; a late answer is logged and discarded, never applied. A longer deadline lets more answers arrive, so it reduces scrutiny.
+    unit: seconds
+  org_prevalence_escape_min_hosts:
+    default: 1
+    bounds:
+      min: 1
+      max: 1
+    reduces_scrutiny_when: higher
+    description: Hosts outside the approved security-tooling and analysis hosts on which the file's hash may appear in the alert window before the guard fires. Fixed at 1.
+  vuln_data_max_age_days:
+    default: 30
+    bounds:
+      min: 1
+      max: 90
+    reduces_scrutiny_when: higher
+    description: Oldest vulnerability data vuln.not_applicable may rely on (a window sent to the broker)
+    unit: days
+  dlp_record_count_flag:
+    default: 1000
+    bounds:
+      min: 10
+      max: 100000
+    reduces_scrutiny_when: higher
+    description: Records or matches in one DLP event that flag even to approved destinations
+  usb_files_written_flag:
+    default: 50
+    bounds:
+      min: 1
+      max: 10000
+    reduces_scrutiny_when: higher
+    description: Files written in one event that flag even with an approved exception
+  blocked_action_values:
+    default:
+    - blocked
+    - dropped
+    - denied
+    - rejected
+    - prevented
+    - reset
+    bounds:
+      min_items: 1
+      max_items: 18
+      allowed: &id001
+      - allowed
+      - delivered
+      - detected
+      - alerted
+      - blocked
+      - dropped
+      - denied
+      - rejected
+      - prevented
+      - reset
+      - deleted
+      - quarantined
+      - held
+      - pending
+      - pending release
+      - encrypted pending
+      - justification pending
+      - other
+    reduces_scrutiny_when: grows
+    description: Normalized action values meaning the control stopped the item before it took effect
+  email_blocked_action_values:
+    default:
+    - blocked
+    - rejected
+    - quarantined
+    - deleted
+    - dropped
+    bounds:
+      min_items: 1
+      max_items: 18
+      allowed: *id001
+    reduces_scrutiny_when: grows
+    description: Email gateway actions meaning the message was stopped before delivery (quarantine at the gateway counts; every-mailbox status is checked separately)
+  dlp_final_block_values:
+    default:
+    - blocked
+    - denied
+    - deleted
+    - prevented
+    bounds:
+      min_items: 1
+      max_items: 18
+      allowed: *id001
+    reduces_scrutiny_when: grows
+    description: DLP actions that are final
+  dlp_pending_values:
+    default:
+    - quarantined
+    - held
+    - pending
+    - pending release
+    - encrypted pending
+    - justification pending
+    bounds:
+      min_items: 0
+      max_items: 18
+      allowed: *id001
+    reduces_scrutiny_when: shrinks
+    description: 'DLP states that are not final: unknown unless a later status confirms them'
+  dlp_high_severity_values:
+    default:
+    - critical
+    - high
+    bounds:
+      min_items: 1
+      max_items: 6
+      allowed:
+      - informational
+      - low
+      - medium
+      - high
+      - critical
+      - other
+    reduces_scrutiny_when: shrinks
+    description: DLP severities that flag even to approved destinations
+  web_low_risk_categories:
+    default:
+    - advertising
+    - web ads
+    - streaming media
+    - social networking
+    - games
+    - shopping
+    - entertainment
+    - sports
+    - travel
+    - news and media
+    bounds:
+      min_items: 0
+      max_items: 27
+      allowed: &id002
+      - advertising
+      - web ads
+      - streaming media
+      - social networking
+      - games
+      - shopping
+      - entertainment
+      - sports
+      - travel
+      - news and media
+      - malware
+      - malicious
+      - phishing
+      - command and control
+      - botnet
+      - spyware
+      - cryptomining
+      - newly registered
+      - newly observed
+      - parked
+      - dynamic dns
+      - proxy avoidance
+      - uncategorized
+      - unknown
+      - unrated
+      - not rated
+      - other
+    reduces_scrutiny_when: grows
+    description: Normalized web categories treated as low risk once blocked
+  web_high_risk_categories:
+    default:
+    - malware
+    - malicious
+    - phishing
+    - command and control
+    - botnet
+    - spyware
+    - cryptomining
+    - newly registered
+    - dynamic dns
+    - parked
+    bounds:
+      min_items: 1
+      max_items: 27
+      allowed: *id002
+    reduces_scrutiny_when: shrinks
+    description: Web categories that escalate even when blocked
+  web_uncategorized_values:
+    default:
+    - uncategorized
+    - unknown
+    - unrated
+    - not rated
+    bounds:
+      min_items: 1
+      max_items: 27
+      allowed: *id002
+    reduces_scrutiny_when: grows
+    description: Values meaning the filtering service has not categorised the site
+  ids_exploit_class_values:
+    default:
+    - attempted-admin
+    - attempted-user
+    - successful-admin
+    - successful-user
+    - web-application-attack
+    - shellcode-detect
+    - trojan-activity
+    - exploit-kit
+    - command-and-control
+    - malware-cnc
+    - exploit
+    bounds:
+      min_items: 1
+      max_items: 22
+      allowed:
+      - attempted-admin
+      - attempted-user
+      - successful-admin
+      - successful-user
+      - web-application-attack
+      - shellcode-detect
+      - trojan-activity
+      - exploit-kit
+      - command-and-control
+      - attempted-dos
+      - successful-dos
+      - attempted-recon
+      - successful-recon-limited
+      - successful-recon-largescale
+      - network-scan
+      - policy-violation
+      - misc-activity
+      - misc-attack
+      - bad-unknown
+      - malware-cnc
+      - exploit
+      - other
+    reduces_scrutiny_when: shrinks
+    description: IDS signature classes for which a block flags instead of closing (only recon and policy classes close on block)
+  usb_non_storage_classes:
+    default:
+    - hid
+    - keyboard
+    - mouse
+    - composite
+    - network adapter
+    bounds:
+      min_items: 1
+      max_items: 7
+      allowed:
+      - storage
+      - hid
+      - keyboard
+      - mouse
+      - composite
+      - network adapter
+      - other
+    reduces_scrutiny_when: shrinks
+    description: Device classes that are not storage; a non-storage device in a storage alert flags (possible keystroke injector)
+
+# Retired in the bank migration (kept so reviewers can trace them):
+#   av_low_risk_pattern: moved to the Tool Broker (what a vendor's value means is the broker's)
+#   av_high_risk_pattern: moved to the Tool Broker (what a vendor's value means is the broker's)
+#   av_test_file_pattern: moved to the Tool Broker (what a vendor's value means is the broker's)
+#   av_pre_execution_block_values: moved to the Tool Broker (what a vendor's value means is the broker's)
+#   av_post_execution_values: moved to the Tool Broker (what a vendor's value means is the broker's)
+#   browser_user_agent_pattern: moved to the Tool Broker (what a vendor's value means is the broker's)
+#   usb_connect_event_values: moved to the Tool Broker (what a vendor's value means is the broker's)
+#   usb_write_event_values: moved to the Tool Broker (what a vendor's value means is the broker's)
+#   web_success_status_pattern: moved to the Tool Broker (what a vendor's value means is the broker's)
+#   av_low_risk_categories: unused; the broker's av_risk_class answer replaces it
+#   av_high_risk_categories: unused; the broker's av_risk_class answer replaces it
+#   internal_networks: moved to a customer context list read by the Tool Broker (customer context, not policy and not a vendor meaning)
+#   vuln_data_max_age: renamed vuln_data_max_age_days

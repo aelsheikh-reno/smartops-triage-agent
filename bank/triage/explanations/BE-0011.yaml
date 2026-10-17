@@ -1,0 +1,10 @@
+id: BE-0011
+name: Backup software
+description: Sanctioned backup or snapshot software creates or rotates volume shadow copies.
+derived_from:
+  source:
+  - splunk/security_content detections/endpoint/creation_of_shadow_copy.yml (known_false_positives)
+  - splunk/security_content detections/endpoint/deleting_shadow_copies.yml (known_false_positives)
+  license:
+  - Apache-2.0
+version: 1

@@ -1,20 +1,21 @@
 #!/usr/bin/env bash
-# Run every quality gate. Usage: tools/gates.sh [batch ...]
-#   No argument runs every batch (escu, vendor, technique). A batch argument narrows the batch-scoped gates
-#   (attacker influence, replay, review packet). An unknown batch, or a gate that loads nothing, fails.
+# Run every quality gate. Usage: tools/gates.sh [family ...]
+#   Batches are detection families: endpoint, identity, endpoint_malware, network, email, data_protection, technique_fallback.
+#   No argument runs every family. A family argument narrows the family-scoped gates (attacker influence, replay, review
+#   packet). An unknown family, or a gate that loads nothing, fails.
 #   The review packet is written to review/$PACKET.md (default bank-migration).
 set -u
 cd "$(dirname "$0")/.."
 packet="${PACKET:-bank-migration}"
 rc=0
 python3 -c 'import sys; sys.path.insert(0, "tools"); import bank as B; B.select_batches(sys.argv[1:])' "$@" || exit 2
-# Replay covers the rule-level batches only; technique fallbacks have no source rule or dataset.
+# Replay covers the detection families only; technique fallbacks have no source rule or dataset (#26).
 replay_batches=()
-for a in "$@"; do [ "$a" != technique ] && replay_batches+=("$a"); done
-echo "== 1. validate (incl. vendor-leak gate)"; python3 tools/validate.py | grep -v '^INFO'; [ "${PIPESTATUS[0]}" = 0 ] || rc=1
+for a in "$@"; do [ "$a" != technique_fallback ] && replay_batches+=("$a"); done
+echo "== 1. validate (incl. vendor-leak and triage-neutrality gates, contract and envelope)"; python3 tools/validate.py | grep -v '^INFO'; [ "${PIPESTATUS[0]}" = 0 ] || rc=1
 echo "== 2. attacker influence";  python3 tools/redteam_paths.py --quiet "$@" || rc=1; python3 tools/redteam_paths.py "$@" | tail -1
 if [ $# -gt 0 ] && [ ${#replay_batches[@]} -eq 0 ]; then
-  echo "== 3. replay: skipped (technique fallbacks are not replayable)"
+  echo "== 3. replay: skipped (technique fallbacks have no true-positive replay data, #26)"
 else
   echo "== 3. replay (strict)";   python3 tools/replay.py --strict "${replay_batches[@]}" > build/replay.txt 2>&1 || rc=1; tail -16 build/replay.txt
 fi

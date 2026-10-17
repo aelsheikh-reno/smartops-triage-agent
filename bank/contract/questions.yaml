@@ -1,0 +1,387 @@
+# The contract both sides share: every question's ID and its answer type. Nothing else lives here.
+# type: bool (yes/no), count, number, enum (a value from the fixed list), time. components: named counts in one answer.
+questions:
+- id: C-01
+  answer:
+    type: bool
+- id: C-02
+  answer:
+    type: count
+    components:
+    - alerts
+    - distinct_detections
+- id: C-03
+  answer:
+    type: enum
+    values:
+    - none
+    - informational
+    - low
+    - medium
+    - high
+    - critical
+- id: C-04
+  answer:
+    type: count
+    components:
+    - audited
+    - independent_analyst
+- id: C-05
+  answer:
+    type: enum
+    values:
+    - critical
+    - high
+    - medium
+    - low
+- id: C-06
+  answer:
+    type: bool
+- id: C-07
+  answer:
+    type: bool
+- id: C-08
+  answer:
+    type: enum
+    values:
+    - server
+    - workstation
+    - network
+    - other
+    - unknown
+- id: Q-0000
+  answer:
+    type: bool
+- id: Q-0001
+  answer:
+    type: bool
+- id: Q-0002
+  answer:
+    type: bool
+- id: Q-0003
+  answer:
+    type: count
+- id: Q-0004
+  answer:
+    type: bool
+- id: Q-0005
+  answer:
+    type: bool
+- id: Q-0006
+  answer:
+    type: bool
+- id: Q-0007
+  answer:
+    type: count
+- id: Q-0008
+  answer:
+    type: bool
+- id: Q-0009
+  answer:
+    type: bool
+- id: Q-0010
+  answer:
+    type: count
+- id: Q-0011
+  answer:
+    type: bool
+- id: Q-0012
+  answer:
+    type: count
+- id: Q-0013
+  answer:
+    type: bool
+- id: Q-0014
+  answer:
+    type: count
+- id: Q-0015
+  answer:
+    type: count
+- id: Q-0016
+  answer:
+    type: bool
+- id: Q-0017
+  answer:
+    type: bool
+- id: Q-0018
+  answer:
+    type: count
+- id: Q-0019
+  answer:
+    type: bool
+- id: Q-0020
+  answer:
+    type: bool
+- id: Q-0021
+  answer:
+    type: bool
+- id: Q-0022
+  answer:
+    type: bool
+- id: Q-0023
+  answer:
+    type: bool
+- id: Q-0024
+  answer:
+    type: bool
+- id: Q-0025
+  answer:
+    type: bool
+- id: Q-0026
+  answer:
+    type: bool
+- id: Q-0027
+  answer:
+    type: enum
+    values: &id003
+    - allowed
+    - delivered
+    - detected
+    - alerted
+    - blocked
+    - dropped
+    - denied
+    - rejected
+    - prevented
+    - reset
+    - deleted
+    - quarantined
+    - held
+    - pending
+    - pending release
+    - encrypted pending
+    - justification pending
+    - unknown
+    - other
+- id: Q-0028
+  answer:
+    type: enum
+    values: &id001
+    - high_risk
+    - low_risk
+    - other
+    - unknown
+- id: Q-0029
+  answer:
+    type: enum
+    values: *id001
+- id: Q-0030
+  answer:
+    type: bool
+- id: Q-0031
+  answer:
+    type: bool
+- id: Q-0032
+  answer:
+    type: bool
+- id: Q-0033
+  answer:
+    type: bool
+- id: Q-0034
+  answer:
+    type: bool
+- id: Q-0035
+  answer:
+    type: bool
+- id: Q-0036
+  answer:
+    type: bool
+- id: Q-0037
+  answer:
+    type: bool
+- id: Q-0038
+  answer:
+    type: bool
+- id: Q-0039
+  answer:
+    type: bool
+- id: Q-0041
+  answer:
+    type: enum
+    values: &id002
+    - advertising
+    - web ads
+    - streaming media
+    - social networking
+    - games
+    - shopping
+    - entertainment
+    - sports
+    - travel
+    - news and media
+    - malware
+    - malicious
+    - phishing
+    - command and control
+    - botnet
+    - spyware
+    - cryptomining
+    - newly registered
+    - newly observed
+    - parked
+    - dynamic dns
+    - proxy avoidance
+    - uncategorized
+    - unknown
+    - unrated
+    - not rated
+    - other
+- id: Q-0042
+  answer:
+    type: bool
+- id: Q-0043
+  answer:
+    type: bool
+- id: Q-0044
+  answer:
+    type: number
+- id: Q-0045
+  answer:
+    type: count
+- id: Q-0046
+  answer:
+    type: count
+- id: Q-0047
+  answer:
+    type: count
+- id: Q-0048
+  answer:
+    type: bool
+- id: Q-0049
+  answer:
+    type: enum
+    values:
+    - pre_execution
+    - ran
+    - unknown
+- id: Q-0050
+  answer:
+    type: bool
+- id: Q-0051
+  answer:
+    type: bool
+- id: Q-0052
+  answer:
+    type: bool
+- id: Q-0053
+  answer:
+    type: enum
+    values:
+    - attempted-admin
+    - attempted-user
+    - successful-admin
+    - successful-user
+    - web-application-attack
+    - shellcode-detect
+    - trojan-activity
+    - exploit-kit
+    - command-and-control
+    - attempted-dos
+    - successful-dos
+    - attempted-recon
+    - successful-recon-limited
+    - successful-recon-largescale
+    - network-scan
+    - policy-violation
+    - misc-activity
+    - misc-attack
+    - bad-unknown
+    - malware-cnc
+    - exploit
+    - other
+- id: Q-0054
+  answer:
+    type: enum
+    values:
+    - success
+    - redirect
+    - client_error
+    - server_error
+    - other
+- id: Q-0055
+  answer:
+    type: bool
+- id: Q-0056
+  answer:
+    type: bool
+- id: Q-0057
+  answer:
+    type: enum
+    values: *id002
+- id: Q-0058
+  answer:
+    type: enum
+    values:
+    - browser
+    - other
+- id: Q-0059
+  answer:
+    type: enum
+    values: *id002
+- id: Q-0060
+  answer:
+    type: count
+- id: Q-0061
+  answer:
+    type: bool
+- id: Q-0062
+  answer:
+    type: enum
+    values: *id003
+- id: Q-0063
+  answer:
+    type: enum
+    values:
+    - informational
+    - low
+    - medium
+    - high
+    - critical
+    - other
+- id: Q-0064
+  answer:
+    type: number
+- id: Q-0065
+  answer:
+    type: enum
+    values: &id004
+    - connect
+    - write
+    - other
+- id: Q-0066
+  answer:
+    type: enum
+    values:
+    - storage
+    - hid
+    - keyboard
+    - mouse
+    - composite
+    - network adapter
+    - other
+- id: Q-0067
+  answer:
+    type: bool
+- id: Q-0068
+  answer:
+    type: number
+- id: Q-0069
+  answer:
+    type: enum
+    values: *id004
+- id: Q-0070
+  answer:
+    type: bool
+- id: Q-0071
+  answer:
+    type: bool
+- id: Q-0072
+  answer:
+    type: number
+- id: Q-0073
+  answer:
+    type: count
+- id: Q-0074
+  answer:
+    type: enum
+    values: *id003

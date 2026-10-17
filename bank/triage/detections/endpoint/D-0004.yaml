@@ -1,0 +1,68 @@
+id: D-0004
+name: Deleting Shadow Copies
+family: endpoint
+alert_type: analytic
+techniques:
+- T1490
+required_roles:
+- event
+- host
+- process
+- user
+intent: Detects vssadmin or wmic deleting volume shadow copies from process creation logs.
+fp_quality: good
+notes: 'Contrast case: benign deletion is rare and the behavior precedes ransomware. Unknown answers escalate instead of flagging.'
+explanations:
+- BE-0011
+- BE-0003
+fingerprint:
+- role:host.name
+- role:process.parent_name
+- role:process.sha256
+fingerprint_influence:
+  role:host.name:
+    rating: low
+    reason: Host that reported the event.
+  role:process.parent_name:
+    rating: high
+    reason: File name the attacker can choose.
+  role:process.sha256:
+    rating: low
+    reason: Computed by the sensor; reproducing it means running the same binary.
+precedent_entity: role:host.name
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: role:host.name
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce the fingerprint's host, process hash.
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
+- step: 2
+  question: Q-0021
+  on_yes: close:benign_true_positive:sanctioned_backup_tool
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: escalate
+status: draft
+version: 6
+derived_from:
+  library: escu
+  rule: escu:deleting_shadow_copies
+  title: Deleting Shadow Copies
+  path: detections/endpoint/deleting_shadow_copies.yml
+  repo: splunk/security_content
+  license: Apache-2.0

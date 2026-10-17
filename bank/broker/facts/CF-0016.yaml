@@ -1,0 +1,14 @@
+id: CF-0016
+name: known_bad_driver_samples
+description: Known vulnerable and malicious driver samples from a public driver catalogue, keyed by SHA256.
+fields:
+- sha256
+- filename
+- category
+- loldrivers_id
+match_rule: sha256 exact
+collected_by: bank_seed
+supply_effort: low
+supply_effort_reason: Supplied by the bank.
+version: 3
+seed_file: broker/seeds/CF-0016.yaml

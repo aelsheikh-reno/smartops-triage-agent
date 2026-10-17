@@ -1,6 +1,6 @@
 # Review packet: bank-migration
 
-35 detections, 73 distinct questions, 21 capabilities. Everything is `status: draft`.
+35 detections, 74 distinct questions, 21 capabilities. Everything is `status: draft`.
 
 How to read a flow: steps run top to bottom; each answer leads to the next step, a close (with disposition and reason code), an escalation, or a flag to an analyst with no verdict. An unknown answer never closes. Q-0000 (precedent) runs first everywhere.
 
@@ -25,7 +25,7 @@ Bank migration (#12): roles instead of field names, typed broker answers with Tr
 | Q-0055 (approved change names this source) | none | low | same |
 
 **Flow outcome changes** (structural; every other path is unchanged):
-- 14 flows (escu: creation_of_shadow_copy, detect_psexec_with_accepteula_flag, process_execution_via_wmi, remote_process_instantiation_via_winrm_and_powershell, windows_service_creation_on_remote_endpoint; techniques T1021.001, T1021.002, T1021.006, T1047, T1069.001, T1069.002, T1087.001, T1087.002, T1482): the step-4 "admin activity baselined" close becomes a flag (4 paths each, 56 in all). Its only none/low yes was identity group membership, which can no longer carry a close on its own.
+- 14 flows (D-0003, D-0006, D-0010, D-0012, D-0023; techniques T1021.001, T1021.002, T1021.006, T1047, T1069.001, T1069.002, T1087.001, T1087.002, T1482): the step-4 "admin activity baselined" close becomes a flag (4 paths each, 56 in all). Its only none/low yes was identity group membership, which can no longer carry a close on its own.
 
 **Behaviour changes not visible as path changes:**
 - Precedent validity is capped at 72h: 11 detections had 7 days.
@@ -34,19 +34,20 @@ Bank migration (#12): roles instead of field names, typed broker answers with Tr
 - change.window: a change approved by one of its own implementers answers unknown (was yes).
 - Defender event-log 1117 "Block" now maps to unknown (was blocked before execution): flags instead of a possible mitigated close, until the lab test (#20).
 - Round 2: Q-0049 reads the endpoint API first (vendor alert ID, else device + hash + window); the SIEM copy is a fallback. Q-0067 is a Triage-side rule over C-06 and C-08.
-- Round 4, row kinds and modes (replaces round 3's raise-only rule): ambiguous rows (5: Defender event 1117 Block and 1117 Quarantine/Remove/Clean, CrowdStrike quarantine in its API and SIEM-copy tables, generic post-execution remediation states) answer unknown in every mode; unverified rows (110) may support a close in Shadow and Recommend, marked, never in Auto; verified is per customer. A detection is Auto-eligible for a customer only when every row on its close paths is verified for that customer (replaces vendor_mapping_verified). Technique fallbacks stay capped at Recommend (#26).
+- Round 4, row kinds and modes (replaces round 3's raise-only rule): ambiguous rows (5 then: Defender event 1117 Block and 1117 Quarantine/Remove/Clean, CrowdStrike quarantine in its API and SIEM-copy tables, generic post-execution remediation states) answer unknown in every mode; unverified rows (110) may support a close in Shadow and Recommend, marked, never in Auto; verified is per customer. A detection is Auto-eligible for a customer only when every row on its close paths is verified for that customer (replaces vendor_mapping_verified). Technique fallbacks stay capped at Recommend (#26).
 - Round 3, missing context: an unknown or unavailable context question flags with context_unknown and never escalates. Q-0067 with C-08 unknown flags (was: escalate, treated as a server).
-- vendor:ids_alert is now capped at Recommend per customer until its IDS classification rows are verified.
+- D-0028 is now capped at Recommend per customer until its IDS classification rows are verified.
+- Round 5, triage/broker split: bank/ is now contract/ (question IDs, answer types, status, trust, envelope), triage/, broker/ and intake/. Detections have neutral IDs D-0001…D-0035 by family; source rule IDs moved to intake/rule-map.yaml. The Triage agent sees each answer's status and trust only; a not_checked answer never supports an Auto close. No triage outcome changed except the round 5 decisions: an email quarantine supports a close only before delivery (Q-0074 replaces Q-0027 in D-0031); HTTP status translations are standards-defined (checked); fallback translations don't count against Auto eligibility.
 
 ## Gate results
 
-- validate: PASS (35 detections, 26 technique fallbacks, 73 questions, 8 context questions, 31 context facts, 32 capabilities, 31 parameters, 7 value tables: 0 errors, 0 warnings)
+- validate: PASS (35 detections, 26 technique fallbacks, 74 questions, 8 context questions, 31 context facts, 32 capabilities, 32 parameters, 7 translations: 0 errors, 0 warnings)
 - attacker influence: PASS (61 flows, 739 close paths checked, 0 failing, in 0 flows; 50 closes flag under the forwarded profile, 1 under fingerprint fallback)
-- replay: PASS (replay: 655 TP events in 28 detections, 22/22 regression cases; 0 benign/FP closes, 0 mitigated closes -> PASS)
+- replay: PASS (replay: 655 TP events in 28 detections, 25/25 regression cases; 0 benign/FP closes, 0 mitigated closes -> PASS)
 
 ## Detections
 
-### Add or Set Antivirus Exclusion via MpPreference (`escu:add_or_set_antivirus_exclusion`)
+### Add or Set Antivirus Exclusion via MpPreference (`D-0001`)
 
 Detects Add-MpPreference or Set-MpPreference adding an antivirus, Controlled Folder Access or ASR exclusion from process creation logs.
 
@@ -60,7 +61,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 4 | Q-0002: Is the user an IT admin account, directly or through an admin group? | `identity.groups` | low | next step | **escalate** | flag to analyst | – |
 | 5 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### BITSAdmin Download File (`escu:bitsadmin_download_file`)
+### BITSAdmin Download File (`D-0002`)
 
 Detects bitsadmin.exe /transfer or /addfile downloading a file from process creation logs.
 
@@ -74,7 +75,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 4 | Q-0014: Has the same normalized command line, with the same parent binary (hash or signer plus path), run on this host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | close (benign true positive: activity_baselined_on_host) | next step | next step | – |
 | 5 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### Creation of Shadow Copy (`escu:creation_of_shadow_copy`)
+### Creation of Shadow Copy (`D-0003`)
 
 Detects vssadmin or wmic creating a volume shadow copy from process creation logs.
 
@@ -90,7 +91,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 4 | Q-0014: Has the same normalized command line, with the same parent binary (hash or signer plus path), run on this host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | flag to analyst | next step | next step | – |
 | 5 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### Deleting Shadow Copies (`escu:deleting_shadow_copies`)
+### Deleting Shadow Copies (`D-0004`)
 
 Detects vssadmin or wmic deleting volume shadow copies from process creation logs.
 
@@ -104,7 +105,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 2 | Q-0021: Is the parent process sanctioned backup software, matched on hash or on signer plus path? | `list.lookup` | low | close (benign true positive: sanctioned_backup_tool) | next step | next step | – |
 | 3 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | **escalate** | – |
 
-### Detect MSHTA Url in Command Line (`escu:detect_mshta_url_in_command_line`)
+### Detect MSHTA Url in Command Line (`D-0005`)
 
 Detects mshta.exe with an http(s) URL in the command line from process creation logs.
 
@@ -117,20 +118,7 @@ Required roles: event, host, process. Fingerprint: role:host.name (low), role:pr
 | 3 | Q-0014: Has the same normalized command line, with the same parent binary (hash or signer plus path), run on this host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | close (benign true positive: activity_baselined_on_host) | next step | next step | – |
 | 4 | Q-0015: Has the same normalized command line, from the same parent binary, run on at least the customer's minimum number of hosts in at least the customer's minimum number of the weeks examined before the alert window? [gte org_prevalence_min_hosts] | `org.prevalence` | high | close (benign true positive: prevalent_in_org) | **escalate** | flag to analyst | – |
 
-### Detect New Local Admin account (`escu:detect_new_local_admin_account`)
-
-Detects a new local account (4720) that is added to local Administrators (4732) within 180 minutes, from Windows Security logs.
-
-Required roles: event, host, actor, user. Fingerprint: role:host.name (low), role:actor.name (low), role:user.name (low). Precedent entity: role:host.name. Precedent valid for 72h.
-
-| Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
-|---|---|---|---|---|---|---|---|
-| 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | low | close (inherit: precedent_match) | next step | next step | Q-0045 [gte alert_history_min_count] yes → flag |
-| 2 | Q-0020: Was the account created or added to local Administrators by a provisioning service account? | `list.lookup` | low | close (benign true positive: provisioning_service_account) | next step | next step | – |
-| 3 | Q-0002: Is the user an IT admin account, directly or through an admin group? | `identity.groups` | low | next step | **escalate** | flag to analyst | – |
-| 4 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
-
-### Detect PsExec With accepteula Flag (`escu:detect_psexec_with_accepteula_flag`)
+### Detect PsExec With accepteula Flag (`D-0006`)
 
 Detects PsExec run with -accepteula (likely first use) on an endpoint from process creation logs.
 
@@ -144,7 +132,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 4 | Q-0003: Has this user run this same binary (same hash, or same signer and path) on this host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | flag to analyst | next step | next step | – |
 | 5 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### Detect Remote Access Software Usage Process (`escu:detect_remote_access_software_usage_process`)
+### Detect Remote Access Software Usage Process (`D-0007`)
 
 Detects execution of a known remote access tool (the source rule's remote-access tool list) on an endpoint from process creation logs.
 
@@ -158,7 +146,7 @@ Required roles: host, user, process, event. Fingerprint: role:host.name (low), r
 | 4 | Q-0010: Has this same binary (same hash, or same signer and path) run on this host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | close (benign true positive: sanctioned_rmm_baselined) | next step | next step | – |
 | 5 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### Detect SharpHound Usage (`escu:detect_sharphound_usage`)
+### Detect SharpHound Usage (`D-0008`)
 
 Detects SharpHound (BloodHound collector) execution by process or original file name from process creation logs.
 
@@ -169,7 +157,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | low | close (inherit: precedent_match) | next step | next step | Q-0045 [gte alert_history_min_count] yes → flag |
 | 2 | Q-0026: Does an authorized security test engagement cover this host or user at the alert time? | `list.lookup` | low | close (benign true positive: authorized_security_test) | **escalate** | flag to analyst | – |
 
-### Malicious PowerShell Process - Execution Policy Bypass (`escu:malicious_powershell_process___execution_policy_bypass`)
+### Malicious PowerShell Process - Execution Policy Bypass (`D-0009`)
 
 Detects PowerShell started with -ExecutionPolicy Bypass from process creation logs.
 
@@ -183,7 +171,7 @@ Required roles: event, host, process. Fingerprint: role:host.name (low), role:pr
 | 4 | Q-0014: Has the same normalized command line, with the same parent binary (hash or signer plus path), run on this host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | close (benign true positive: activity_baselined_on_host) | next step | next step | – |
 | 5 | Q-0015: Has the same normalized command line, from the same parent binary, run on at least the customer's minimum number of hosts in at least the customer's minimum number of the weeks examined before the alert window? [gte org_prevalence_min_hosts] | `org.prevalence` | high | close (benign true positive: prevalent_in_org) | **escalate** | flag to analyst | – |
 
-### Process Execution via WMI (`escu:process_execution_via_wmi`)
+### Process Execution via WMI (`D-0010`)
 
 Detects a process spawned by WmiPrvSE.exe (local or remote WMI execution) from process creation logs.
 
@@ -197,7 +185,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 4 | Q-0014: Has the same normalized command line, with the same parent binary (hash or signer plus path), run on this host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | flag to analyst | next step | next step | – |
 | 5 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### Registry Keys Used For Persistence (`escu:registry_keys_used_for_persistence`)
+### Registry Keys Used For Persistence (`D-0011`)
 
 Detects writes to Run/RunOnce and other autostart registry keys on an endpoint from registry events.
 
@@ -213,7 +201,7 @@ Required roles: event, host, process, registry, user. Fingerprint: role:host.nam
 | 4 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | next step | next step | – |
 | 5 | Q-0018: Has the same registry value name with the same normalized data been written on at least the customer's minimum number of hosts in at least the customer's minimum number of the weeks examined before the alert window? [gte org_prevalence_min_hosts] | `org.prevalence` | high | flag to analyst | **escalate** | flag to analyst | – |
 
-### Remote Process Instantiation via WinRM and PowerShell (`escu:remote_process_instantiation_via_winrm_and_powershell`)
+### Remote Process Instantiation via WinRM and PowerShell (`D-0012`)
 
 Detects PowerShell Invoke-Command -ComputerName starting a process on a remote host from process creation logs.
 
@@ -227,7 +215,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 4 | Q-0012: Has this user run the same normalized command line on any host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | flag to analyst | next step | next step | – |
 | 5 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### Suspicious Regsvr32 Register Suspicious Path (`escu:suspicious_regsvr32_register_suspicious_path`)
+### Suspicious Regsvr32 Register Suspicious Path (`D-0013`)
 
 Detects regsvr32.exe registering a non-DLL file from AppData, ProgramData or Windows\Temp from process creation logs.
 
@@ -242,7 +230,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 3 | Q-0015: Has the same normalized command line, from the same parent binary, run on at least the customer's minimum number of hosts in at least the customer's minimum number of the weeks examined before the alert window? [gte org_prevalence_min_hosts] | `org.prevalence` | high | close (benign true positive: prevalent_in_org) | next step | next step | – |
 | 4 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### Suspicious Rundll32 no Command Line Arguments (`escu:suspicious_rundll32_no_command_line_arguments`)
+### Suspicious Rundll32 no Command Line Arguments (`D-0014`)
 
 Detects rundll32.exe running with no arguments (typical injection target) from process creation logs.
 
@@ -255,7 +243,7 @@ Required roles: event, host, process. Fingerprint: role:host.name (low), role:pr
 | 3 | Q-0014: Has the same normalized command line, with the same parent binary (hash or signer plus path), run on this host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | close (benign true positive: activity_baselined_on_host) | next step | next step | – |
 | 4 | Q-0015: Has the same normalized command line, from the same parent binary, run on at least the customer's minimum number of hosts in at least the customer's minimum number of the weeks examined before the alert window? [gte org_prevalence_min_hosts] | `org.prevalence` | high | close (benign true positive: prevalent_in_org) | **escalate** | flag to analyst | – |
 
-### Suspicious Scheduled Task from Public Directory (`escu:suspicious_scheduled_task_from_public_directory`)
+### Suspicious Scheduled Task from Public Directory (`D-0015`)
 
 Detects schtasks.exe /create with an action in a public directory (Users\Public, ProgramData, Windows\Temp) from process creation logs.
 
@@ -269,7 +257,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 4 | Q-0019: Is the subject binary validly signed by a trusted publisher and not on the excluded-binaries list? | `file.signer` | low | next step | flag to analyst | flag to analyst | – |
 | 5 | Q-0015: Has the same normalized command line, from the same parent binary, run on at least the customer's minimum number of hosts in at least the customer's minimum number of the weeks examined before the alert window? [gte org_prevalence_min_hosts] | `org.prevalence` | high | close (benign true positive: prevalent_in_org) | **escalate** | flag to analyst | – |
 
-### Windows Event Log Cleared (`escu:windows_event_log_cleared`)
+### Windows Event Log Cleared (`D-0016`)
 
 Detects the Security log (1102) or System log (104) being cleared on an endpoint from Windows event logs.
 
@@ -281,7 +269,7 @@ Required roles: event, host, user. Fingerprint: role:host.name (low), role:user.
 | 2 | Q-0023: Is the host in a rebuilding or decommissioning state in the asset inventory at the alert time? | `list.lookup` | none | close (benign true positive: host_rebuild) | next step | next step | – |
 | 3 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### Windows File Download Via CertUtil (`escu:windows_file_download_via_certutil`)
+### Windows File Download Via CertUtil (`D-0017`)
 
 Detects certutil.exe downloading a file (-urlcache/-verifyctl -f or -URL) from process creation logs.
 
@@ -295,7 +283,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 4 | Q-0014: Has the same normalized command line, with the same parent binary (hash or signer plus path), run on this host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | close (benign true positive: activity_baselined_on_host) | next step | next step | – |
 | 5 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### Windows File Download Via PowerShell (`escu:windows_file_download_via_powershell`)
+### Windows File Download Via PowerShell (`D-0018`)
 
 Detects PowerShell downloading content (Invoke-WebRequest, wget, curl, DownloadFile/String/Data) from process creation logs.
 
@@ -309,7 +297,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 4 | Q-0014: Has the same normalized command line, with the same parent binary (hash or signer plus path), run on this host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | close (benign true positive: activity_baselined_on_host) | next step | next step | – |
 | 5 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### Windows Office Product Spawned Uncommon Process (`escu:windows_office_product_spawned_uncommon_process`)
+### Windows Office Product Spawned Uncommon Process (`D-0019`)
 
 Detects an Office application spawning a shell, script host or LOLBin (cmd, PowerShell, wscript, cscript, mshta, rundll32, regsvr32, certutil, bitsadmin, wmic) from process creation logs.
 
@@ -323,7 +311,7 @@ Required roles: event, host, process. Fingerprint: role:host.name (low), role:pr
 | 2 | Q-0014: Has the same normalized command line, with the same parent binary (hash or signer plus path), run on this host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | flag to analyst | next step | next step | – |
 | 3 | Q-0015: Has the same normalized command line, from the same parent binary, run on at least the customer's minimum number of hosts in at least the customer's minimum number of the weeks examined before the alert window? [gte org_prevalence_min_hosts] | `org.prevalence` | high | flag to analyst | **escalate** | flag to analyst | – |
 
-### Windows Possible Credential Dumping (`escu:windows_possible_credential_dumping`)
+### Windows Possible Credential Dumping (`D-0020`)
 
 Detects a non-SYSTEM process opening LSASS with query-limited or duplicate-handle access on an endpoint from process access events.
 
@@ -340,7 +328,7 @@ Required roles: host, user, process, target_process, process_access, event. Fing
 | 4 | Q-0007: Has this same binary (path and hash) opened LSASS on this host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | next step | **escalate** | flag to analyst | – |
 | 5 | Q-0011: Is the binary that opened LSASS validly signed by a trusted publisher and not on the dump-capable exclusion list? | `file.signer` | low | close (false positive: lsass_access_baselined) | flag to analyst | flag to analyst | – |
 
-### Windows Remote Services Rdp Enable (`escu:windows_remote_services_rdp_enable`)
+### Windows Remote Services Rdp Enable (`D-0021`)
 
 Detects fDenyTSConnections set to 0 (RDP enabled) on an endpoint from registry events.
 
@@ -354,7 +342,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 4 | Q-0002: Is the user an IT admin account, directly or through an admin group? | `identity.groups` | low | next step | **escalate** | flag to analyst | – |
 | 5 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### Windows Schtasks Create Run As System (`escu:windows_schtasks_create_run_as_system`)
+### Windows Schtasks Create Run As System (`D-0022`)
 
 Detects schtasks.exe /create /ru SYSTEM from process creation logs.
 
@@ -368,7 +356,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 4 | Q-0019: Is the subject binary validly signed by a trusted publisher and not on the excluded-binaries list? | `file.signer` | low | next step | flag to analyst | flag to analyst | – |
 | 5 | Q-0015: Has the same normalized command line, from the same parent binary, run on at least the customer's minimum number of hosts in at least the customer's minimum number of the weeks examined before the alert window? [gte org_prevalence_min_hosts] | `org.prevalence` | high | close (benign true positive: prevalent_in_org) | **escalate** | flag to analyst | – |
 
-### Windows Service Creation on Remote Endpoint (`escu:windows_service_creation_on_remote_endpoint`)
+### Windows Service Creation on Remote Endpoint (`D-0023`)
 
 Detects sc.exe creating a service on a remote host (\\host create binpath=) from process creation logs.
 
@@ -382,7 +370,7 @@ Required roles: event, host, process, user. Fingerprint: role:host.name (low), r
 | 4 | Q-0012: Has this user run the same normalized command line on any host on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | flag to analyst | next step | next step | – |
 | 5 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
 
-### Windows Vulnerable Driver Installed (`escu:windows_vulnerable_driver_installed`)
+### Windows Vulnerable Driver Installed (`D-0024`)
 
 Detects a kernel driver service install (7045) whose file name matches a vulnerable-driver catalogue, from Windows System logs.
 
@@ -397,11 +385,24 @@ Required roles: file, event, host. Fingerprint: role:host.name (low), role:file.
 | 3 | Q-0024: Does the driver's SHA256 match a known vulnerable or malicious driver sample? | `file.reputation` | low | **escalate** | next step | next step | – |
 | 4 | Q-0019: Is the subject binary validly signed by a trusted publisher and not on the excluded-binaries list? | `file.signer` | low | flag to analyst | **escalate** | flag to analyst | – |
 
-### Antivirus or EDR malware detection (`vendor:av_detection`)
+### Detect New Local Admin account (`D-0025`)
+
+Detects a new local account (4720) that is added to local Administrators (4732) within 180 minutes, from Windows Security logs.
+
+Required roles: event, host, actor, user. Fingerprint: role:host.name (low), role:actor.name (low), role:user.name (low). Precedent entity: role:host.name. Precedent valid for 72h.
+
+| Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
+|---|---|---|---|---|---|---|---|
+| 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | low | close (inherit: precedent_match) | next step | next step | Q-0045 [gte alert_history_min_count] yes → flag |
+| 2 | Q-0020: Was the account created or added to local Administrators by a provisioning service account? | `list.lookup` | low | close (benign true positive: provisioning_service_account) | next step | next step | – |
+| 3 | Q-0002: Is the user an IT admin account, directly or through an admin group? | `identity.groups` | low | next step | **escalate** | flag to analyst | – |
+| 4 | Q-0004: Does an approved change cover this host at the alert time and list the alert's user, or a group they belong to, as an implementer? | `change.window` | low | close (benign true positive: approved_change) | **escalate** | flag to analyst | – |
+
+### Antivirus or EDR malware detection (`D-0026`)
 
 Generic: an antivirus or EDR product reports a malware detection on a host (normalized malware alert, any product).
 
-Note: High-risk families escalate even when blocked. Only a block before execution can close, and only for low-risk classes; post-execution remediation, pending reboot and partial remediation flag. Test files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail. Approved tooling and analysis hosts match on asset ID, never hostname. A sample from an analysis host seen on any other host in the window escalates; an approved tool's hash seen outside its approved hosts flags. A quarantined or unreadable file with no hash cannot close as approved tooling; the flow continues. The fingerprint uses the asset ID; without one it falls back to the hostname and the precedent is rated medium. Whether a file ran is read through the product's value table (bank/recipes/value_tables/), never from a data model. Capped at Recommend for each customer whose product rows in the value mapping are unverified.
+Note: High-risk families escalate even when blocked. Only a block before execution can close, and only for low-risk classes; post-execution remediation, pending reboot and partial remediation flag. Test files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail. Approved tooling and analysis hosts match on asset ID, never hostname. A sample from an analysis host seen on any other host in the window escalates; an approved tool's hash seen outside its approved hosts flags. A quarantined or unreadable file with no hash cannot close as approved tooling; the flow continues. The fingerprint uses the asset ID; without one it falls back to the hostname and the precedent is rated medium. Whether a file ran is a question to the Tool Broker (Q-0049); a not_checked answer never supports an Auto close.
 
 Required roles: host, user, reporting_control, file, event. Fingerprint: role:host.asset_id (low), role:reporting_control.signature (low), role:file.sha256 (low). Precedent entity: role:host.asset_id. Precedent valid for 24h.
 
@@ -413,39 +414,7 @@ Required roles: host, user, reporting_control, file, event. Fingerprint: role:ho
 | 4 | Q-0049: Was the file blocked before it executed? [yes pre_execution; unknown unknown] | `endpoint.run_status` | low, forwarded medium | next step | **escalate** | flag to analyst | – |
 | 5 | Q-0028: Is the detection in a low-risk class (potentially unwanted software, adware, grayware), and not a test file? [yes low_risk; unknown unknown] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_low_risk_detection) | flag to analyst | flag to analyst | Q-0046 [gte alert_history_min_count] yes → flag; Q-0030 yes → escalate |
 
-### DLP policy match (`vendor:dlp_match`)
-
-Generic: a DLP control reports regulated data leaving through email, web, cloud storage or print (normalized DLP alert, any product).
-
-Note: Held, quarantined and pending-release actions answer unknown and flag: a later release would undo them. High severity or a large record count flags even to approved destinations. Three or more DLP alerts for the same user in the window turn a benign close into a flag and a block into an escalation, and escalate an unblocked match to an unapproved destination (which otherwise flags).
-
-Required roles: user, dest, reporting_control, dlp, event. Fingerprint: role:user.name (low), role:reporting_control.signature (low), derived:destination_domain (high). Precedent entity: role:user.name. Precedent valid for 24h.
-
-| Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
-|---|---|---|---|---|---|---|---|
-| 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | low | close (inherit: precedent_match) | next step | next step | Q-0045 [gte alert_history_min_count] yes → flag; Q-0063 [yes dlp_high_severity_values] yes → flag; Q-0064 [gte dlp_record_count_flag] yes → flag; Q-0046 [gte alert_history_min_count] yes → flag |
-| 2 | Q-0061: Is the flagged content a known DLP test file or template, by content hash? | `list.lookup` | low | close (false positive: known_test_data) | next step | next step | Q-0046 [gte alert_history_min_count] yes → flag |
-| 3 | Q-0062: Is the DLP action final (blocked or deleted), rather than held, quarantined or pending release? [yes dlp_final_block_values; unknown dlp_pending_values] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | next step | flag to analyst | Q-0046 [gte alert_history_min_count] yes → escalate |
-| 4 | Q-0038: Does an approved, unexpired DLP exception cover this user, policy and destination? | `list.lookup` | none | close (benign true positive: approved_business_exception) | next step | next step | Q-0063 [yes dlp_high_severity_values] yes → flag; Q-0064 [gte dlp_record_count_flag] yes → flag; Q-0046 [gte alert_history_min_count] yes → flag |
-| 5 | Q-0039: Is the destination an internal or tenant domain, or an approved partner domain for this data class? | `list.lookup` | low | close (benign true positive: approved_recipient) | flag to analyst | flag to analyst | Q-0063 [yes dlp_high_severity_values] yes → flag; Q-0064 [gte dlp_record_count_flag] yes → flag; Q-0046 [gte alert_history_min_count] yes → flag; Q-0046 [gte alert_history_min_count] yes → escalate (on flag) |
-
-### Email gateway threat alert (`vendor:email_gateway`)
-
-Generic: an email security gateway reports a malicious or suspicious message, delivered or not (normalized email alert, any product).
-
-Note: Every fingerprint field is sender-chosen, so a precedent never closes or flags by itself; the flow proceeds and the precedent is shown as context. A block closes only when the message is out of every mailbox and no reputation source marks its URL or attachment. Delivered-then-removed closes only with no recorded click or open.
-
-Required roles: email, file, reporting_control, event. Fingerprint: role:email.sender (high), role:email.subject (high), role:file.sha256 (high). Precedent entity: role:email.recipient. Precedent valid for 24h.
-
-| Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
-|---|---|---|---|---|---|---|---|
-| 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | high | next step | next step | next step | – |
-| 2 | Q-0037: Is the message part of an approved phishing-simulation campaign, matched on sending address and campaign marker inside the campaign window? | `list.lookup` | low | close (benign true positive: authorized_phishing_simulation) | next step | next step | Q-0070 no → flag |
-| 3 | Q-0035: Is the message quarantined or removed from every recipient mailbox? | `email.message_status` | low | next step | flag to analyst | flag to analyst | – |
-| 4 | Q-0027: Did the control that raised the alert stop the item (the file, connection, request or message) before it took effect? [yes email_blocked_action_values] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | next step | next step | Q-0034 yes → flag; Q-0030 yes → flag |
-| 5 | Q-0036: Do click and open records show that no recipient followed a link or opened an attachment from the message? | `email.no_interaction` | low | close (mitigated true positive: contained_without_interaction) | **escalate** | flag to analyst | – |
-
-### Firewall deny or port-scan alert (`vendor:firewall_deny`)
+### Firewall deny or port-scan alert (`D-0027`)
 
 Generic: a firewall reports denied connections or a scan pattern from a source (normalized network-traffic alert, any product).
 
@@ -461,11 +430,11 @@ Required roles: src, dest, network, reporting_control, event. Fingerprint: role:
 | 4 | Q-0055: Does an approved change or test-engagement record name this source address and cover the alert time? | `change.window` | low | close (benign true positive: approved_change) | next step | next step | – |
 | 5 | Q-0042: Was every connection from the source address in the alert window denied, with none allowed or established, to any destination? | `traffic.denied_only` | low | close (mitigated true positive: denied_no_successful_connection) | flag to analyst | flag to analyst | Q-0050 yes → flag; Q-0032 yes → escalate |
 
-### IDS or IPS signature alert (`vendor:ids_alert`)
+### IDS or IPS signature alert (`D-0028`)
 
 Generic: a network IDS or IPS reports a signature match between a source and a target (normalized intrusion alert, any product).
 
-Note: Internal sources never close on blocked or patched (not applicable); tuned-signature and approved-scanner closes still apply to them. An approved scanner closes only while its scan job targets this destination; an approved tester only under a covering change or engagement record (unknown flags). Alert history applies to the blocked and not-applicable closes only. Exploit, intrusion and malware classes flag when blocked; only reconnaissance and policy classes close on a block. Signatures with no vulnerability mapping answer unknown at the vulnerability step and flag. Capped at Recommend for each customer whose IDS product rows in the value tables (signature class) are unverified.
+Note: Internal sources never close on blocked or patched (not applicable); tuned-signature and approved-scanner closes still apply to them. An approved scanner closes only while its scan job targets this destination; an approved tester only under a covering change or engagement record (unknown flags). Alert history applies to the blocked and not-applicable closes only. Exploit, intrusion and malware classes flag when blocked; only reconnaissance and policy classes close on a block. Signatures with no vulnerability mapping answer unknown at the vulnerability step and flag. A not_checked signature-class answer never supports an Auto close.
 
 Required roles: src, dest, reporting_control, event. Fingerprint: role:src.ip (medium), role:dest.ip (high), role:reporting_control.signature_id (high). Precedent entity: role:src.ip. Precedent valid for 24h.
 
@@ -477,7 +446,7 @@ Required roles: src, dest, reporting_control, event. Fingerprint: role:src.ip (m
 | 4 | Q-0027: Did the control that raised the alert stop the item (the file, connection, request or message) before it took effect? [yes blocked_action_values] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | next step | next step | Q-0053 [yes ids_exploit_class_values] yes → flag; Q-0050 yes → flag; Q-0046 [gte ids_history_min_count] yes → flag; Q-0032 yes → escalate |
 | 5 | Q-0033: Does recent vulnerability data show the target is not affected by the vulnerability this signature targets? | `vuln.not_applicable` | low | close (mitigated true positive: signature_not_applicable) | **escalate** | flag to analyst | Q-0050 yes → flag; Q-0046 [gte ids_history_min_count] yes → flag; Q-0032 yes → escalate |
 
-### Web proxy or URL-filter block (`vendor:proxy_block`)
+### Web proxy or URL-filter block (`D-0029`)
 
 Generic: a web proxy or URL filter blocks a request from a user or host (normalized web alert, any product).
 
@@ -493,38 +462,39 @@ Required roles: src, user, web, dest, reporting_control, event. Fingerprint: rol
 | 4 | Q-0041: Is the blocked site in a low-risk web category (advertising, streaming media, social networking, games, shopping, entertainment, sports, travel, news and media)? [yes web_low_risk_categories] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_low_risk_category) | next step | next step | Q-0058 [yes browser] no → flag; Q-0046 [gte proxy_history_min_count] yes → flag; Q-0034 yes → escalate |
 | 5 | Q-0060: Has this host requested this domain on at least the customer's minimum number of distinct days in the lookback before the alert window? [gte entity_baseline_min_days] | `entity.baseline` | high | close (benign true positive: established_uncategorized_site) | flag to analyst | flag to analyst | Q-0059 [yes_unless web_uncategorized_values] yes → flag; Q-0058 [yes browser] no → flag; Q-0046 [gte proxy_history_min_count] yes → flag; Q-0034 yes → escalate |
 
-### Removable media (device control) alert (`vendor:removable_media`)
+### Web application firewall alert (`D-0030`)
 
-Generic: an endpoint device-control or DLP product reports removable storage connected (any product). File writes have their own detection.
+Generic: a web application firewall reports a rule match on a request to a protected application (normalized web alert, any product).
 
-Note: Connection events only; a write event flags here and belongs to vendor:removable_media_write. A non-storage device class flags first (possible keystroke injector). Servers and crown jewels escalate. A missing file count answers unknown and flags. Device serial numbers can be spoofed, so no approved-device list closes. The zero-files-written close needs the customer's coverage report to show write events from the same product; otherwise it flags.
+Note: Uses the client address, not the edge address. A block with a success status flags. Internal clients never close on a block. Five or more distinct rules from one client flag the blocked close. QA and penetration-test sources close under a covering change or engagement record. The vulnerability step was dropped: generic rules have no CVE mapping, so it never closed them; an unblocked request flags.
 
-Required roles: host, user, device, reporting_control, event. Fingerprint: role:host.name (low), role:user.name (low), role:device.id (high), role:device.event_type (low). Precedent entity: role:host.name. Precedent valid for 72h.
-
-| Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
-|---|---|---|---|---|---|---|---|
-| 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | low | close (inherit: precedent_match) | next step | next step | Q-0045 [gte alert_history_min_count] yes → flag; Q-0065 [yes connect] no → flag; Q-0066 [yes usb_non_storage_classes] yes → flag; Q-0067 yes → escalate |
-| 2 | Q-0066: Is the device a non-storage class (keyboard, mouse, composite, network adapter)? [yes usb_non_storage_classes] | `alert.class` | low | flag to analyst | next step | flag to analyst | – |
-| 3 | Q-0027: Did the control that raised the alert stop the item (the file, connection, request or message) before it took effect? [yes blocked_action_values] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | next step | next step | Q-0065 [yes connect] no → flag; Q-0067 yes → escalate; Q-0046 [gte alert_history_min_count] yes → flag |
-| 4 | Q-0043: Does an approved, unexpired removable-media exception cover this user and device class? | `list.lookup` | none | close (benign true positive: approved_business_exception) | next step | next step | Q-0065 [yes connect] no → flag; Q-0067 yes → escalate; Q-0068 [gte usb_files_written_flag] yes → flag |
-| 5 | Q-0044: Did the alert record no file written to the device? [lte 0] | `alert.measure` | low | close (benign true positive: no_data_transferred) | **escalate** | flag to analyst | Q-0065 [yes connect] no → flag; Q-0067 yes → escalate |
-
-### Removable media file write (device control) alert (`vendor:removable_media_write`)
-
-Generic: an endpoint device-control or DLP product reports files written to removable storage (any product).
-
-Note: Write events only. Blocked writes and approved exceptions close; more files than the customer's threshold flag even with an exception. Non-storage devices flag; servers and crown jewels escalate.
-
-Required roles: host, user, device, reporting_control, event. Fingerprint: role:host.name (low), role:user.name (low), role:device.id (high), role:device.event_type (low). Precedent entity: role:host.name. Precedent valid for 72h.
+Required roles: src, web, dest, reporting_control, event. Fingerprint: derived:client_ip (medium), role:web.app (high), role:reporting_control.signature (high). Precedent entity: derived:client_ip. Precedent valid for 24h.
 
 | Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
 |---|---|---|---|---|---|---|---|
-| 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | low | close (inherit: precedent_match) | next step | next step | Q-0045 [gte alert_history_min_count] yes → flag; Q-0069 [yes write] no → flag; Q-0066 [yes usb_non_storage_classes] yes → flag; Q-0067 yes → escalate |
-| 2 | Q-0066: Is the device a non-storage class (keyboard, mouse, composite, network adapter)? [yes usb_non_storage_classes] | `alert.class` | low | flag to analyst | next step | flag to analyst | – |
-| 3 | Q-0027: Did the control that raised the alert stop the item (the file, connection, request or message) before it took effect? [yes blocked_action_values] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | next step | next step | Q-0069 [yes write] no → flag; Q-0067 yes → escalate; Q-0046 [gte alert_history_min_count] yes → flag |
-| 4 | Q-0043: Does an approved, unexpired removable-media exception cover this user and device class? | `list.lookup` | none | close (benign true positive: approved_business_exception) | **escalate** | flag to analyst | Q-0069 [yes write] no → flag; Q-0067 yes → escalate; Q-0068 [gte usb_files_written_flag] yes → flag |
+| 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | medium | close (inherit: precedent_match) | next step | next step | Q-0045 [gte alert_history_min_count] yes → flag; Q-0050 yes → flag; Q-0047 [gte waf_distinct_signatures_min] yes → flag; Q-0054 [yes success] yes → flag; Q-0027 [yes blocked_action_values] no → flag |
+| 2 | Q-0051: Is this signature or rule on the customer's tuned list for this source and destination (or application)? | `list.lookup` | none | close (false positive: tuned_signature) | next step | next step | – |
+| 3 | Q-0031: Is the source address an approved scanner or authorised tester, inside its scheduled window? | `list.lookup` | low | close (benign true positive: approved_scanner_activity) | next step | next step | Q-0052 no → flag (if scanner); Q-0055 no → flag (if tester) |
+| 4 | Q-0055: Does an approved change or test-engagement record name this source address and cover the alert time? | `change.window` | low | close (benign true positive: authorized_security_test) | next step | next step | – |
+| 5 | Q-0027: Did the control that raised the alert stop the item (the file, connection, request or message) before it took effect? [yes blocked_action_values] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | flag to analyst | flag to analyst | Q-0054 [yes success] yes → flag; Q-0050 yes → flag; Q-0047 [gte waf_distinct_signatures_min] yes → flag |
 
-### User-reported phishing email (`vendor:user_reported_phishing`)
+### Email gateway threat alert (`D-0031`)
+
+Generic: an email security gateway reports a malicious or suspicious message, delivered or not (normalized email alert, any product).
+
+Note: Every fingerprint field is sender-chosen, so a precedent never closes or flags by itself; the flow proceeds and the precedent is shown as context. A block closes only when the message is out of every mailbox and no reputation source marks its URL or attachment. Delivered-then-removed closes only with no recorded click or open.
+
+Required roles: email, file, reporting_control, event. Fingerprint: role:email.sender (high), role:email.subject (high), role:file.sha256 (high). Precedent entity: role:email.recipient. Precedent valid for 24h.
+
+| Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
+|---|---|---|---|---|---|---|---|
+| 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | high | next step | next step | next step | – |
+| 2 | Q-0037: Is the message part of an approved phishing-simulation campaign, matched on sending address and campaign marker inside the campaign window? | `list.lookup` | low | close (benign true positive: authorized_phishing_simulation) | next step | next step | Q-0070 no → flag |
+| 3 | Q-0035: Is the message quarantined or removed from every recipient mailbox? | `email.message_status` | low | next step | flag to analyst | flag to analyst | – |
+| 4 | Q-0074: Did the email control stop the message before it reached the recipient (blocked, rejected, or quarantined before delivery)? [yes email_blocked_action_values] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | next step | next step | Q-0034 yes → flag; Q-0030 yes → flag |
+| 5 | Q-0036: Do click and open records show that no recipient followed a link or opened an attachment from the message? | `email.no_interaction` | low | close (mitigated true positive: contained_without_interaction) | **escalate** | flag to analyst | – |
+
+### User-reported phishing email (`D-0032`)
 
 Generic: a user reports an email as phishing through the report button or a reporting mailbox.
 
@@ -540,21 +510,52 @@ Required roles: email, user, event. Fingerprint: role:email.message_id (high). P
 | 4 | Q-0072: Does the message contain no URL and no attachment? [lte 0] | `alert.measure` | low | flag to analyst | next step | next step | – |
 | 5 | Q-0036: Do click and open records show that no recipient followed a link or opened an attachment from the message? | `email.no_interaction` | low | close (mitigated true positive: contained_without_interaction) | **escalate** | flag to analyst | Q-0035 no → flag; Q-0046 [gte alert_history_min_count] yes → flag |
 
-### Web application firewall alert (`vendor:waf_alert`)
+### DLP policy match (`D-0033`)
 
-Generic: a web application firewall reports a rule match on a request to a protected application (normalized web alert, any product).
+Generic: a DLP control reports regulated data leaving through email, web, cloud storage or print (normalized DLP alert, any product).
 
-Note: Uses the client address, not the edge address. A block with a success status flags. Internal clients never close on a block. Five or more distinct rules from one client flag the blocked close. QA and penetration-test sources close under a covering change or engagement record. The vulnerability step was dropped: generic rules have no CVE mapping, so it never closed them; an unblocked request flags.
+Note: Held, quarantined and pending-release actions answer unknown and flag: a later release would undo them. High severity or a large record count flags even to approved destinations. Three or more DLP alerts for the same user in the window turn a benign close into a flag and a block into an escalation, and escalate an unblocked match to an unapproved destination (which otherwise flags).
 
-Required roles: src, web, dest, reporting_control, event. Fingerprint: derived:client_ip (medium), role:web.app (high), role:reporting_control.signature (high). Precedent entity: derived:client_ip. Precedent valid for 24h.
+Required roles: user, dest, reporting_control, dlp, event. Fingerprint: role:user.name (low), role:reporting_control.signature (low), derived:destination_domain (high). Precedent entity: role:user.name. Precedent valid for 24h.
 
 | Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
 |---|---|---|---|---|---|---|---|
-| 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | medium | close (inherit: precedent_match) | next step | next step | Q-0045 [gte alert_history_min_count] yes → flag; Q-0050 yes → flag; Q-0047 [gte waf_distinct_signatures_min] yes → flag; Q-0054 [yes success] yes → flag; Q-0027 [yes blocked_action_values] no → flag |
-| 2 | Q-0051: Is this signature or rule on the customer's tuned list for this source and destination (or application)? | `list.lookup` | none | close (false positive: tuned_signature) | next step | next step | – |
-| 3 | Q-0031: Is the source address an approved scanner or authorised tester, inside its scheduled window? | `list.lookup` | low | close (benign true positive: approved_scanner_activity) | next step | next step | Q-0052 no → flag (if scanner); Q-0055 no → flag (if tester) |
-| 4 | Q-0055: Does an approved change or test-engagement record name this source address and cover the alert time? | `change.window` | low | close (benign true positive: authorized_security_test) | next step | next step | – |
-| 5 | Q-0027: Did the control that raised the alert stop the item (the file, connection, request or message) before it took effect? [yes blocked_action_values] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | flag to analyst | flag to analyst | Q-0054 [yes success] yes → flag; Q-0050 yes → flag; Q-0047 [gte waf_distinct_signatures_min] yes → flag |
+| 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | low | close (inherit: precedent_match) | next step | next step | Q-0045 [gte alert_history_min_count] yes → flag; Q-0063 [yes dlp_high_severity_values] yes → flag; Q-0064 [gte dlp_record_count_flag] yes → flag; Q-0046 [gte alert_history_min_count] yes → flag |
+| 2 | Q-0061: Is the flagged content a known DLP test file or template, by content hash? | `list.lookup` | low | close (false positive: known_test_data) | next step | next step | Q-0046 [gte alert_history_min_count] yes → flag |
+| 3 | Q-0062: Is the DLP action final (blocked or deleted), rather than held, quarantined or pending release? [yes dlp_final_block_values; unknown dlp_pending_values] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | next step | flag to analyst | Q-0046 [gte alert_history_min_count] yes → escalate |
+| 4 | Q-0038: Does an approved, unexpired DLP exception cover this user, policy and destination? | `list.lookup` | none | close (benign true positive: approved_business_exception) | next step | next step | Q-0063 [yes dlp_high_severity_values] yes → flag; Q-0064 [gte dlp_record_count_flag] yes → flag; Q-0046 [gte alert_history_min_count] yes → flag |
+| 5 | Q-0039: Is the destination an internal or tenant domain, or an approved partner domain for this data class? | `list.lookup` | low | close (benign true positive: approved_recipient) | flag to analyst | flag to analyst | Q-0063 [yes dlp_high_severity_values] yes → flag; Q-0064 [gte dlp_record_count_flag] yes → flag; Q-0046 [gte alert_history_min_count] yes → flag; Q-0046 [gte alert_history_min_count] yes → escalate (on flag) |
+
+### Removable media (device control) alert (`D-0034`)
+
+Generic: an endpoint device-control or DLP product reports removable storage connected (any product). File writes have their own detection.
+
+Note: Connection events only; a write event flags here and belongs to vendor:removable_media_write. A non-storage device class flags first (possible keystroke injector). Servers and crown jewels escalate. A missing file count answers unknown and flags. Device serial numbers can be spoofed, so no approved-device list closes. The zero-files-written close needs the customer's coverage report to show write events from the same product; otherwise it flags.
+
+Required roles: host, user, device, reporting_control, event. Fingerprint: role:host.name (low), role:user.name (low), role:device.id (high), role:device.event_type (low). Precedent entity: role:host.name. Precedent valid for 72h.
+
+| Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
+|---|---|---|---|---|---|---|---|
+| 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | low | close (inherit: precedent_match) | next step | next step | Q-0045 [gte alert_history_min_count] yes → flag; Q-0065 [yes connect] no → flag; Q-0066 [yes usb_non_storage_classes] yes → flag; Q-0067 yes → escalate |
+| 2 | Q-0066: Is the device a non-storage class (keyboard, mouse, composite, network adapter)? [yes usb_non_storage_classes] | `alert.class` | low | flag to analyst | next step | flag to analyst | – |
+| 3 | Q-0027: Did the control that raised the alert stop the item (the file, connection, request or message) before it took effect? [yes blocked_action_values] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | next step | next step | Q-0065 [yes connect] no → flag; Q-0067 yes → escalate; Q-0046 [gte alert_history_min_count] yes → flag |
+| 4 | Q-0043: Does an approved, unexpired removable-media exception cover this user and device class? | `list.lookup` | none | close (benign true positive: approved_business_exception) | next step | next step | Q-0065 [yes connect] no → flag; Q-0067 yes → escalate; Q-0068 [gte usb_files_written_flag] yes → flag |
+| 5 | Q-0044: Did the alert record no file written to the device? [lte 0] | `alert.measure` | low | close (benign true positive: no_data_transferred) | **escalate** | flag to analyst | Q-0065 [yes connect] no → flag; Q-0067 yes → escalate |
+
+### Removable media file write (device control) alert (`D-0035`)
+
+Generic: an endpoint device-control or DLP product reports files written to removable storage (any product).
+
+Note: Write events only. Blocked writes and approved exceptions close; more files than the customer's threshold flag even with an exception. Non-storage devices flag; servers and crown jewels escalate.
+
+Required roles: host, user, device, reporting_control, event. Fingerprint: role:host.name (low), role:user.name (low), role:device.id (high), role:device.event_type (low). Precedent entity: role:host.name. Precedent valid for 72h.
+
+| Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
+|---|---|---|---|---|---|---|---|
+| 1 | Q-0000: Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer's minimum number of independent analyst closes, inside the validity window, with the precedent entity not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)? | `precedent.check` | low | close (inherit: precedent_match) | next step | next step | Q-0045 [gte alert_history_min_count] yes → flag; Q-0069 [yes write] no → flag; Q-0066 [yes usb_non_storage_classes] yes → flag; Q-0067 yes → escalate |
+| 2 | Q-0066: Is the device a non-storage class (keyboard, mouse, composite, network adapter)? [yes usb_non_storage_classes] | `alert.class` | low | flag to analyst | next step | flag to analyst | – |
+| 3 | Q-0027: Did the control that raised the alert stop the item (the file, connection, request or message) before it took effect? [yes blocked_action_values] | `alert.class` | low, forwarded medium | close (mitigated true positive: blocked_by_control) | next step | next step | Q-0069 [yes write] no → flag; Q-0067 yes → escalate; Q-0046 [gte alert_history_min_count] yes → flag |
+| 4 | Q-0043: Does an approved, unexpired removable-media exception cover this user and device class? | `list.lookup` | none | close (benign true positive: approved_business_exception) | **escalate** | flag to analyst | Q-0069 [yes write] no → flag; Q-0067 yes → escalate; Q-0068 [gte usb_files_written_flag] yes → flag |
 
 ## Questions used
 
@@ -633,6 +634,7 @@ Required roles: src, web, dest, reporting_control, event. Fingerprint: derived:c
 | Q-0071 | Is the From domain on the customer's approved-sender list (customer-controlled or transactional-notification domains only)? | `list.lookup` | high | The From domain is chosen by the sender; only the authentication guard makes it trustworthy. |
 | Q-0072 | Does the message contain no URL and no attachment? | `alert.measure` | low | Counted from the message as delivered. |
 | Q-0073 | Was the file's hash seen in the alert window on any host outside the approved security-tooling and analysis hosts? | `org.prevalence` | low | Hash sightings across the fleet come from sensors; used only as a guard that escalates. |
+| Q-0074 | Did the email control stop the message before it reached the recipient (blocked, rejected, or quarantined before delivery)? | `alert.class` | low, forwarded medium | Set by the security control, not by the activity. |
 
 ## Context facts used
 
@@ -674,7 +676,7 @@ Supply effort is how hard a low-maturity customer finds it to provide the fact. 
 
 | Capability | Answer | Meaning | Escalate only |
 |---|---|---|---|
-| `alert.class` | enum | The class of an alert value, from the reporting control's value table (bank/recipes/value_tables/): the table maps the product's raw value to one of the class's fixed values (alert_classes below). A raw value no table row matches maps to the class's default. | no |
+| `alert.class` | enum | The class of an alert value, from the reporting control's value table (bank/broker/translations/): the table maps the product's raw value to one of the class's fixed values (alert_classes below). A raw value no table row matches maps to the class's default. | no |
 | `alert.history` | count | Earlier alerts that already fired inside the triage window and share the key (or, with distinct, the number of distinct values of that role among them). | no |
 | `alert.measure` | number | A number the reporting control recorded on the alert (for example files written, records matched, indicators in a message). | no |
 | `change.window` | bool | An approved change covers one of the entities at at_time and lists user, or a group user belongs to, as an implementer, and the change's approver is not one of its implementers. | no |
@@ -682,7 +684,7 @@ Supply effort is how hard a low-maturity customer finds it to provide the fact. 
 | `email.auth` | bool | The message passed DMARC with an aligned SPF or DKIM pass for its From domain. | no |
 | `email.message_status` | bool | The message is quarantined or removed from every recipient mailbox now. | no |
 | `email.no_interaction` | bool | Click and attachment-open records show no recipient followed a link or opened an attachment from the message. | no |
-| `endpoint.run_status` | enum | Whether the detected file was stopped before it ran, from the endpoint product's own record of the alert. The broker finds the vendor's alert by vendor_alert_id; if that is missing, by endpoint_device (or host), file hash and a time window of match_window_minutes around at_time. No match, or more than one, answers unknown. The vendor's run-status values map through its API value table (bank/recipes/value_tables/, source edr_api). | no |
+| `endpoint.run_status` | enum | Whether the detected file was stopped before it ran, from the endpoint product's own record of the alert. The broker finds the vendor's alert by vendor_alert_id; if that is missing, by endpoint_device (or host), file hash and a time window of match_window_minutes around at_time. No match, or more than one, answers unknown. The vendor's run-status values map through its API value table (bank/broker/translations/, source edr_api). | no |
 | `entity.baseline` | count | Distinct days in the lookback, ending before the triage window, on which the entity showed the same behavior. | no |
 | `file.reputation` | bool | A reputation source (including bank seed lists such as known-bad driver samples) marks the file's hash as known vulnerable or malicious. | yes |
 | `file.signer` | bool | The file has a valid code signature from a publisher on trusted_list and the binary is not on that list's excluded_binaries. | no |
@@ -690,7 +692,7 @@ Supply effort is how hard a low-maturity customer finds it to provide the fact. 
 | `ip.reputation` | bool | A reputation source marks the IP as malicious. | yes |
 | `list.lookup` | bool | The entity matches an entry of the named context list under that list's match_rule (file entities match on sha256, or signer plus path), the entry's host scope includes host when given, and the entry is in force at at_time when the list is time-bound. | no |
 | `org.prevalence` | count | With of_weeks and min_weeks: the k-th lowest weekly count of distinct hosts showing the pattern over the of_weeks weeks before the alert window, with k = of_weeks - min_weeks + 1 (default 4 and 3, so the 2nd lowest). It is at least N exactly when at least min_weeks of the of_weeks weeks reach N hosts, so the Triage agent compares it with org_prevalence_min_hosts and no threshold reaches the broker. of_weeks and min_weeks set the statistic, not a threshold. With window alert_window: distinct hosts showing it inside the alert window. Hosts in exclude_list (a context list's host scopes, by asset ID) are not counted. | no |
-| `precedent.check` | bool | Q0, answered by the Triage agent from context questions C-03, C-04 and C-06 (bank/context_rules.yaml q0): the fingerprint has an audited close, or at least q0_min_independent_closes independent analyst closes, inside the validity window; no other alert on the entity has a higher severity than this one; the precedent entity is not a crown jewel. A mitigated precedent counts only when this alert was also stopped. | no |
+| `precedent.check` | bool | Q0, answered by the Triage agent from context questions C-03, C-04 and C-06 (bank/triage/context_rules.yaml q0): the fingerprint has an audited close, or at least q0_min_independent_closes independent analyst closes, inside the validity window; no other alert on the entity has a higher severity than this one; the precedent entity is not a crown jewel. A mitigated precedent counts only when this alert was also stopped. | no |
 | `scan.job_active` | bool | An approved scan job from this scanner address that targets this address was running at at_time. | no |
 | `traffic.denied_only` | bool | Every connection from the source (to the destination, when given) in the alert window was denied; none was allowed or established. | no |
 | `url.reputation` | bool | A reputation source marks a URL or domain in the entity as malicious. | yes |

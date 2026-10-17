@@ -1,0 +1,8 @@
+id: BE-0022
+name: Signature not applicable
+description: The target does not run the product or version the signature's exploit needs, so the attempt cannot succeed.
+derived_from:
+  source:
+  - bank/intake/use_cases.yaml triage_hints
+  license: internal
+version: 1

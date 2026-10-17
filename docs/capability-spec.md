@@ -1,8 +1,8 @@
 # Capability specification
 
-Status: (designed, not built) for the Tool Broker and recipes; none runs yet. The answer types, rating floors, parameters with bounds and step rules are in the bank (`bank/capabilities.yaml`, `bank/parameters.yaml`) and enforced by `validate`.
+Status: (designed, not built) for the Tool Broker and recipes; none runs yet. The answer types, rating floors, parameters with bounds and step rules are in the bank (`bank/broker/capabilities.yaml`, `bank/triage/parameters.yaml`) and enforced by `validate`.
 
-One entry per capability in `bank/capabilities.yaml` (the bank migration split `alert.field` into `alert.class` and `alert.measure` and added the context capabilities `case.open`, `entity.alerts`, `entity.max_severity`, `asset.priority`, `asset.crown_jewel`, `identity.privileged` and `precedent.check`). The list below is the batch-1 set (PR #6), which adds `alert.field`, `url.reputation`, `vuln.not_applicable`, `email.*`, `traffic.denied_only`, `alert.history` and `scan.job_active` to the pilot set.
+One entry per capability in `bank/broker/capabilities.yaml` (the bank migration split `alert.field` into `alert.class` and `alert.measure` and added the context capabilities `case.open`, `entity.alerts`, `entity.max_severity`, `asset.priority`, `asset.crown_jewel`, `identity.privileged` and `precedent.check`). The list below is the batch-1 set (PR #6), which adds `alert.field`, `url.reputation`, `vuln.not_applicable`, `email.*`, `traffic.denied_only`, `alert.history` and `scan.job_active` to the pilot set.
 
 What may be asked of the broker at all (bank IDs, answer types, status and provenance, no thresholds, scope profiles), and which capabilities are context or triage questions: `docs/broker-questions.md`.
 
@@ -14,17 +14,17 @@ No threshold lives in a recipe.
 
 Source rows: each entry's source lines name Splunk (the first SIEM in scope). Sentinel, Elastic, QRadar, FortiSIEM and CrowdStrike Next-Gen SIEM rows are added when each SIEM's adapter is built (designed, not built). A capability may also be answered directly from a tool's API or a read-only SOAR action; each customer has one authoritative source per capability and a fallback order (design-decisions §9).
 
-Parameter defaults, bounds and scrutiny directions are in `bank/parameters.yaml`; validation rejects values outside them. Lowering scrutiny (a lower count, a longer validity, a wider list) needs human approval with an owner and an expiry. Where a number below differs from the bank, the bank wins.
+Parameter defaults, bounds and scrutiny directions are in `bank/triage/parameters.yaml`; validation rejects values outside them. Lowering scrutiny (a lower count, a longer validity, a wider list) needs human approval with an owner and an expiry. Where a number below differs from the bank, the bank wins.
 
 Template kinds (§10):
 - **Sigma**: an event search compiled to SPL by pySigma with the customer's pipeline.
 - **lookup**: a typed template against a list, lookup table or index.
 - **API**: a typed template against a tool's API.
-- **alert source**: the normalized alert itself, through a value table (`bank/recipes/value_tables/`); no tool call and outside the call budget.
+- **alert source**: the normalized alert itself, through a translation (`bank/broker/translations/`); no tool call and outside the call budget.
 
-Call budget (design-decisions §9, `scope` in `bank/capabilities.yaml`): at most 6 calls per alert on the worst path (Q0, the steps and the guards of the closing step). It counts calls to outside tools only: the SIEM, the EDR, identity, email, threat intel, change and ticketing, the vulnerability scanner and SOAR (`budget_counts_sources`). Lookups in our own cached context and list store do not count (`list.lookup`, context questions), nor do the alert source, case memory (`precedent.check`) and `context.rule`. The flow limit is separate and unchanged: at most 5 steps per flow in total, Q0 counting as step 1, enforced by `validate`.
+Call budget (design-decisions §9, `scope` in `bank/broker/capabilities.yaml`): at most 6 calls per alert on the worst path (Q0, the steps and the guards of the closing step). It counts calls to outside tools only: the SIEM, the EDR, identity, email, threat intel, change and ticketing, the vulnerability scanner and SOAR (`budget_counts_sources`). Lookups in our own cached context and list store do not count (`list.lookup`, context questions), nor do the alert source, case memory (`precedent.check`) and `context.rule`. The flow limit is separate and unchanged: at most 5 steps per flow in total, Q0 counting as step 1, enforced by `validate`.
 
-Row kinds and modes: an ambiguous row answers unknown in every mode; an unverified row (and any non-ambiguous fallback answer) may support a close in Shadow and Recommend, marked "unverified mapping: <table>/<row>", but in Auto only its raise-only values stand (each class lists them: ran, high risk, malicious categories); a row verified for the customer may support any close. Details: `docs/broker-questions.md`.
+Trust: every answer carries `trust` (checked | not_checked; `bank/contract/answer.yaml`). The broker sets it: checked for a translation verified for the customer or standards-defined (for example HTTP status codes, RFC 9110), or no translation at all; not_checked for an unverified or model-proposed translation and for any fallback-source answer. An ambiguous translation answers status unknown. A not_checked answer may support a close in Shadow and Recommend (marked), never in Auto. Details: `docs/broker-questions.md`.
 
 Every event-search recipe also runs a data-recency test: the data source must show events within the expected ingestion delay, so an empty result is never read as "no".
 
@@ -32,7 +32,7 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 
 ## case.precedent (context question C-04) and precedent.check (Q0)
 - **Measures:** closes of the fingerprint inside the validity window by an original decision with a recorded reason: how many passed audit, and how many independent analyst closes there were (a count per component). A mitigated close counts only when the current alert was also stopped.
-- **Triage rule (Q0, `bank/context_rules.yaml`):** yes if at least one close passed audit or at least `q0_min_independent_closes` (default 2, min 2, max 5) independent analyst closes exist (C-04), no other alert on the entity has a higher severity than this one (C-03), and the precedent entity is not a crown jewel (C-06).
+- **Triage rule (Q0, `bank/triage/context_rules.yaml`):** yes if at least one close passed audit or at least `q0_min_independent_closes` (default 2, min 2, max 5) independent analyst closes exist (C-04), no other alert on the entity has a higher severity than this one (C-03), and the precedent entity is not a crown jewel (C-06).
   - `precedent_validity_hours`: default 24, min 1, max 72; detections set their own value up to the maximum (the 7-day detections were capped at 72h).
   - Closures with reason `precedent_match` are never returned, so precedents never chain.
 - **Template kind:** lookup (case memory, Reno's database on premises).
@@ -148,8 +148,8 @@ Every event-search recipe also runs a data-recency test: the data source must sh
   - Hosts in `exclude_list`, matched by asset ID, are not counted.
 - **Triage rule:** yes if the statistic ≥ `org_prevalence_min_hosts`. With the alert window, yes if hosts ≥ `org_prevalence_escape_min_hosts` (fixed at 1).
   - `org_prevalence_min_hosts`: default 5, min 3, max 50. Triage-side threshold.
-  - `org_prevalence_of_weeks`: default 4, min 3, max 12. Recipe statistic setting (`category: recipe_statistic`).
-  - `org_prevalence_min_weeks`: default 3, min 2, max 12, never above `of_weeks`. Recipe statistic setting; lowering it reduces scrutiny.
+  - `org_prevalence_of_weeks`: default 4, min 3, max 12. Statistic setting (`category: statistic_setting`).
+  - `org_prevalence_min_weeks`: default 3, min 2, max 12, never above `of_weeks`. Statistic setting; lowering it reduces scrutiny.
   - This restores the pre-migration rule (3 of 4 weeks). The first migration commit (`4686ea4`) used the minimum over every week, which was stricter.
 - **Template kind:** Sigma, with an aggregation (distinct hosts, distinct weeks).
 - **Splunk (CIM):** Endpoint.Processes (`process`, `process_hash`, `dest`), accelerated.
@@ -173,20 +173,20 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Owner:** Splunk specialist, when change records are in Splunk. Otherwise ITSM access is an open question, since none of the six specialists covers it.
 
 ## alert.class and alert.measure (were alert.field)
-- **Measures:** `alert.class` returns one value of a fixed class (`alert_classes` in `bank/capabilities.yaml`, e.g. `av_execution_state`: pre_execution, ran, unknown). The product's raw value goes through its value table (`bank/recipes/value_tables/`, one per vendor and product, each row verified or not; a generic table holds vendor-neutral rows). `alert.measure` returns a number the control recorded.
+- **Measures:** `alert.class` returns one value of a fixed class (`alert_classes` in `bank/broker/capabilities.yaml`, e.g. `av_execution_state`: pre_execution, ran, unknown). The product's raw value goes through its translation (`bank/broker/translations/`, one per vendor and product, each row with a kind; a generic one holds vendor-neutral rows); the answer carries a trust. `alert.measure` returns a number the control recorded.
 - **Triage rule:** the step's rule: enum values (or a list parameter) that mean yes, and those that mean unknown; or `gte`/`lte` a parameter for numbers, for example `dlp_record_count_flag` (default 1000, min 10, max 100000) and `usb_files_written_flag` (default 50, min 1, max 10000).
 - **Template kind:** alert source (the broker answers from the normalized alert; no tool call, outside the call budget). The Triage agent never sees a field name or raw value.
 - **Splunk:** Enterprise Security notable fields after CIM normalization.
 - **Known-answer tests:** a replayed sample alert per vendor family returns the expected normalized values. An unapproved raw value is reported as pending translation.
 - **Unknown when:** the field is missing or empty, its value is in `unknown_values`, or the value's translation is not yet approved (which taints the close).
 - **Attacker influence:** rated per question and per source profile (direct API vs forwarded syslog).
-- **Owner:** Tool Broker (alert source). New value-table rows are proposed by the Use Case Manager and approved by a human; a detection is Auto-eligible for a customer only when every row on its close paths is verified for that customer (customer layer).
+- **Owner:** Tool Broker (alert source). New translation rows are proposed (by a person, or by a model in build mode only) and approved by a human before they are frozen; a detection is Auto-eligible for a customer only when every row on its close paths is verified for that customer (customer layer).
 
 ## endpoint.run_status
 - **Measures:** whether the detected file was stopped before it ran: pre_execution, ran or unknown, from the endpoint product's own record of the alert.
-- **Source authority:** the endpoint product's API (for Defender, the alert evidence in its security API). The broker finds the product's alert by `reporting_control.vendor_alert_id`; if that is missing, by `reporting_control.endpoint_device`, file hash and `edr_alert_match_window_minutes` (default 10, min 1, max 60). No match or several matches answer unknown. Fallback, only when the API is unavailable or not granted: the SIEM's copy of the product's alert, through its `siem_copy` value table; its answers follow the unverified rule (Shadow and Recommend only, marked; never Auto), and its ambiguous rows (1117 Block, quarantine) answer unknown in every mode. Rows of the API table are unverified until the customer verifies them.
+- **Source authority:** the endpoint product's API (for Defender, the alert evidence in its security API). The broker finds the product's alert by `reporting_control.vendor_alert_id`; if that is missing, by `reporting_control.endpoint_device`, file hash and `edr_alert_match_window_minutes` (default 10, min 1, max 60). No match or several matches answer unknown. Fallback, only when the API is unavailable or not granted: the SIEM's copy of the product's alert, through its `siem_copy` translation; its answers follow the unverified rule (Shadow and Recommend only, marked; never Auto), and its ambiguous rows (1117 Block, quarantine) answer unknown in every mode. Rows of the API table are unverified until the customer verifies them.
 - **Triage rule:** the step's enum rule (Q-0049: pre_execution means yes, unknown means unknown).
-- **Template kind:** API lookup, with the run-status value table in the API recipe.
+- **Template kind:** API lookup, with the run-status translation in the API recipe.
 - **Known-answer tests:** known prevented, blocked, quarantined and detected alerts return pre_execution, ran, unknown and ran (#20 for Defender, #9 for CrowdStrike).
 - **Unknown when:** no match or several matches, mixed evidence, a quarantine or cleaning after execution, pending reboot, partial remediation, an ambiguous row (in every mode), or in Auto an unverified row or a fallback answer.
 - **Attacker influence:** low from the API; medium when forwarded.

@@ -1,0 +1,18 @@
+id: Q-0050
+text: Is the source address inside the customer's internal networks?
+tests: BE-0021
+attacker_influence:
+  rating: none
+  reason: Compared with the customer's own address plan.
+notes: 'Customer context (the customer''s own address ranges), so it is a context list with an owner, not a vendor meaning.'
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 2
+kind: triage
+inputs:
+  entity: role:src.ip

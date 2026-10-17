@@ -1,0 +1,10 @@
+# Broker-side settings, bounded like the Triage agent's parameters (same schema). The Triage agent never reads them.
+parameters:
+  verification_min_spot_check_alerts:
+    default: 20
+    bounds:
+      min: 20
+      max: 1000
+    reduces_scrutiny_when: lower
+    description: Real alerts at this customer on which the Product Operator spot-checked a value-table row before that row counts as verified for the customer (with a cited vendor doc, checker, date, product version and expiry).
+    unit: alerts

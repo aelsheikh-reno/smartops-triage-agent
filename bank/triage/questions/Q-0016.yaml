@@ -1,0 +1,18 @@
+id: Q-0016
+text: Is the host on the customer's list of hosts whose role requires RDP?
+tests: BE-0009
+attacker_influence:
+  rating: none
+  reason: Asset-role record maintained by IT.
+derived_from:
+  source:
+  - splunk/security_content detections/endpoint/windows_remote_services_rdp_enable.yml
+  license:
+  - Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+kind: triage
+inputs:
+  entity: role:host.name

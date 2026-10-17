@@ -1,0 +1,21 @@
+id: Q-0026
+text: Does an authorized security test engagement cover this host or user at the alert time?
+tests: BE-0016
+attacker_influence:
+  rating: low
+  reason: Approved engagement record, but a real attacker active on an in-scope host during the window would also match.
+derived_from:
+  source:
+  - splunk/security_content detections/endpoint/detect_sharphound_usage.yml
+  license:
+  - Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+kind: triage
+inputs:
+  entity:
+  - role:host.name
+  - role:user.name
+  at_time: role:event.time

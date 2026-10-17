@@ -1,0 +1,37 @@
+# Worked messages the gates check against the envelope rules (validate runs each answer through the acceptance rules).
+# expect: accept or reject (with the reason the Triage agent logs).
+pending:
+- request_id: 7f3c1e0a-run:2:Q-0049:1
+  run_id: 7f3c1e0a-run
+  question_id: Q-0049
+  scope_profile: triage
+  deadline: '2026-10-17T10:00:10Z'
+- request_id: ew-host42-1000:0:C-06:1
+  entity_window_id: ew-host42-1000
+  question_id: C-06
+  scope_profile: triage
+  deadline: '2026-10-17T10:00:10Z'
+answers:
+- name: answer to a pending triage request, in time
+  expect: accept
+  received_at: '2026-10-17T10:00:03Z'
+  message: {request_id: 7f3c1e0a-run:2:Q-0049:1, run_id: 7f3c1e0a-run, measurement_id: m-901, answer: pre_execution, status: answered, trust: not_checked, provenance: {source: endpoint API, observed_at: '2026-10-17T10:00:02Z'}}
+- name: context answer shared through the entity window
+  expect: accept
+  received_at: '2026-10-17T10:00:04Z'
+  message: {request_id: ew-host42-1000:0:C-06:1, entity_window_id: ew-host42-1000, measurement_id: m-777, answer: false, status: answered, trust: checked, provenance: {source: context store, observed_at: '2026-10-17T09:59:00Z'}}
+- name: answer for a run that did not send this request
+  expect: reject
+  reason: run_id does not match the pending request
+  received_at: '2026-10-17T10:00:05Z'
+  message: {request_id: 7f3c1e0a-run:2:Q-0049:1, run_id: 99999999-other, measurement_id: m-902, answer: pre_execution, status: answered, trust: checked, provenance: {source: endpoint API}}
+- name: late answer
+  expect: reject
+  reason: late
+  received_at: '2026-10-17T10:00:30Z'
+  message: {request_id: 7f3c1e0a-run:2:Q-0049:1, run_id: 7f3c1e0a-run, measurement_id: m-903, answer: ran, status: answered, trust: checked, provenance: {source: endpoint API}}
+- name: answer to no pending request
+  expect: reject
+  reason: no pending request
+  received_at: '2026-10-17T10:00:05Z'
+  message: {request_id: 7f3c1e0a-run:3:Q-0028:1, run_id: 7f3c1e0a-run, measurement_id: m-904, answer: low_risk, status: answered, trust: not_checked, provenance: {source: alert}}

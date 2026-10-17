@@ -12,13 +12,15 @@ Beyond structure, it enforces the bank's design rules:
 - honest ratings: no question rated below its capability's floor without a written reason; change.window needs an
   independent approver
 - value tables: every row has an id and a kind (ambiguous or unverified); an ambiguous row never maps to a value that
-  supports a close; verified is per customer (bank/overlays/customer/<c>/verifications.yaml), and a detection set to Auto
+  supports a close; verified is per customer (bank/broker/customers/<c>/verifications.yaml), and a detection set to Auto
   for a customer needs every value-table row on its close paths verified for that customer
 """
 import glob
 import json
 import os
 import re
+
+import yaml
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -44,13 +46,14 @@ PROSE = {"text", "name", "intent", "notes", "note", "description", "reason", "so
          "changed_in_migration", "below_floor_reason", "approved_by", "pattern", "when", "then", "applies_to", "if_entry_type", "on_yes",
          "on_no", "on_unknown", "step", "question", "kind", "feeds", "when_not_answered", "sigma_logsource_none", "required_roles",
          "precedent_validity_reason", "parameters", "rule", "list", "context", "context_questions", "coverage", "fallback_rating", "rating",
-         "join", "first", "all", "repo", "_file"}
+         "join", "first", "all", "repo", "_file", "derived_from", "alert_type"}
 TODAY = __import__("datetime").date.today().isoformat()
+ROW_KINDS = ("ambiguous", "unverified", "proposed", "standards_defined")
 THRESHOLD_KEYS = {"min_count", "min_hosts", "min_days", "min_weeks", "of_weeks", "threshold", "op", "values", "unknown_op", "unknown_values", "max_count"}
 WINDOW_KEYS = {"lookback_days", "lookback_weeks", "lookback_hours", "max_age_days", "validity_hours", "window"}   # windows may travel to the broker
 QUERY_SYNTAX = re.compile(r"\b(tstats|sourcetype|inputlookup|index\s*=)|\|\s*stats\b", re.I)
 # Vendor-leak gate (design-decisions: Version 1 scope). Vendor-specific content lives only in adapter folders,
-# broker recipes and value tables (bank/recipes/), and in offline metadata (data_source, the use-case catalog).
+# broker recipes and value tables (bank/broker/), and in offline metadata (data_source, the use-case catalog).
 QUERY_LANGUAGE = re.compile(
     r"index\s*=|\|\s*(tstats|stats|inputlookup|lookup|eval|rex|search|table|dedup|where|summarize|project|extend|join|mv-expand|parse)\b"
     r"|\bsourcetype\b|\bdatamodel\b|\btstats\b|\binputlookup\b|(?-i:\bLAST\s+\d+\s+(MINUTES|HOURS|DAYS)\b)|\bSELECT\s+\S+.*\bFROM\s+events\b"
@@ -60,7 +63,7 @@ PRODUCT_TERMS = re.compile(
     r"|correlation search|saved search|analytics rule|\bdata model\b", re.I)
 DISTINCT_FIELD = ({f for f in field_names.KNOWN if "_" in f.strip("_") or "." in f or re.search("[A-Z]", f)} | {"_time"}) - set(R.ROLES)
 
-EXEMPT_KEYS = {"data_source", "sigma_logsource", "sigma_refs", "source", "license"}
+EXEMPT_KEYS = {"data_source", "sigma_logsource", "sigma_refs", "source", "license", "derived_from"}
 SIGMA = os.path.join(B.ROOT, "sources/sigma")
 ATTACK = os.path.join(B.ROOT, "sources/attack-stix-data/enterprise-attack/enterprise-attack-20.0.json")
 TYPES = {"bool", "count", "number", "enum", "time"}
@@ -83,7 +86,7 @@ def scan_text(obj, path="", exempt=EXEMPT_KEYS):
             yield path, hit
 
 
-LEAK_SKIP = {"data_source", "sigma_logsource", "sigma_refs", "source", "license", "use_case", "escu_uuid", "_file"}
+LEAK_SKIP = {"data_source", "sigma_logsource", "sigma_refs", "source", "license", "use_case", "escu_uuid", "_file", "derived_from"}
 
 
 def scan_leaks(obj, path=""):
@@ -107,6 +110,45 @@ def scan_leaks(obj, path=""):
             if tok.rstrip(".") in DISTINCT_FIELD:
                 yield path, "schema field name", tok.rstrip(".")
                 break
+
+
+# Triage-neutrality gate: the triage layer and the contract never name vendors, products or rule libraries, never refer to
+# the broker's internals (its translations, rows, sources, recipes), and never hold field names or query-language tokens.
+# derived_from metadata is the only exception.
+BROKER_REF = re.compile(r"\bbank/broker\b|\bbroker/|\b(value|translation)[ -]?tables?\b|\btranslation rows?\b|\b(table|translation)/row\b|"
+                        r"\brows?\b|\brecipes?\b|\bsiem_copy\b|\bedr_api\b|\bsource[_ ]authority\b|\bfallback[- ]sources?\b|"
+                        r"\bauthoritative sources?\b|\brow kinds?\b|\bunverified mapping\b|\bintake/|\brule[- ]map\b|\bCF-\d{4}\b", re.I)
+
+
+def _strip_derived(obj):
+    if isinstance(obj, dict):
+        return {k: _strip_derived(v) for k, v in obj.items() if k != "derived_from"}
+    if isinstance(obj, list):
+        return [_strip_derived(v) for v in obj]
+    return obj
+
+
+def neutrality_hits(path):
+    """(where, kind, hit) for every neutrality violation in one triage/ or contract/ file (comments included)."""
+    raw = open(path).read()
+    doc = _strip_derived(yaml.safe_load(raw))
+    texts = [("comment", line) for line in raw.split("\n") if line.lstrip().startswith("#")]
+    texts.append(("content", yaml.safe_dump(doc, sort_keys=False, width=10000, allow_unicode=True)))
+    out = []
+    for where, text in texts:
+        for kind, fn in (("vendor or product name", vendors.find), ("rule library name", vendors.find_library),
+                         ("reference to the broker's internals", lambda t: (BROKER_REF.search(t) or [None])[0])):
+            hit = fn(text)
+            if hit:
+                out.append((where, kind, hit))
+    for p, kind, hit in scan_leaks(doc):
+        if kind != "schema field name" or FIELD_SHAPED.search(hit):
+            out.append((p, kind, hit))
+    return out
+
+
+# In prose an English word can share a schema field's name (User, Signature); a field-shaped token cannot.
+FIELD_SHAPED = re.compile(r"_|\.|[a-z][A-Z]")
 
 
 def scan_fields(obj, path=""):
@@ -200,7 +242,7 @@ def main():
 
     # ---------- capabilities and scope ----------
     for name, c in caps.items():
-        w = f"bank/capabilities.yaml {name}"
+        w = f"bank/broker/capabilities.yaml {name}"
         a = c.get("answer") or {}
         if a.get("type") not in TYPES:
             err(w, f"answer.type must be one of {sorted(TYPES)}")
@@ -211,24 +253,24 @@ def main():
         if c.get("rating_floor") not in set(B.RATING_ORDER) | {"per_detection"}:
             err(w, "rating_floor must be none|low|medium|high|per_detection")
     if set(b["capabilities"]["scope"].get("profiles") or {}) != {"triage", "falsifier", "detection_engineering", "use_case_manager"}:
-        err("bank/capabilities.yaml scope", "profiles must be triage, falsifier, detection_engineering and use_case_manager")
+        err("bank/broker/capabilities.yaml scope", "profiles must be triage, falsifier, detection_engineering and use_case_manager")
     if "±" in json.dumps(b["capabilities"]["scope"], ensure_ascii=False):
-        err("bank/capabilities.yaml scope", "the triage window is a 24h look-back, never ±24h")
+        err("bank/broker/capabilities.yaml scope", "the triage window is a 24h look-back, never ±24h")
     for cname, spec in classes.items():
         if spec.get("default") not in spec.get("values", []):
-            err(f"bank/capabilities.yaml alert_classes {cname}", "default must be one of the class values")
+            err(f"bank/broker/capabilities.yaml alert_classes {cname}", "default must be one of the class values")
         for role in spec.get("reads") or []:
             if role not in R.ATTRS:
-                err(f"bank/capabilities.yaml alert_classes {cname}", f"reads {role}, not a role attribute")
+                err(f"bank/broker/capabilities.yaml alert_classes {cname}", f"reads {role}, not a role attribute")
     sa_doc = b["capabilities"].get("source_authority") or {}
     known_sources, siem_ok = set(sa_doc.get("sources") or {}), set(sa_doc.get("siem_authoritative_only_for") or [])
     if not sa_doc.get("principle") or not known_sources:
-        err("bank/capabilities.yaml source_authority", "needs the principle and the list of sources")
+        err("bank/broker/capabilities.yaml source_authority", "needs the principle and the list of sources")
     outside = set(b["capabilities"]["scope"].get("budget_counts_sources") or [])
     if not outside or outside - known_sources or outside & {"alert", "context_store", "case_memory", "derived"}:
-        err("bank/capabilities.yaml scope", "budget_counts_sources lists the outside tools the call budget counts (sources from source_authority.sources; never our own stores)")
+        err("bank/broker/capabilities.yaml scope", "budget_counts_sources lists the outside tools the call budget counts (sources from source_authority.sources; never our own stores)")
     for name, c in caps.items():
-        w = f"bank/capabilities.yaml {name}"
+        w = f"bank/broker/capabilities.yaml {name}"
         sa = c.get("source_authority") or {}
         auth, fb = sa.get("authoritative"), sa.get("fallback")
         if auth not in known_sources or not isinstance(fb, list) or set(fb) - known_sources:
@@ -238,12 +280,12 @@ def main():
             extra = "; an endpoint API source exists, so it is authoritative and the SIEM copy is the fallback" if "edr_api" in fb else ""
             err(w, f"authoritative source is the SIEM, which is authoritative only for alert history and log searches ({', '.join(sorted(siem_ok))}){extra}")
     if (b["capabilities"]["capabilities"] and not caps.get("change.window", {}).get("requires_independent_approver")):
-        err("bank/capabilities.yaml change.window", "a yes must require an approver who is not an implementer")
+        err("bank/broker/capabilities.yaml change.window", "a yes must require an approver who is not an implementer")
 
     # ---------- parameters ----------
     c08 = [v for v in caps.get("asset.class", {}).get("answer", {}).get("values", []) if v != "unknown"]
     for name, p in params.items():
-        w = f"bank/parameters.yaml {name}"
+        w = f"bank/triage/parameters.yaml {name}"
         if isinstance(p.get("default"), dict) or {"map", "rows", "match", "pattern", "mapping"} & set(p) or re.search(r"_(pattern|map|mapping)$", name):
             err(w, "a parameter holds customer policy, never a mapping of a vendor's raw values (that belongs in a value table)")
         for cls_, v in (p.get("by_entity_class") or {}).items():
@@ -265,7 +307,7 @@ def main():
         if msg:
             err(w, f"default {msg}")
     if params.get("org_prevalence_min_weeks", {}).get("default", 0) > params.get("org_prevalence_of_weeks", {}).get("default", 99):
-        err("bank/parameters.yaml org_prevalence_min_weeks", "must not exceed org_prevalence_of_weeks")
+        err("bank/triage/parameters.yaml org_prevalence_min_weeks", "must not exceed org_prevalence_of_weeks")
     for cust, ov in b["overlays"].items():
         for o in ov.get("overrides") or []:
             w = f"{ov['_file']} {o.get('param')}"
@@ -318,8 +360,8 @@ def main():
         for k in set(inputs) | set(cap.get("params") or {}):
             if k in stat_keys:
                 v = inputs.get(k)
-                if not (isinstance(v, dict) and (params.get(v.get("param")) or {}).get("category") == "recipe_statistic"):
-                    err(w, f"statistic setting '{k}' must be bound to a recipe_statistic parameter")
+                if not (isinstance(v, dict) and (params.get(v.get("param")) or {}).get("category") == "statistic_setting"):
+                    err(w, f"statistic setting '{k}' must be bound to a statistic_setting parameter")
             elif k in THRESHOLD_KEYS:
                 err(w, f"threshold or comparison '{k}' in the question; it belongs on the flow step as a rule with a parameter")
         for k, v in (cap.get("params") or {}).items():
@@ -392,37 +434,88 @@ def main():
         if "unanswered_value" in q or re.search(r"treated as|counts as", str(q.get("when_not_answered")), re.I):
             err(w, "no worst-case default for unknown context (treated as / counts as): it flags with context_unknown")
     if (b["reason_codes"].get("context_unknown") or {}).get("disposition") != "flag":
-        err("bank/reason_codes.yaml", "context_unknown must exist with disposition flag")
+        err("bank/triage/reason_codes.yaml", "context_unknown must exist with disposition flag")
     # context rules: every referenced question and parameter exists
     cr = b["context_rules"] or {}
     for sect in ("entity_guard", "q0", "priority", "q0067"):
         if sect not in cr:
-            err("bank/context_rules.yaml", f"missing {sect}")
+            err("bank/triage/context_rules.yaml", f"missing {sect}")
     for sect, want in (("entity_guard", ["C-01", "C-02", "C-08"]), ("q0", ["C-03", "C-04", "C-06"]), ("priority", ["C-05", "C-06", "C-07"]),
                        ("q0067", ["C-06", "C-08"])):
         if sorted((cr.get(sect) or {}).get("reads") or []) != want:
-            err("bank/context_rules.yaml", f"{sect} reads {want}")
+            err("bank/triage/context_rules.yaml", f"{sect} reads {want}")
     for m in re.finditer(r"'param': '([a-z_0-9]+)'", repr(cr)):
-        param_check(err, "bank/context_rules.yaml", params, m.group(1))
+        param_check(err, "bank/triage/context_rules.yaml", params, m.group(1))
     if (cr.get("q0") or {}).get("question") != "Q-0000" or b["questions"]["Q-0000"]["capability"]["name"] != "precedent.check":
-        err("bank/context_rules.yaml", "q0 is Q-0000, answered by precedent.check from the context questions")
+        err("bank/triage/context_rules.yaml", "q0 is Q-0000, answered by precedent.check from the context questions")
     if "CF-0030" not in b["facts"] or not {"owner", "approved_by", "expiry"} <= set(b["facts"]["CF-0030"].get("fields") or []):
         err("bank/facts", "routine (entity, detection) pairs need CF-0030 with owner, approved_by and expiry")
     em = b["reason_codes"].get("entity_missing")
     if not em or em.get("disposition") != "flag":
-        err("bank/reason_codes.yaml", "reason code entity_missing (disposition flag) is required")
+        err("bank/triage/reason_codes.yaml", "reason code entity_missing (disposition flag) is required")
 
     # ---------- vendor-leak gate ----------
-    leak_docs = [("bank/capabilities.yaml", b["capabilities"]), ("bank/parameters.yaml", b["parameters"]), ("bank/context_rules.yaml", cr)]
+    leak_docs = [("bank/broker/capabilities.yaml", b["capabilities"]), ("bank/triage/parameters.yaml", b["parameters"]), ("bank/triage/context_rules.yaml", cr)]
     leak_docs += [(q["_file"], q) for q in list(b["questions"].values()) + list(b["context_questions"].values())]
     leak_docs += [(d["_file"], {"flow": d.get("flow"), "required_roles": d.get("required_roles")}) for _, d in B.flows(b)]
     for where, doc in leak_docs:
         for path, kind, hit in scan_leaks(doc):
             err(where, f"vendor leak ({kind}) '{hit}' at {path}: allowed only in adapter folders, broker recipes and value tables")
 
+    # ---------- triage-neutrality gate: triage/ and contract/ ----------
+    for path in sorted(glob.glob(os.path.join(B.TRIAGE, "**", "*.yaml"), recursive=True) + glob.glob(os.path.join(B.CONTRACT, "*.yaml"))):
+        rel = os.path.relpath(path, B.ROOT)
+        for where, kind, hit in neutrality_hits(path):
+            err(rel, f"triage-neutral layer: {kind} '{hit}' ({where}); vendors, libraries and the broker's internals belong to the broker or intake (derived_from is the only exception)")
+
+    # ---------- contract: question IDs and answer types, status and trust, message envelope ----------
+    con = b["contract"]
+    cq = con["questions"]
+    asked = set(b["questions"]) | set(b["context_questions"])
+    if set(cq) != asked:
+        err("bank/contract/questions.yaml", f"must list every question exactly once: missing {sorted(asked - set(cq))[:5]}, extra {sorted(set(cq) - asked)[:5]}")
+    ans = con.get("answer") or {}
+    if set(ans.get("status") or {}) != {"answered", "unknown", "source_unavailable", "sources_disagree"}:
+        err("bank/contract/answer.yaml", "status values are answered, unknown, source_unavailable, sources_disagree")
+    if set(ans.get("trust") or {}) != set(B.TRUST):
+        err("bank/contract/answer.yaml", "trust values are checked and not_checked")
+    for qid in sorted(asked & set(cq)):
+        q = b["questions"].get(qid) or b["context_questions"][qid]
+        cap = caps.get(q["capability"]["name"]) or {}
+        want = dict(cap.get("answer") or {})
+        if want.pop("values_from", None):
+            want["values"] = (classes.get(q["capability"]["inputs"].get("class")) or {}).get("values")
+        got = cq[qid].get("answer") or {}
+        if got.get("type") not in (ans.get("answer_types") or {}):
+            err("bank/contract/questions.yaml", f"{qid}: answer type {got.get('type')} is not a contract answer type")
+        if got != want:
+            err("bank/contract/questions.yaml", f"{qid}: contract answer {got} differs from what the broker implements ({want})")
+    env = con.get("envelope") or {}
+    for kind, need in (("request", B.ENVELOPE_REQUEST), ("answer", B.ENVELOPE_ANSWER)):
+        req = set((env.get(kind) or {}).get("required") or [])
+        missing = (set(need) | {"run_or_window"}) - req
+        if missing:
+            err("bank/contract/envelope.yaml", f"{kind} schema must require {', '.join(sorted(missing))}")
+    if set(env.get("ids") or {}) != {"alert_id", "run_id", "entity_window_id", "request_id", "measurement_id"}:
+        err("bank/contract/envelope.yaml", "ids are alert_id, run_id, entity_window_id, request_id and measurement_id")
+    if "question_timeout_seconds" not in params:
+        err("bank/triage/parameters.yaml", "question_timeout_seconds (the per-question deadline) must be a bounded parameter")
+    exs = con.get("examples") or {}
+    pending = {}
+    for r in exs.get("pending") or []:
+        for m in B.envelope_missing(r, "request"):
+            err("bank/contract/envelope_examples.yaml", f"request {r.get('request_id')}: missing {m}")
+        pending[r.get("request_id")] = r
+    for a in exs.get("answers") or []:
+        for m in B.envelope_missing(a.get("message") or {}, "answer"):
+            err("bank/contract/envelope_examples.yaml", f"answer '{a.get('name')}': missing {m}")
+        ok, why = B.accept_answer(pending, a.get("message") or {}, a.get("received_at"))
+        if ok != (a.get("expect") == "accept") or (not ok and a.get("reason") and a["reason"] != why):
+            err("bank/contract/envelope_examples.yaml", f"answer '{a.get('name')}': expected {a.get('expect')}, the acceptance rule says {why}")
+
     # ---------- vendor names, bundle ----------
-    named = [("bank/capabilities.yaml", b["capabilities"]), ("bank/parameters.yaml", b["parameters"]), ("bank/context_rules.yaml", cr),
-             ("bank/reason_codes.yaml", list(b["reason_codes"].values())), ("bank/pilot.yaml", b["pilot"])]
+    named = [("bank/broker/capabilities.yaml", b["capabilities"]), ("bank/triage/parameters.yaml", b["parameters"]), ("bank/triage/context_rules.yaml", cr),
+             ("bank/triage/reason_codes.yaml", list(b["reason_codes"].values())), ("bank/intake/pilot.yaml", {**b["pilot"], "detections": [{k: v for k, v in x.items() if k != "source_rule"} for x in b["pilot"]["detections"]]})]
     for coll in ("questions", "explanations", "facts", "detections", "techniques", "context_questions"):
         named += [(d["_file"], {k: v for k, v in d.items() if k != "seed"}) for d in b[coll].values()]
     for where, doc in named:
@@ -430,7 +523,7 @@ def main():
             err(where, f"vendor/product name or query syntax '{hit}' at {path}")
     for u in b["use_cases"]:
         for path, hit in scan_text(u, exempt=EXEMPT_KEYS | {"linked", "covered_by"}):
-            err(f"bank/use_cases.yaml {u['id']}", f"vendor/product name '{hit}' at {path}")
+            err(f"bank/intake/use_cases.yaml {u['id']}", f"vendor/product name '{hit}' at {path}")
     for fid, s in b["seeds"].items():
         if fid not in b["facts"]:
             err(s["_file"], f"seed for unknown fact {fid}")
@@ -458,8 +551,14 @@ def main():
                 yield path, hit
     for path, hit in walk(bundle):
         err("runtime bundle", f"vendor/product name '{hit}' at {path}")
-    if "value_tables" in bundle or "recipes" in json.dumps(list(bundle)):
-        err("runtime bundle", "value tables are recipe data and never enter the runtime bundle")
+    if any(k in bundle[x] for x in bundle for k in ("value_tables", "translations", "recipes")):
+        err("runtime bundle", "translations are recipe data and never enter a runtime bundle")
+    # the triage bundle carries the contract and the triage layer only: nothing the broker implements
+    tjson = json.dumps(bundle["triage"])
+    for needle, what in (('"capability"', "a capability"), ('"question_map"', "the broker's question map"), ("CF-0", "a context-list ID"),
+                         ('"source_authority"', "source authority"), ('"alert_classes"', "translation classes")):
+        if needle in tjson:
+            err("triage bundle", f"carries {what}; the Triage agent sees only questions and answers with status and trust")
 
     # ---------- value tables ----------
     row_kinds = {}
@@ -479,7 +578,7 @@ def main():
                 if not vals or cname != "run_status":
                     err(w, f"a table answering {answers} holds the class run_status with that capability's values")
                     continue
-                cdef = {"values": vals, "default": "unknown", "raise_only": caps[answers]["answer"].get("raise_only")}
+                cdef = {"values": vals, "default": "unknown"}
             elif cname not in classes:
                 err(w, f"unknown alert class {cname}")
                 continue
@@ -496,19 +595,38 @@ def main():
                 rid = r.get("id") or f"row {i}"
                 if not r.get("id") or [x.get("id") for x in spec["rows"]].count(r["id"]) > 1:
                     err(w, f"{cname} row {i}: needs an id, unique in the table")
-                if r.get("kind") not in ("ambiguous", "unverified"):
-                    err(w, f"{cname} {rid}: kind must be ambiguous or unverified (verified is per customer, in the customer layer)")
+                if r.get("kind") not in ROW_KINDS:
+                    err(w, f"{cname} {rid}: kind must be one of {', '.join(ROW_KINDS)} (verified is per customer, in the customer layer)")
                 if "verified" in r:
-                    err(w, f"{cname} {rid}: verified is per customer (bank/overlays/customer/<c>/verifications.yaml), not a row key")
-                ro = set(cdef.get("raise_only") or [])
-                if r.get("kind") == "ambiguous" and r.get("value") not in ro | {"unknown"}:
+                    err(w, f"{cname} {rid}: verified is per customer (bank/broker/customers/<c>/verifications.yaml), not a row key")
+                if r.get("kind") == "ambiguous" and r.get("value") != "unknown":
                     err(w, f"{cname} {rid}: an ambiguous row maps to {r.get('value')!r}, which could support a close; it must answer unknown")
+                if r.get("kind") == "standards_defined" and not r.get("standard"):
+                    err(w, f"{cname} {rid}: a standards-defined row cites its standard (for example RFC 9110 section 15)")
+                if r.get("kind") == "proposed" and r.get("proposed_by") != "model":
+                    err(w, f"{cname} {rid}: a proposed row records proposed_by: model (build mode only; it answers not_checked until checked and frozen)")
+                if r.get("questions") and set(r["questions"]) - set(b["questions"]):
+                    err(w, f"{cname} {rid}: questions lists unknown question IDs")
                 if not isinstance(r.get("match"), dict) or not r["match"]:
                     err(w, f"{cname} {rid}: needs a match")
                 row_kinds[r.get("kind")] = row_kinds.get(r.get("kind"), 0) + 1
-    for cname, cdef in list(classes.items()) + [("run_status (endpoint.run_status)", caps.get("endpoint.run_status", {}).get("answer", {}))]:
-        if "raise_only" not in cdef or not set(cdef.get("raise_only") or []) <= set(cdef.get("values") or []):
-            err(f"bank/capabilities.yaml {cname}", "declare raise_only: the values that can only raise scrutiny (they stand from a fallback or unverified row; every other value becomes unknown)")
+    # a translation limited to some questions (questions: [...]) is never read by an endpoint question; quarantine rows
+    # for messages and documents are always limited to the email and DLP questions (round 5 decision)
+    users = {}
+    for _, d in B.flows(b):
+        for st in d["flow"]:
+            for x in [st] + (st.get("guards") or []):
+                users.setdefault(x.get("question"), set()).add(d.get("family", "technique_fallback"))
+    for tname, t in b["value_tables"].items():
+        for cname, spec in (t.get("classes") or {}).items():
+            for r in spec.get("rows") or []:
+                vals = [str(v).lower() for v in (r.get("match") or {}).get("value", []) if isinstance(v, str)] if isinstance((r.get("match") or {}).get("value"), list) else []
+                if cname == "control_action" and {"quarantined", "quarantine"} & set(vals) and not r.get("questions"):
+                    err(t["_file"], f"{cname} {r.get('id')}: a quarantine translation lists the email and DLP questions it serves (questions: [...])")
+                for qid in r.get("questions") or []:
+                    bad = users.get(qid, set()) - {"email", "data_protection"}
+                    if bad:
+                        err(t["_file"], f"{cname} {r.get('id')}: {qid} is used by {', '.join(sorted(bad))} flows; this translation is limited to email and DLP questions")
     for tname, t in b["value_tables"].items():
         if bool(t.get("fallback")) != (t.get("source") == "siem_copy"):
             err(t["_file"], "a table whose source is a fallback (siem_copy) declares fallback: true, and only such a table")
@@ -518,7 +636,7 @@ def main():
         if t.get("source") == "siem_copy" and t.get("fallback_for") and t["fallback_for"] not in b["value_tables"]:
             err(t["_file"], f"fallback_for {t['fallback_for']} is not a value table")
     if "generic" not in b["value_tables"]:
-        err("bank/recipes/value_tables", "a generic table is required")
+        err("bank/broker/translations", "a generic table is required")
 
     # ---------- sources (Sigma, ATT&CK) ----------
     sigma_tax, sigma_ids = None, None
@@ -559,20 +677,22 @@ def main():
         for t in techs:
             if attack_ids is not None and t not in attack_ids:
                 err(w, f"technique {t} not active in ATT&CK v20.0")
-            if kind == "rule" and d.get("family") != "vendor" and t not in b["techniques"]:
+            if kind == "rule" and d.get("alert_type") != "control" and t not in b["techniques"]:
                 warnings.append(f"{d['id']}: no technique fallback for {t}")
         if kind == "rule":
-            vendor = d.get("family") == "vendor"
+            vendor = d.get("alert_type") == "control"
+            if d.get("alert_type") not in ("control", "analytic") or d.get("family") not in B.BATCHES or d["family"] == "technique_fallback":
+                err(w, f"alert_type must be control or analytic, family one of {', '.join(f for f in B.BATCHES if f != 'technique_fallback')}")
+            if not re.fullmatch(r"D-\d{4}", d["id"]) or os.path.basename(os.path.dirname(w)) != d.get("family"):
+                err(w, "detections have neutral IDs (D-0001...) and live in triage/detections/<family>/")
             if d.get("fp_quality") not in ("good", "vague", "none", "generic"):
                 err(w, f"fp_quality {d.get('fp_quality')} must be good|vague|none|generic")
             if vendor:
-                if not d["id"].startswith("vendor:"):
-                    err(w, "vendor-family detections use the vendor: id prefix")
                 if b["use_cases"] and d.get("use_case") not in {u["id"] for u in b["use_cases"]}:
                     err(w, f"use_case {d.get('use_case')} not in the catalog")
             ls = d.get("sigma_logsource") or []
             if not ls and not (vendor and d.get("sigma_logsource_none")):
-                err(w, "sigma_logsource must list at least one entry (vendor families may leave it empty with sigma_logsource_none)")
+                err(w, "sigma_logsource (intake/rule-map.yaml) must list at least one entry (control-alert families may leave it empty with sigma_logsource_none)")
             for entry in ls:
                 keys = set(entry) - {"product"}
                 if len(keys) != 1 or not keys <= {"category", "service"}:
@@ -699,18 +819,6 @@ def main():
             for path, problem in scan_fields({k: v for k, v in item.items() if k not in ("guards",)}, ""):
                 err(where, f"{problem} at {path}")
 
-        def raise_values(item, q):
-            """(class, answer per raise-only value) for a step or guard that reads an alert class or endpoint run status."""
-            name = q["capability"]["name"]
-            if name not in ("alert.class", "endpoint.run_status") or not item.get("rule"):
-                return None, {}
-            cls, answers = (B.step_inputs(q, item).get("class"), None) if name == "alert.class" else ("run_status", name)
-            try:
-                _, ro = B.class_values(b, cls, answers)
-                return cls, {v: B.apply_rule(b, item["rule"], v, "enum", d) for v in ro}
-            except (KeyError, ValueError):
-                return cls, {}
-
         def reads_context(q):
             c = caps.get(q["capability"]["name"], {})
             return c.get("kind") == "derived" or c.get("group") == "context"
@@ -724,10 +832,6 @@ def main():
                 err(where, f"unknown question {st.get('question')}")
                 continue
             check_item(where, st, q)
-            cls, ans = raise_values(st, q)
-            for v, a in ans.items():
-                if B.outcome_kind(st.get(f"on_{a}", "")) == "close":
-                    err(where, f"{q['id']}: {cls} value {v} is raise-only (it may come from a fallback or unverified row) but leads to a close")
             if reads_context(q) and B.outcome_kind(st.get("on_unknown", "")) == "escalate":
                 err(where, f"{q['id']} reads context: an unknown context answer flags (context_unknown), it never escalates")
             if n == 1:
@@ -753,10 +857,6 @@ def main():
                     err(gw, "unknown question")
                     continue
                 check_item(gw, gd, gq)
-                gcls, gans = raise_values(gd, gq)
-                for v, a in gans.items():
-                    if "close" in kinds and a not in gd.get("when", ["yes"]) and a != "unknown":
-                        err(gw, f"{gq['id']}: {gcls} value {v} is raise-only but leaves the close standing (the guard must fire on it)")
                 if reads_context(gq) and "unknown" in (gd.get("when") or []) and gd.get("then") == "escalate":
                     err(gw, f"{gq['id']} reads context: an unknown context answer flags (context_unknown), it never escalates")
                 if gd.get("then") not in ("flag", "escalate"):
@@ -807,18 +907,18 @@ def main():
         for path, out, guards in B.enumerate_paths(flow):
             if out.startswith("close"):
                 n_close += 1
-                needs = B.close_path_rows(b, path, guards)
+                needs = B.close_path_rows(b, path, guards, detection=d)
                 n_auto_today += not needs and d.get("max_mode") != "recommend"
 
     # use-case catalog
     ucs = b["use_cases"]
-    src_to_bank = B.source_ids(b)
+    src_to_bank = B.source_ids(b, ("escu", "product_alert"))
     if ucs:
         ids = [u["id"] for u in ucs]
         if len(set(ids)) != len(ids):
-            err("bank/use_cases.yaml", "duplicate use-case ids")
+            err("bank/intake/use_cases.yaml", "duplicate use-case ids")
         if sorted(u["rank"] for u in ucs) != list(range(1, len(ucs) + 1)):
-            err("bank/use_cases.yaml", "ranks must be 1..n with no gaps")
+            err("bank/intake/use_cases.yaml", "ranks must be 1..n with no gaps")
         src_ids = None
         if sigma_ids is not None:
             src_ids = {"sigma": {f"sigma:{i}" for i in sigma_ids}}
@@ -835,7 +935,7 @@ def main():
             if os.path.isdir(escu_dir):
                 src_ids["escu"] = {"escu:" + os.path.basename(p)[:-4] for p in glob.glob(os.path.join(escu_dir, "*/*.yml")) if "/deprecated/" not in p}
         for u in ucs:
-            w = f"bank/use_cases.yaml {u['id']}"
+            w = f"bank/intake/use_cases.yaml {u['id']}"
             for k in ("name", "domain", "family", "rank", "volume_reason", "techniques", "linked", "coverage", "covered_detections", "linked_detections"):
                 if k not in u:
                     err(w, f"missing {k}")
@@ -848,8 +948,8 @@ def main():
                 for x in block.get("shown", []):
                     if src_ids and src in src_ids and x["id"] not in src_ids[src]:
                         err(w, f"linked {x['id']} not found in cloned {src} sources")
-                    if src == "vendor" and x["id"] not in b["detections"]:
-                        err(w, f"linked {x['id']} is not a bank vendor detection")
+                    if src == "product_alert" and x["id"] not in src_to_bank:
+                        err(w, f"linked {x['id']} is not a product-alert source in intake/rule-map.yaml")
             covered = u.get("covered_by", [])
             shown = {x["id"] for blk in u["linked"].values() for x in blk.get("shown", [])}
             for d in covered:
@@ -867,7 +967,7 @@ def main():
             fallbacks = [t for t in u.get("techniques", []) if t in b["techniques"]]
             if sorted(u.get("technique_fallbacks", [])) != sorted(fallbacks):
                 err(w, f"technique_fallbacks should be {sorted(fallbacks)}")
-            want = ("generic" if u.get("family") == "vendor" and covered and all(x.startswith("vendor:") for x in covered)
+            want = ("generic" if u.get("family") == "vendor" and covered and all(x.startswith("product_alert:") for x in covered)
                     else ("rule-level-full" if len(covered) == n_linked else "rule-level-partial") if covered
                     else "technique-only" if fallbacks else "none")
             if u.get("coverage") != want:
@@ -896,13 +996,13 @@ def main():
             elif d.get("max_mode") == "recommend":
                 err(w, f"{did}: capped at Recommend ({d.get('max_mode_reason')})")
             missing = sorted({f"{t}/{r}" for path, out, guards in B.enumerate_paths(d["flow"]) if out.startswith("close")
-                              for t, r in B.close_path_rows(b, path, guards, customer=cust) if not B.row_verified(b, cust, t, r, TODAY)})
+                              for t, r in B.close_path_rows(b, path, guards, customer=cust, detection=d) if not B.row_verified(b, cust, t, r, TODAY)})
             if missing:
                 err(w, f"{did}: set to Auto while unverified value-table rows sit on its close paths: {', '.join(missing[:6])}"
                        + (f" and {len(missing) - 6} more" if len(missing) > 6 else ""))
     for x in b["pilot"]["detections"]:
         if x["id"] not in b["detections"]:
-            err("bank/pilot.yaml", f"{x['id']} has no detection file")
+            err("bank/intake/pilot.yaml", f"{x['id']} has no detection file")
     used_q = {st["question"] for _, d in B.flows(b) for st in d["flow"]} | {
         gd["question"] for _, d in B.flows(b) for st in d["flow"] for gd in st.get("guards") or []}
     for qid in sorted(set(b["questions"]) - used_q):
@@ -917,7 +1017,7 @@ def main():
             print(f"{title} {i}")
     print(f"\n{len(b['detections'])} detections, {len(b['techniques'])} technique fallbacks, {len(b['questions'])} questions, "
           f"{len(b['context_questions'])} context questions, {len(b['facts'])} context facts, {len(caps)} capabilities, "
-          f"{len(b['parameters'])} parameters, {len(b['value_tables'])} value tables: {len(errors)} errors, {len(warnings)} warnings")
+          f"{len(b['parameters'])} parameters, {len(b["value_tables"])} translations: {len(errors)} errors, {len(warnings)} warnings")
     B.require_loaded("validate", detections=len(b["detections"]), flows=sum(1 for _ in B.flows(b)), questions=len(b["questions"]))
     return 1 if errors else 0
 

@@ -1,0 +1,21 @@
+id: Q-0011
+text: Is the binary that opened LSASS validly signed by a trusted publisher and not on the dump-capable exclusion list?
+tests: BE-0007
+attacker_influence:
+  rating: low
+  reason: OS-verified code signature; dump-capable signed binaries are excluded.
+notes: Gate on the baseline closure. Signer trust is not proof of benign intent; Microsoft-signed dump tools are excluded. Seed signers are unverified until onboarding.
+derived_from:
+  source:
+  - elastic/detection-rules rules/windows/credential_access_lsass_openprocess_api.toml (signed with valid digital signatures)
+  - LOLBAS-Project/LOLBAS yml (Category Dump)
+  license:
+  - Elastic-2.0
+  - GPL-3.0
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+kind: triage
+inputs:
+  entity: entity:process

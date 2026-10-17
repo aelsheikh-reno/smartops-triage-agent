@@ -1,0 +1,21 @@
+id: Q-0019
+text: Is the subject binary validly signed by a trusted publisher and not on the excluded-binaries list?
+tests: BE-0018
+attacker_influence:
+  rating: low
+  reason: OS-verified code signature; LOLBins, script hosts and dump tools are excluded.
+notes: The entity is bound per detection (parent process, registry writer, loaded module, driver file). A trusted signature is evidence, not clearance. Seed signers are unverified until onboarding.
+derived_from:
+  source:
+  - splunk/security_content detections/endpoint/suspicious_rundll32_no_command_line_arguments.yml
+  - LOLBAS-Project/LOLBAS yml
+  license:
+  - Apache-2.0
+  - GPL-3.0
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+kind: triage
+inputs:
+  entity: entity:subject

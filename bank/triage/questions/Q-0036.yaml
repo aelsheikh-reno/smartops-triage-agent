@@ -1,0 +1,17 @@
+id: Q-0036
+text: Do click and open records show that no recipient followed a link or opened an attachment from the message?
+tests: BE-0024
+attacker_influence:
+  rating: low
+  reason: Click and open records come from the mail platform; clicks outside its rewriting (copied links, other devices) can be missed.
+derived_from:
+  source:
+  - bank/intake/use_cases.yaml triage_hints
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  message: role:email.message_id

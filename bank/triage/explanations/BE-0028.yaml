@@ -1,0 +1,8 @@
+id: BE-0028
+name: Denied with no successful connection
+description: The firewall denied the traffic and no connection from the source succeeded in the window.
+derived_from:
+  source:
+  - bank/intake/use_cases.yaml triage_hints
+  license: internal
+version: 1

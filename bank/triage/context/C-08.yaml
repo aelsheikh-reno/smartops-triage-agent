@@ -1,0 +1,24 @@
+id: C-08
+text: What class of asset is the entity?
+kind: context
+inputs:
+  entity: role:host.asset_id
+feeds:
+- entity_guard
+- q0067
+attacker_influence:
+  rating: low
+  reason: Asset data maintained by the customer.
+when_not_answered: 'Unknown or source unavailable: Q-0067 flags with reason context_unknown (C-08); the entity guard uses the global defaults (entity_guard_min_alerts, entity_guard_min_detections, entity_grouping_window_minutes).
+  It never escalates.'
+on_unknown: flag
+unknown_reason: context_unknown
+derived_from:
+  source:
+  - docs/intake/context-questions.md
+  - docs/design-decisions.md §5
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

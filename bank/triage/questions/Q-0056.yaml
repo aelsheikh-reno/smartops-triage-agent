@@ -1,0 +1,20 @@
+id: Q-0056
+text: Is the source an approved infrastructure source (monitoring, backup, replication, health check) for this destination and port?
+tests: BE-0033
+attacker_influence:
+  rating: low
+  reason: Source address of a denied connection can be spoofed, but a spoofed probe gains the attacker nothing.
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  entity:
+  - role:src.ip
+  - role:dest.ip
+  - role:dest.port

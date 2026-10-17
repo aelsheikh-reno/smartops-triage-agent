@@ -81,7 +81,7 @@ For vendor alerts (AV/EDR, IDS/IPS, WAF, email gateway, DLP, proxy, firewall, de
 | `reporting_control.vendor` | string | per detection | added for triage | Offline metadata only: never read by a flow. |
 | `reporting_control.product` | string | per detection | added for triage | Offline metadata only. |
 | `reporting_control.action` | string | per detection | added for triage | Normalized action (for example `blocked_pre_execution`, `quarantined_post_execution`, `detected`). |
-| `reporting_control.action_raw` | string | per detection | added for triage | As the product sent it; the value table translates it (§10). |
+| `reporting_control.action_raw` | string | per detection | added for triage | As the product sent it; the broker's translation reads it (§10). |
 | `reporting_control.signature` | string | per detection | added for triage | Detection or signature name. |
 | `reporting_control.signature_id` | string | no | added for triage | |
 | `reporting_control.vendor_alert_id` | string | yes for vendor alerts | added for triage | The reporting product's own alert ID (for Defender, the alert ID in its security API). The broker uses it to find the product's alert through the product's API, the authoritative source (§9). Missing: the broker falls back to device, file hash and a bounded time window; no match or several matches answer unknown. |

@@ -29,11 +29,15 @@ def edit_text(path, old, new):
 
 
 def q(n):
-    return f"bank/questions/{n}.yaml"
+    return f"bank/triage/questions/{n}.yaml"
 
 
-PSEXEC = "bank/detections/escu/detect_psexec_with_accepteula_flag.yaml"
-OVERLAY = "bank/overlays/customer/selftest/parameters.yaml"
+PSEXEC = "bank/triage/detections/endpoint/D-0006.yaml"
+AV = "bank/triage/detections/endpoint_malware/D-0026.yaml"
+IDS = "bank/triage/detections/network/D-0028.yaml"
+USB = "bank/triage/detections/data_protection/D-0034.yaml"
+RULE_MAP = "bank/intake/rule-map.yaml"
+OVERLAY = "bank/triage/customers/selftest/parameters.yaml"
 
 
 def overlay(*overrides):
@@ -43,7 +47,8 @@ def overlay(*overrides):
     return write
 
 
-CUSTOMER = "bank/overlays/customer/selftest/verifications.yaml"
+CUSTOMER = "bank/broker/customers/selftest/verifications.yaml"
+MODES = "bank/triage/customers/selftest/modes.yaml"
 
 
 def customer(modes, verify=(), products=None, **rec_changes):
@@ -51,7 +56,7 @@ def customer(modes, verify=(), products=None, **rec_changes):
     def write(root):
         recs = []
         for t in verify:
-            doc = yaml.safe_load(open(os.path.join(root, "bank/recipes/value_tables", t + ".yaml")))
+            doc = yaml.safe_load(open(os.path.join(root, "bank/broker/translations", t + ".yaml")))
             for spec in doc["classes"].values():
                 for r in spec.get("rows") or []:
                     if r.get("kind") != "ambiguous":
@@ -60,7 +65,9 @@ def customer(modes, verify=(), products=None, **rec_changes):
                                           "expires": "2099-01-01"}, **rec_changes))
         os.makedirs(os.path.join(root, os.path.dirname(CUSTOMER)), exist_ok=True)
         open(os.path.join(root, CUSTOMER), "w").write(dump({"customer": "selftest", "products": products or {t: "1.0" for t in verify},
-                                                             "verifications": recs, "modes": modes}))
+                                                             "verifications": recs}))
+        os.makedirs(os.path.join(root, os.path.dirname(MODES)), exist_ok=True)
+        open(os.path.join(root, MODES), "w").write(dump({"customer": "selftest", "modes": modes}))
     return write
 
 
@@ -88,24 +95,24 @@ def first_guard(d, qid):
 
 # (name, gate, change, expected substring or None for "must pass")
 CASES = [
-    ("question reads a field directly", "validate", y(q("Q-0016"), lambda d: d["capability"]["inputs"].update(entity="value:dest")), "reads a field directly"),
-    ("schema field name as an input value", "validate", y(q("Q-0016"), lambda d: d["capability"]["inputs"].update(entity="dest_ip")), "schema field name"),
+    ("question reads a field directly", "validate", y(q("Q-0016"), lambda d: d.setdefault("inputs", {}).update(entity="value:dest")), "reads a field directly"),
+    ("schema field name as an input value", "validate", y(q("Q-0016"), lambda d: d.setdefault("inputs", {}).update(entity="dest_ip")), "schema field name"),
     ("Sysmon field name in a detection", "validate", y(PSEXEC, lambda d: d["flow"][1].update(bind={"entity": "TargetImage"})), "schema field name"),
-    ("unknown role attribute", "validate", y(q("Q-0016"), lambda d: d["capability"]["inputs"].update(entity="role:host.nam")), "not a role attribute"),
+    ("unknown role attribute", "validate", y(q("Q-0016"), lambda d: d.setdefault("inputs", {}).update(entity="role:host.nam")), "not a role attribute"),
     ("role used but not required", "validate", y(PSEXEC, lambda d: d.update(required_roles=[r for r in d["required_roles"] if r != "user"])), "to required_roles"),
     ("old required_alert_fields key", "validate", y(PSEXEC, lambda d: d.update(required_alert_fields=["dest"])), "old key"),
-    ("threshold inside a question", "validate", y(q("Q-0045"), lambda d: d["capability"]["inputs"].update(min_count=3)), "threshold or comparison"),
+    ("threshold inside a question", "validate", y(q("Q-0045"), lambda d: d.setdefault("inputs", {}).update(min_count=3)), "threshold or comparison"),
     ("count answer without a step rule", "validate", y(PSEXEC, lambda d: first_guard(d, "Q-0045").pop("rule")), "needs a rule"),
     ("literal threshold on a step", "validate", y(PSEXEC, lambda d: first_guard(d, "Q-0045").update(rule={"gte": 3})), "not the literal"),
-    ("enum rule value outside the class", "validate", y("bank/detections/vendor/av_detection.yaml", lambda d: d["flow"][3].update(rule={"yes": ["blocked"]})), "rule yes values"),
+    ("enum rule value outside the class", "validate", y(AV, lambda d: d["flow"][3].update(rule={"yes": ["blocked"]})), "rule yes values"),
     ("question without a context/triage tag", "validate", y(q("Q-0016"), lambda d: d.pop("kind")), "kind"),
     ("rated below its capability's floor", "validate", y(q("Q-0003"), lambda d: d["attacker_influence"].update(rating="low")), "below its capability's rating"),
     ("below the floor with a written reason passes", "validate",
      y(q("Q-0003"), lambda d: d["attacker_influence"].update(rating="low", below_floor_reason="selftest")), None),
-    ("change.window without an independent approver", "validate", t("bank/capabilities.yaml", "requires_independent_approver: true", "requires_independent_approver: false"), "approver who is not an implementer"),
-    ("±24h scope", "validate", t("bank/capabilities.yaml", "24h look-back ending at the alert time", "fixed ±24h alert window"), "never ±24h"),
-    ("parameter without bounds", "validate", y("bank/parameters.yaml", lambda d: d["parameters"]["alert_history_min_count"].pop("bounds")), "needs default, bounds"),
-    ("default outside its bounds", "validate", y("bank/parameters.yaml", lambda d: d["parameters"]["alert_history_min_count"].update(default=99)), "outside bounds"),
+    ("change.window without an independent approver", "validate", t("bank/broker/capabilities.yaml", "requires_independent_approver: true", "requires_independent_approver: false"), "approver who is not an implementer"),
+    ("±24h scope", "validate", t("bank/broker/capabilities.yaml", "24h look-back ending at the alert time", "fixed ±24h alert window"), "never ±24h"),
+    ("parameter without bounds", "validate", y("bank/triage/parameters.yaml", lambda d: d["parameters"]["alert_history_min_count"].pop("bounds")), "needs default, bounds"),
+    ("default outside its bounds", "validate", y("bank/triage/parameters.yaml", lambda d: d["parameters"]["alert_history_min_count"].update(default=99)), "outside bounds"),
     ("precedent validity over 72h", "validate", y(PSEXEC, lambda d: d.setdefault("parameters", {}).update(precedent_validity_hours=168)), "outside bounds"),
     ("reduce-scrutiny override without approval", "validate", overlay({"param": "alert_history_min_count", "value": 6}), "reduces scrutiny"),
     ("reduce-scrutiny list override without approval", "validate", overlay({"param": "web_low_risk_categories", "value": ["advertising", "malware"]}), "reduces scrutiny"),
@@ -113,78 +120,108 @@ CASES = [
      overlay({"param": "alert_history_min_count", "value": 6, "approved_by": "soc lead", "owner": "it ops", "expiry": "2027-01-31"}), None),
     ("raise-scrutiny override needs no approval", "validate", overlay({"param": "alert_history_min_count", "value": 2}), None),
     ("override outside bounds", "validate", overlay({"param": "precedent_validity_hours", "value": 100, "approved_by": "x", "owner": "y", "expiry": "z"}), "outside bounds"),
-    ("context question missing", "validate", lambda root: os.remove(os.path.join(root, "bank/context/C-03.yaml")), "context questions must be exactly"),
-    ("entity_missing reason code missing", "validate", t("bank/reason_codes.yaml", "- code: entity_missing", "- code: entity_gone"), "entity_missing"),
-    ("old auto_requires key", "validate", y("bank/detections/vendor/ids_alert.yaml", lambda d: d.update(auto_requires=["vendor_mapping_verified"])), "replaced by per-customer"),
+    ("context question missing", "validate", lambda root: os.remove(os.path.join(root, "bank/triage/context/C-03.yaml")), "context questions must be exactly"),
+    ("entity_missing reason code missing", "validate", t("bank/triage/reason_codes.yaml", "- code: entity_missing", "- code: entity_gone"), "entity_missing"),
+    ("old auto_requires key", "validate", y(IDS, lambda d: d.update(auto_requires=["vendor_mapping_verified"])), "replaced by per-customer"),
     ("value-table row with no kind", "validate",
-     y("bank/recipes/value_tables/microsoft-defender-for-endpoint.yaml", lambda d: d["classes"]["run_status"]["rows"][0].pop("kind")), "kind must be"),
+     y("bank/broker/translations/microsoft-defender-for-endpoint.yaml", lambda d: d["classes"]["run_status"]["rows"][0].pop("kind")), "kind must be"),
     ("verified written into the shared bank row", "validate",
-     y("bank/recipes/value_tables/microsoft-defender-for-endpoint.yaml", lambda d: d["classes"]["run_status"]["rows"][0].update(verified=True)), "verified is per customer"),
+     y("bank/broker/translations/microsoft-defender-for-endpoint.yaml", lambda d: d["classes"]["run_status"]["rows"][0].update(verified=True)), "verified is per customer"),
     # Round 2: thresholds stay Triage-side, classification principle, source authority, per-class parameters.
-    ("threshold at the broker in org.prevalence", "validate", y(q("Q-0015"), lambda d: d["capability"]["inputs"].update(min_hosts=3)), "threshold or comparison"),
-    ("org.prevalence statistic setting as a literal", "validate", y(q("Q-0015"), lambda d: d["capability"]["inputs"].update(min_weeks=2)), "bound to a recipe_statistic parameter"),
+    ("threshold at the broker in org.prevalence", "validate", y(q("Q-0015"), lambda d: d.setdefault("inputs", {}).update(min_hosts=3)), "threshold or comparison"),
+    ("org.prevalence statistic setting as a literal", "validate", y(q("Q-0015"), lambda d: d.setdefault("inputs", {}).update(min_weeks=2)), "bound to a statistic_setting parameter"),
     ("org.prevalence statistic bound to a policy parameter", "validate",
-     y(q("Q-0015"), lambda d: d["capability"]["inputs"].update(min_weeks={"param": "org_prevalence_min_hosts"})), "bound to a recipe_statistic parameter"),
-    ("min_weeks above of_weeks", "validate", y("bank/parameters.yaml", lambda d: d["parameters"]["org_prevalence_min_weeks"].update(default=5)), "must not exceed"),
+     y(q("Q-0015"), lambda d: d.setdefault("inputs", {}).update(min_weeks={"param": "org_prevalence_min_hosts"})), "bound to a statistic_setting parameter"),
+    ("min_weeks above of_weeks", "validate", y("bank/triage/parameters.yaml", lambda d: d["parameters"]["org_prevalence_min_weeks"].update(default=5)), "must not exceed"),
     ("customer policy list inside a value table", "validate",
-     y("bank/recipes/value_tables/microsoft-defender-for-endpoint.yaml", lambda d: d["classes"]["run_status"].update(param="usb_non_storage_classes")), "never a customer's policy"),
+     y("bank/broker/translations/microsoft-defender-for-endpoint.yaml", lambda d: d["classes"]["run_status"].update(param="usb_non_storage_classes")), "never a customer's policy"),
     ("customer address ranges matched inside a value table", "validate",
-     y("bank/recipes/value_tables/generic.yaml", lambda d: next(iter(d["classes"].values()))["rows"][0]["match"].update(cidr_param="internal_networks")), "never a customer's policy"),
+     y("bank/broker/translations/generic.yaml", lambda d: next(iter(d["classes"].values()))["rows"][0]["match"].update(cidr_param="internal_networks")), "never a customer's policy"),
     ("vendor-meaning mapping inside a parameter", "validate",
-     y("bank/parameters.yaml", lambda d: d["parameters"].update(av_action_map={"default": {"Block": "pre_execution"}, "bounds": {"min_items": 1}, "reduces_scrutiny_when": "grows"})), "never a mapping"),
+     y("bank/triage/parameters.yaml", lambda d: d["parameters"].update(av_action_map={"default": {"Block": "pre_execution"}, "bounds": {"min_items": 1}, "reduces_scrutiny_when": "grows"})), "never a mapping"),
     ("EDR capability answered from the SIEM although an endpoint API exists", "validate",
-     y("bank/capabilities.yaml", lambda d: cap(d, "endpoint.run_status").update(source_authority={"authoritative": "siem_copy", "fallback": ["edr_api"]})), "an endpoint API source exists"),
+     y("bank/broker/capabilities.yaml", lambda d: cap(d, "endpoint.run_status").update(source_authority={"authoritative": "siem_copy", "fallback": ["edr_api"]})), "an endpoint API source exists"),
     ("per-class value for a class C-08 does not have", "validate",
-     y("bank/parameters.yaml", lambda d: d["parameters"]["entity_guard_min_alerts"]["by_entity_class"].update(laptop=3)), "not an asset class of C-08"),
+     y("bank/triage/parameters.yaml", lambda d: d["parameters"]["entity_guard_min_alerts"]["by_entity_class"].update(laptop=3)), "not an asset class of C-08"),
     ("per-class value outside bounds", "validate",
-     y("bank/parameters.yaml", lambda d: d["parameters"]["entity_guard_min_alerts"]["by_entity_class"].update(server=999)), "outside bounds"),
-    ("context rule reads a context question it does not declare", "validate", y(q("Q-0067"), lambda d: d["capability"]["inputs"].update(reads=["C-06"])), "context_rule over"),
+     y("bank/triage/parameters.yaml", lambda d: d["parameters"]["entity_guard_min_alerts"]["by_entity_class"].update(server=999)), "outside bounds"),
+    ("context rule reads a context question it does not declare", "validate", y(q("Q-0067"), lambda d: d.setdefault("inputs", {}).update(reads=["C-06"])), "context_rule over"),
     # Vendor-leak gate: query language, SIEM product terms, schema field names in bank logic.
     ("query-language token (SPL) in question text", "validate", y(q("Q-0016"), lambda d: d.update(text=d["text"] + " (index=main | tstats count)")), "query-language token"),
     ("query-language token (KQL) in a flow", "validate",
      y(PSEXEC, lambda d: d["flow"][0]["attacker_influence"].update(reason="DeviceEvents | summarize count() by DeviceId")), "query-language token"),
-    ("SIEM product term in a context question", "validate", y("bank/context/C-03.yaml", lambda d: d.update(text=d["text"] + " Read from Incident Review.")), "SIEM product term"),
-    ("SIEM product term in a capability", "validate", y("bank/capabilities.yaml", lambda d: cap(d, "alert.history").update(measures="Count of notables for the key.")), "SIEM product term"),
+    ("SIEM product term in a context question", "validate", y("bank/triage/context/C-03.yaml", lambda d: d.update(text=d["text"] + " Read from Incident Review.")), "SIEM product term"),
+    ("SIEM product term in a capability", "validate", y("bank/broker/capabilities.yaml", lambda d: cap(d, "alert.history").update(measures="Count of notables for the key.")), "SIEM product term"),
     ("schema field name in question prose", "validate", y(q("Q-0016"), lambda d: d.update(text=d["text"] + " Compare dest_ip.")), "schema field name"),
     ("schema field name in a parameter", "validate",
-     y("bank/parameters.yaml", lambda d: d["parameters"]["alert_history_min_count"].update(description="Counted by process_guid.")), "schema field name"),
+     y("bank/triage/parameters.yaml", lambda d: d["parameters"]["alert_history_min_count"].update(description="Counted by process_guid.")), "schema field name"),
     ("vendor terms in offline metadata and value tables pass", "validate",
-     lambda root: (edit_yaml(os.path.join(root, PSEXEC), lambda d: d.update(data_source=d["data_source"] + ["Splunk ES notable via | tstats from datamodel=Endpoint"])),
-                   edit_yaml(os.path.join(root, "bank/recipes/value_tables/generic.yaml"), lambda d: d.update(feed=d["feed"] + " (sourcetype=XmlWinEventLog, dest_ip)"))), None),
+     lambda root: (edit_yaml(os.path.join(root, RULE_MAP), lambda d: d["rules"][5].update(data_source=d["rules"][5]["data_source"] + ["Splunk ES notable via | tstats from datamodel=Endpoint"])),
+                   edit_yaml(os.path.join(root, "bank/broker/translations/generic.yaml"), lambda d: d.update(feed=d["feed"] + " (sourcetype=XmlWinEventLog, dest_ip)"))), None),
     # Round 3: gates never pass on nothing; raise-only answers; missing context never escalates.
-    ("empty batch: every vendor detection removed", "redteam vendor",
-     lambda root: [os.remove(f) for f in __import__("glob").glob(os.path.join(root, "bank/detections/vendor/*.yaml"))], "loaded 0 flows"),
+    ("empty family: every endpoint-malware detection removed", "redteam endpoint_malware",
+     lambda root: [os.remove(f) for f in __import__("glob").glob(os.path.join(root, "bank/triage/detections/endpoint_malware/*.yaml"))], "loaded 0 flows"),
     ("empty bank: no detection at all", "validate",
-     lambda root: [os.remove(f) for f in __import__("glob").glob(os.path.join(root, "bank/detections/*/*.yaml"))], "loaded 0 detections"),
-    ("wrong batch name (attacker influence)", "redteam vendr", lambda root: None, "unknown batch vendr"),
-    ("wrong batch name (replay)", "replay escuu", lambda root: None, "unknown batch escuu"),
-    ("class without its raise_only list", "validate", y("bank/capabilities.yaml", lambda d: d["alert_classes"]["av_risk_class"].pop("raise_only")), "declare raise_only"),
-    ("raise-only value leads to a close", "validate",
-     y("bank/detections/vendor/av_detection.yaml", lambda d: d["flow"][3].update(on_no="close:mitigated_true_positive:blocked_low_risk_detection")), "is raise-only"),
+     lambda root: [os.remove(f) for f in __import__("glob").glob(os.path.join(root, "bank/triage/detections/*/*.yaml"))], "loaded 0 detections"),
+    ("wrong family name (attacker influence)", "redteam vendr", lambda root: None, "unknown family vendr"),
+    ("old batch name (replay)", "replay escu", lambda root: None, "unknown family escu"),
     ("fallback-source table not marked fallback", "validate",
-     y("bank/recipes/value_tables/microsoft-defender-antivirus-event-log.yaml", lambda d: d.pop("fallback")), "declares fallback: true"),
-    ("worst-case default for unknown context", "validate", y("bank/context/C-08.yaml", lambda d: d.update(unanswered_value="server")), "no worst-case default"),
-    ("unknown context escalates", "validate", y("bank/context/C-06.yaml", lambda d: d.update(on_unknown="escalate")), "never escalates"),
+     y("bank/broker/translations/microsoft-defender-antivirus-event-log.yaml", lambda d: d.pop("fallback")), "declares fallback: true"),
+    ("worst-case default for unknown context", "validate", y("bank/triage/context/C-08.yaml", lambda d: d.update(unanswered_value="server")), "no worst-case default"),
+    ("unknown context escalates", "validate", y("bank/triage/context/C-06.yaml", lambda d: d.update(on_unknown="escalate")), "never escalates"),
     ("guard escalates on unknown context", "validate",
-     y("bank/detections/vendor/removable_media.yaml", lambda d: first_guard(d, "Q-0067").update(when=["yes", "unknown"])), "never escalates"),
+     y(USB, lambda d: first_guard(d, "Q-0067").update(when=["yes", "unknown"])), "never escalates"),
     # Round 4: row kinds, per-customer verification, Auto eligibility, technique fallbacks capped at Recommend.
     ("ambiguous row mapped to a close-supporting value", "validate",
-     y("bank/recipes/value_tables/microsoft-defender-antivirus-event-log.yaml",
+     y("bank/broker/translations/microsoft-defender-antivirus-event-log.yaml",
        lambda d: next(r for r in d["classes"]["run_status"]["rows"] if r["id"] == "run_status.1117_block").update(value="pre_execution")), "an ambiguous row maps to"),
-    ("Auto with unverified rows on a close path", "validate", customer({"vendor:av_detection": "auto"}), "set to Auto while unverified value-table rows"),
+    ("Auto with unverified rows on a close path", "validate", customer({"D-0026": "auto"}), "set to Auto while unverified value-table rows"),
     ("Auto with only some of the rows verified", "validate",
-     customer({"vendor:av_detection": "auto"}, verify=["microsoft-defender-for-endpoint"], products={"microsoft-defender-for-endpoint": "1.0"}),
+     customer({"D-0026": "auto"}, verify=["microsoft-defender-for-endpoint"], products={"microsoft-defender-for-endpoint": "1.0"}),
      "set to Auto while unverified value-table rows"),
-    ("Auto with every row on its close paths verified passes", "validate", customer({"vendor:av_detection": "auto"}, verify=AV_TABLES), None),
+    ("Auto with every row on its close paths verified passes", "validate", customer({"D-0026": "auto"}, verify=AV_TABLES), None),
     ("verification with a spot check below 20 alerts", "validate", customer({}, verify=AV_TABLES, spot_check_alerts=19), "below verification_min_spot_check_alerts"),
     ("vendor product version change re-opens verification", "validate",
      customer({}, verify=AV_TABLES, products={"microsoft-defender-for-endpoint": "2.0", "generic": "1.0"}), "re-opens verification"),
     ("expired verification", "validate", customer({}, verify=AV_TABLES, expires="2020-01-01"), "expired"),
     ("verification without a cited vendor doc", "validate", customer({}, verify=AV_TABLES, vendor_doc=""), "missing vendor_doc"),
-    ("technique fallback set to Auto in the bank", "validate", y("bank/techniques/T1003.001.yaml", lambda d: d.update(max_mode="auto")), "capped at recommend"),
+    ("technique fallback set to Auto in the bank", "validate", y("bank/triage/techniques/T1003.001.yaml", lambda d: d.update(max_mode="auto")), "capped at recommend"),
     ("technique fallback set to Auto for a customer", "validate", customer({"T1003.001": "auto"}), "technique fallbacks are capped at Recommend"),
+    # Round 5: the triage layer stays neutral; the contract and its envelope; trust and translation kinds; email quarantine.
+    ("vendor name in a triage question", "validate", y(q("Q-0016"), lambda d: d.update(notes="Ask the CrowdStrike console.")), "triage-neutral layer: vendor or product name"),
+    ("vendor name in the contract", "validate", t("bank/contract/answer.yaml", "the Tool Broker decides trust", "the Splunk search decides trust"), "triage-neutral layer: vendor or product name"),
+    ("rule library name in a detection", "validate", y(PSEXEC, lambda d: d.update(notes="Same logic as the ESCU rule.")), "triage-neutral layer: rule library name"),
+    ("rule library name in a triage comment", "validate", lambda root: open(os.path.join(root, "bank/triage/parameters.yaml"), "a").write("# tuned from SigmaHQ\n"),
+     "triage-neutral layer: rule library name"),
+    ("reference to the broker's translations in a detection", "validate", y(AV, lambda d: d.update(notes="Read through the translation table row for the product.")),
+     "triage-neutral layer: reference to the broker"),
+    ("context-list ID in a triage question", "validate", y(q("Q-0016"), lambda d: d.setdefault("inputs", {}).update(list="CF-0009")), "triage-neutral layer: reference to the broker"),
+    ("broker path in a triage file", "validate", y(q("Q-0049"), lambda d: d.update(notes="See bank/broker/translations.")), "triage-neutral layer: reference to the broker"),
+    ("field name in a triage detection's prose", "validate", y(PSEXEC, lambda d: d.update(notes="Filter on parent_process_name.")), "triage-neutral layer"),
+    ("query-language token in a triage file", "validate", y(PSEXEC, lambda d: d.update(intent=d["intent"] + " | tstats count by dest")), "triage-neutral layer"),
+    ("vendor names inside derived_from pass", "validate", y(PSEXEC, lambda d: d["derived_from"].update(title="Splunk ESCU rule, Sigma and CrowdStrike notes")), None),
+    ("answer without request_id", "validate",
+     y("bank/contract/envelope_examples.yaml", lambda d: d["answers"][0]["message"].pop("request_id")), "missing request_id"),
+    ("answer with a mismatched run_id", "validate",
+     y("bank/contract/envelope_examples.yaml", lambda d: d["answers"][0]["message"].update(run_id="other-run")), "the acceptance rule says run_id does not match"),
+    ("envelope schema without trust", "validate",
+     y("bank/contract/envelope.yaml", lambda d: d["answer"]["required"].remove("trust")), "answer schema must require trust"),
+    ("question missing from the contract", "validate",
+     y("bank/contract/questions.yaml", lambda d: d.update(questions=[x for x in d["questions"] if x["id"] != "Q-0016"])), "must list every question"),
+    ("contract answer type differs from the broker's", "validate",
+     y("bank/contract/questions.yaml", lambda d: next(x for x in d["questions"] if x["id"] == "Q-0045")["answer"].update(type="bool")), "differs from what the broker implements"),
+    ("standards-defined translation without its standard", "validate",
+     y("bank/broker/translations/generic.yaml", lambda d: d["classes"]["http_status_class"]["rows"][0].pop("standard")), "cites its standard"),
+    ("model-proposed translation without proposed_by", "validate",
+     y("bank/broker/translations/generic.yaml", lambda d: d["classes"]["severity"]["rows"][0].update(kind="proposed")), "records proposed_by: model"),
+    ("email quarantine translation not limited to email and DLP questions", "validate",
+     y("bank/broker/translations/generic.yaml", lambda d: next(r for r in d["classes"]["control_action"]["rows"] if r["id"] == "control_action.quarantined_pre_delivery").pop("questions")),
+     "lists the email and DLP questions it serves"),
+    ("email quarantine translation read by an endpoint or network question", "validate",
+     y("bank/broker/translations/generic.yaml", lambda d: next(r for r in d["classes"]["control_action"]["rows"] if r["id"] == "control_action.quarantined_pre_delivery").update(questions=["Q-0027"])),
+     "limited to email and DLP questions"),
     ("identity groups as the only low-rated yes on a close path", "redteam",
-     y(PSEXEC, lambda d: d["flow"][3].update(on_yes="close:benign_true_positive:admin_activity_baselined")), "FAIL escu:detect_psexec"),
+     y(PSEXEC, lambda d: d["flow"][3].update(on_yes="close:benign_true_positive:admin_activity_baselined")), "FAIL D-0006"),
 ]
 
 

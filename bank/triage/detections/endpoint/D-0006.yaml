@@ -1,0 +1,99 @@
+id: D-0006
+name: Detect PsExec With accepteula Flag
+family: endpoint
+alert_type: analytic
+techniques:
+- T1021.002
+required_roles:
+- event
+- host
+- process
+- user
+intent: Detects PsExec run with -accepteula (likely first use) on an endpoint from process creation logs.
+fp_quality: good
+explanations:
+- BE-0002
+- BE-0001
+- BE-0007
+- BE-0003
+derived_fields:
+  target_host:
+    from: role:process.command_line
+    pattern: \\\\([^\\\s]+)
+    note: first UNC host in the command line; a host list yields "h1,h2"; absent for local use
+fingerprint:
+- role:host.name
+- role:user.name
+- role:process.parent_name
+- role:process.sha256
+- derived:target_host
+fingerprint_influence:
+  role:host.name:
+    rating: low
+    reason: Host that reported the event.
+  role:user.name:
+    rating: low
+    reason: Account recorded by the OS.
+  role:process.parent_name:
+    rating: high
+    reason: File name the attacker can choose.
+  role:process.sha256:
+    rating: low
+    reason: Computed by the sensor; reproducing it means running the same binary.
+  derived:target_host:
+    rating: high
+    reason: Target named in an attacker-written command line.
+precedent_entity: role:host.name
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: role:host.name
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce the fingerprint's host, user, process hash.
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
+- step: 2
+  question: Q-0001
+  on_yes: close:benign_true_positive:sanctioned_deployment_tool
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0002
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 4
+  question: Q-0003
+  rule:
+    gte:
+      param: entity_baseline_min_days
+  on_yes: flag
+  on_no: next
+  on_unknown: next
+  note: 'Was close:benign_true_positive:admin_activity_baselined. Its only none/low yes was identity group membership (Q-0002) plus a baseline rated high, so it flags: group membership is never the only
+    low-rated answer on a close path.'
+- step: 5
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+status: draft
+version: 8
+parameters:
+  precedent_validity_hours: 72
+derived_from:
+  library: escu
+  rule: escu:detect_psexec_with_accepteula_flag
+  title: Detect PsExec With accepteula Flag
+  path: detections/endpoint/detect_psexec_with_accepteula_flag.yml
+  repo: splunk/security_content
+  license: Apache-2.0

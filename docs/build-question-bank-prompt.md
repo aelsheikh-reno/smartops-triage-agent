@@ -5,11 +5,11 @@ Read CLAUDE.md and docs/design-decisions.md first. Create branch feat/triage-que
 Sources: shallow-clone Azure/Azure-Sentinel (sparse: Solutions/*/Analytic Rules, SolutionMetadata.json), splunk/security_content, elastic/detection-rules, SigmaHQ/sigma, LOLBAS-Project/LOLBAS, GTFOBins/GTFOBins.github.io, magicsword-io/LOLDrivers, mitre-attack/attack-stix-data into sources/. Validate technique IDs against ATT&CK v20.0 (enterprise-attack-20.0.json); no revoked or deprecated IDs.
 
 Layout:
-- bank/questions/Q-*.yaml, bank/detections/ (metadata + flow), bank/techniques/T*.yaml, bank/explanations/BE-*.yaml, bank/facts/CF-*.yaml, bank/reason_codes.yaml, bank/overlays/customer/ (empty slot)
-- bank/capabilities.yaml (capabilities, answer contract, Tool Broker scope, write-back policy)
+- bank/triage/questions/Q-*.yaml, bank/triage/detections/ (metadata + flow), bank/triage/techniques/T*.yaml, bank/triage/explanations/BE-*.yaml, bank/broker/facts/CF-*.yaml, bank/triage/reason_codes.yaml, bank/triage/customers/ (empty slot)
+- bank/broker/capabilities.yaml (capabilities, answer contract, Tool Broker scope, write-back policy)
 - tools/validate (refs exist, ≤5 steps, valid outcomes, required fields, license, capability rules), tools/load_sql (YAML → SQLite, Postgres-compatible: detections, questions, flow_steps, question_needs, context_facts), tools/rank_facts (facts ranked by detections unblocked)
 
-Question fields: id, text, tests, capability (exactly one, from bank/capabilities.yaml), needs, source, license, status, version.
+Question fields: id, text, tests, capability (exactly one, from bank/broker/capabilities.yaml), needs, source, license, status, version.
 Detection fields: id (escu:/sigma:/elastic:), name, techniques, data_source, required_roles (roles of the normalized alert, never field names), intent, fp_quality (good|vague|none), flow. Every flow starts with Q0.
 
 Steps (stop after each):
@@ -19,7 +19,7 @@ Steps (stop after each):
 4. Run validate, load_sql, rank_facts; show the top 15 context facts.
 5. Commit, push, open a draft PR. Do not merge.
 
-Expansion batches (after the pilot), chosen from `bank/use_cases.yaml` by rank, one branch and draft PR each (`feat/bank-batch-<n>-<domain>`):
+Expansion batches (after the pilot), chosen from `bank/intake/use_cases.yaml` by rank, one branch and draft PR each (`feat/bank-batch-<n>-<domain>`):
 1. Vendor alerts: AV/EDR, IPS/IDS, WAF, email gateway including user-reported phishing, DLP, scanner noise, proxy blocks, firewall denies, removable media.
 2. Identity and cloud: Entra ID, M365, Azure, on-prem AD authentication, lockouts, service accounts, PAM.
 3. Network and email.

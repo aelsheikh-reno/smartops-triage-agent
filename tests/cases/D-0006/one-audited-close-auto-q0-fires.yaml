@@ -1,6 +1,6 @@
 detection: D-0006
-name: 'one audited close, Auto: Q0 fires'
-reason: 'one audited close, Auto: Q0 fires'
+name: 'one audited close, Auto: Q0 fires, and the close flags because the path is unproven (suggests the precedent)'
+reason: 'one audited close, Auto: Q0 fires, and the close flags because the path is unproven (suggests the precedent)'
 mode: auto
 closures:
 - kind: audited_close
@@ -15,5 +15,7 @@ alert:
   event.time: '2026-10-17T08:00:00Z'
   severity: medium
 expect:
-  outcome: close:inherit
+  outcome: flag
+  suggests: close:inherit
+  blocked_by: unproven_path
 order: 40

@@ -22,13 +22,14 @@ def bank(flow, extra_questions=(), **detection):
                                   "defer_rule": {"max_wait_parameter": "defer_max_wait_seconds", "past_max_wait": "source_unavailable"}}},
         "parameters": {"question_timeout_seconds": {"default": 10}, "defer_max_wait_seconds": {"default": 300},
                        "entity_grouping_window_minutes": {"default": 10}, "triage_lookback_hours": {"default": 24},
-                       "min_alerts": {"default": 3}},
+                       "min_alerts": {"default": 3}, "proof_min_tp_events": {"default": 20}},
         "overlays": {},
         "context_rules": {"q0": {"question": "P0", "yes_when": {"all": [{"C-04.audited": {"gte": 1}}, {"C-06": False}]}},
                           "closes_need_known": [{"question": "C-06", "reason": "context_unknown"}],
                           "entity_guard": {"entity_class": {"question": "C-08", "classes": ["server", "workstation"]}, "hot_when": {"any": [{"C-01": True}, {"C-02.alerts": {"gte": {"param": "min_alerts"}}}, {"C-02.day": {"gte": 99}}]}}},
-        "evidence": {"human_evidence": {"counts": {"manual_shadow_close": "", "analyst_override": "", "audited_close": ""},
-                                        "never": {"accepted_recommendation": "", "auto_close": "", "precedent_match": ""}}},
+        "evidence": {"human_evidence": {"counts": {"manual_shadow_close": "", "analyst_override": "", "audited_close": "", "flag_own_close": "", "flag_override": ""},
+                                        "never": {"accepted_recommendation": "", "auto_close": "", "precedent_match": "", "flag_accepted_suggestion": ""},
+                                        "independent_kinds": ["manual_shadow_close", "analyst_override", "flag_own_close", "flag_override"]}},
         "severity": {"scale": ["informational", "low", "medium", "high", "critical"]},
     }
     d = dict({"id": "SYN-1", "fingerprint": ["role:host.name"], "flow": [dict(st, step=i + 1) for i, st in enumerate(flow)]}, **detection)
@@ -65,10 +66,29 @@ def reply(request, value, status=None, trust="checked", **override):
     return msg
 
 
-def run(flow, script, mode="recommend", context=None, **detection):
+def run(flow, script, mode="recommend", context=None, proofs=None, coverage=None, ctx_out=None, **detection):
     b, d = bank(flow, **detection)
+    b["proofs"], b["replay_coverage"] = proofs or [], coverage or {}
     n = E.derive(d, {"alert_id": "a-1", "entity": "h-1", "host.name": "h-1", "event.time": T0})
-    return E.run_flow(b, d, n, {"answerer": Scripted(dict({"P0": False}, **script), context), "mode": mode, "customer": None}, T0)
+    ctx = {"answerer": Scripted(dict({"P0": False}, **script), context), "mode": mode, "customer": None}
+    out = E.run_flow(b, d, n, ctx, T0)
+    if ctx_out is not None:
+        ctx_out.update(ctx["decision"])
+    return out
+
+
+CLOSE_PATH = "SYN-1@vNone:1:P0=no > 2:X-1=yes"   # the synthetic detection has no version
+
+
+def proof(status="reviewed", paths=(CLOSE_PATH,), **kw):
+    return dict({"id": "PR-1", "paths": list(paths), "status": status, "reviewer": "soc lead", "reviewed_on": "2026-10-17"}, **kw)
+
+
+COVERED = {"detections": {"SYN-1": {"tp_events": 20, "paths": {}, "aimed": {CLOSE_PATH: ["case aimed at X-1"]}}}}
+
+
+def run_proven(flow, script, **kw):
+    return run(flow, script, proofs=[proof()], coverage=COVERED, **kw)
 
 
 Q0 = step("P0", "close:inherit:precedent_match")
@@ -182,11 +202,125 @@ class Trust(unittest.TestCase):
         self.assertEqual(out, "escalate")
         self.assertIn("the stricter", trail[-1])
 
-    def test_checked_closes_in_auto(self):
-        self.assertEqual(run(self.flow, {"X-1": True}, mode="auto")[0], "close:benign_true_positive:a")
+    def test_checked_proven_close_closes_in_auto(self):
+        self.assertEqual(run_proven(self.flow, {"X-1": True}, mode="auto")[0], "close:benign_true_positive:a")
 
     def test_capped_detection_never_closes_in_auto(self):
         out, _ = run(self.flow, {"X-1": True}, mode="auto", max_mode="recommend", auto_excluded_reason="no_tp_replay_data")
+        self.assertEqual(out, "flag")
+
+
+class Proof(unittest.TestCase):
+    flow = [Q0, step("X-1", "close:benign_true_positive:a", "escalate", "flag")]
+
+    def test_unproven_close_in_auto_flags_with_suggestion(self):
+        dec = {}
+        out, trail = run(self.flow, {"X-1": True}, mode="auto", ctx_out=dec)
+        self.assertEqual(out, "flag")
+        self.assertEqual(dec["suggests"], "close:benign_true_positive:a")
+        self.assertEqual(dec["blocked_by"]["rule"], "unproven_path")
+        self.assertTrue(dec["suggestion_shown"])
+        self.assertEqual(dec["path_id"], CLOSE_PATH)
+
+    def test_unproven_close_in_recommend_stays_marked(self):
+        out, trail = run(self.flow, {"X-1": True}, mode="recommend")
+        self.assertEqual(out, "close:benign_true_positive:a")
+        self.assertIn(f"unproven path: {CLOSE_PATH}", trail)
+
+    def test_proven_close_in_recommend_is_not_marked(self):
+        out, trail = run_proven(self.flow, {"X-1": True}, mode="recommend")
+        self.assertFalse(any(t.startswith("unproven path") for t in trail))
+
+    def test_stale_proof_is_ignored(self):
+        stale = proof(paths=["SYN-1@v1:1:P0=no > 2:X-1=yes"])   # written for an earlier version of the detection
+        self.assertEqual(run(self.flow, {"X-1": True}, mode="auto", proofs=[stale], coverage=COVERED)[0], "flag")
+
+    def test_draft_proof_is_ignored(self):
+        self.assertEqual(run(self.flow, {"X-1": True}, mode="auto", proofs=[proof(status="draft")], coverage=COVERED)[0], "flag")
+
+    def test_reviewed_proof_without_reviewer_is_ignored(self):
+        self.assertEqual(run(self.flow, {"X-1": True}, mode="auto", proofs=[proof(reviewer="")], coverage=COVERED)[0], "flag")
+
+    def test_proof_needs_the_replay_bar(self):
+        few = {"detections": {"SYN-1": {"tp_events": 19, "paths": {}, "aimed": {CLOSE_PATH: ["x"]}}}}
+        closed = {"detections": {"SYN-1": {"tp_events": 50, "paths": {CLOSE_PATH: {"events": 1, "closes": 1}}, "aimed": {CLOSE_PATH: ["x"]}}}}
+        unaimed = {"detections": {"SYN-1": {"tp_events": 50, "paths": {}, "aimed": {}}}}
+        for cov in (few, closed, unaimed):
+            self.assertEqual(run(self.flow, {"X-1": True}, mode="auto", proofs=[proof()], coverage=cov)[0], "flag")
+
+    def test_flags_made_from_closes_carry_the_suggestion(self):
+        dec = {}
+        run(self.flow, {"X-1": True}, context={"C-01": True}, ctx_out=dec)
+        self.assertEqual((dec["suggests"], dec["blocked_by"]["rule"]), ("close:benign_true_positive:a", "entity_guard"))
+        dec = {}
+        run(self.flow, {"X-1": True}, context={"C-06": None}, ctx_out=dec)
+        self.assertEqual(dec["blocked_by"]["rule"], "context_unknown")
+        dec = {}
+        run(self.flow, {"X-1": (True, "not_checked")}, mode="auto", ctx_out=dec)
+        self.assertEqual(dec["blocked_by"]["rule"], "trust_rule")
+        dec = {}
+        flow = [Q0, step("X-1", "close:benign_true_positive:a", "flag", "flag", guards=[{"question": "X-2", "then": "flag"}])]
+        run(flow, {"X-1": True, "X-2": True}, ctx_out=dec)
+        self.assertEqual((dec["suggests"], dec["blocked_by"]["rule"]), ("close:benign_true_positive:a", "guard"))
+
+    def test_bank_declared_flag_suggestion_and_shadow_hides_it(self):
+        flow = [Q0, step("X-1", "flag", "escalate", "flag", flag_suggests={"on_yes": {"suggests": "close:benign_true_positive:a", "reason": "actor identity only"}})]
+        dec = {}
+        self.assertEqual(run(flow, {"X-1": True}, ctx_out=dec)[0], "flag")
+        self.assertEqual((dec["suggests"], dec["blocked_by"]["rule"], dec["suggestion_shown"]), ("close:benign_true_positive:a", "bank", True))
+        dec = {}
+        run(flow, {"X-1": True}, mode="shadow", ctx_out=dec)
+        self.assertFalse(dec["suggestion_shown"])
+
+    def test_escalations_carry_no_suggestion(self):
+        dec = {}
+        run(self.flow, {"X-1": False}, ctx_out=dec)
+        self.assertEqual((dec["outcome"], dec["suggests"]), ("escalate", None))
+
+
+class FlagCloses(unittest.TestCase):
+    """#28: how an analyst's close of a flag counts as human evidence."""
+
+    def test_no_suggestion_shown_is_own_judgement_and_counts(self):
+        kind = E.flag_close_kind({"outcome": "flag", "suggests": None, "suggestion_shown": False}, "close:benign_true_positive:a")
+        b, _ = bank([Q0])
+        self.assertEqual(kind, "flag_own_close")
+        self.assertEqual(E.human_evidence(b, [{"kind": kind, "analyst": "a"}])["independent_human"], 1)
+
+    def test_accepting_the_shown_suggestion_never_counts(self):
+        kind = E.flag_close_kind({"outcome": "flag", "suggests": "close:benign_true_positive:a", "suggestion_shown": True}, "close:benign_true_positive:a")
+        b, _ = bank([Q0])
+        self.assertEqual(kind, "flag_accepted_suggestion")
+        self.assertEqual(E.human_evidence(b, [{"kind": kind, "analyst": "a"}]), {"audited": 0, "independent_human": 0})
+
+    def test_a_different_disposition_is_an_override_and_counts(self):
+        kind = E.flag_close_kind({"outcome": "flag", "suggests": "close:benign_true_positive:a", "suggestion_shown": True}, "close:false_positive:b")
+        b, _ = bank([Q0])
+        self.assertEqual(kind, "flag_override")
+        self.assertEqual(E.human_evidence(b, [{"kind": kind, "analyst": "a"}])["independent_human"], 1)
+
+    def test_a_suggestion_hidden_in_shadow_is_own_judgement(self):
+        self.assertEqual(E.flag_close_kind({"outcome": "flag", "suggests": "close:x:y", "suggestion_shown": False}, "close:x:y"), "flag_own_close")
+
+
+class GuardOnly(unittest.TestCase):
+    def test_guard_only_question_refused_as_a_step(self):
+        flow = [Q0, step("X-1", "close:benign_true_positive:a", "flag", "flag")]
+        b, d = bank(flow)
+        b["questions"]["X-1"]["context_rule"] = {"C-09": {"in": ["business_hours"]}}
+        b["contract"]["designed"] = {"C-09": {"guard_only": True, "answer": {"type": "enum"}}}
+        n = E.derive(d, {"alert_id": "a-1", "entity": "h-1", "event.time": T0})
+        with self.assertRaises(ValueError):
+            E.run_flow(b, d, n, {"answerer": Scripted({}), "mode": "recommend"}, T0)
+
+    def test_guard_only_question_allowed_in_a_guard(self):
+        flow = [Q0, step("X-1", "close:benign_true_positive:a", "flag", "flag", guards=[{"question": "X-2", "then": "flag"}])]
+        b, d = bank(flow)
+        b["questions"]["X-2"]["context_rule"] = {"C-09": {"in": ["after_hours"]}}
+        b["contract"]["designed"] = {"C-09": {"guard_only": True, "answer": {"type": "enum"}}}
+        b["context_questions"]["C-09"] = {"id": "C-09", "inputs": {}}
+        n = E.derive(d, {"alert_id": "a-1", "entity": "h-1", "event.time": T0})
+        out, trail = E.run_flow(b, d, n, {"answerer": Scripted({"X-1": True}, {"C-09": "after_hours"}), "mode": "recommend"}, T0)
         self.assertEqual(out, "flag")
 
 

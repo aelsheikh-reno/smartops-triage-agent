@@ -91,6 +91,10 @@ def load():
         c["modes"] = (_load(path) or {}).get("modes") or {}
         c["_modes_file"] = os.path.relpath(path, ROOT)
     params_doc = _load(os.path.join(TRIAGE, "parameters.yaml"))
+    contract_params = {}
+    for name in ("proof.yaml", "verification.yaml"):   # parameters the contract declares (proof bar, shared-verification sample)
+        for pname, p in ((_optional(os.path.join(CONTRACT, name)).get("parameters")) or {}).items():
+            contract_params[pname] = dict(p, layer=p.get("layer", "contract"))
     broker_params = (_load(os.path.join(BROKER, "parameters.yaml")) or {}).get("parameters") or {}
     for name, p in broker_params.items():
         p["layer"] = "broker"
@@ -111,6 +115,9 @@ def load():
         "overlays": overlays,
         "customers": customers,
         "contract": {"questions": {q["id"]: q for q in (_load(os.path.join(CONTRACT, "questions.yaml")) or {}).get("questions") or []},
+                     "designed": {q["id"]: q for q in (_load(os.path.join(CONTRACT, "questions.yaml")) or {}).get("designed") or []},
+                     "proof": _optional(os.path.join(CONTRACT, "proof.yaml")),
+                     "verification": _optional(os.path.join(CONTRACT, "verification.yaml")),
                      "answer": _load(os.path.join(CONTRACT, "answer.yaml")) if os.path.exists(os.path.join(CONTRACT, "answer.yaml")) else {},
                      "envelope": _load(os.path.join(CONTRACT, "envelope.yaml")) if os.path.exists(os.path.join(CONTRACT, "envelope.yaml")) else {},
                      "examples": _load(os.path.join(CONTRACT, "envelope_examples.yaml")) if os.path.exists(os.path.join(CONTRACT, "envelope_examples.yaml")) else {}},
@@ -121,7 +128,7 @@ def load():
         "precedence": params_doc.get("precedence"),
         "capabilities": caps,
         "capability_by_name": {c["name"]: c for c in caps["capabilities"]},
-        "parameters": dict(params_doc["parameters"], **broker_params),
+        "parameters": dict(params_doc["parameters"], **broker_params, **contract_params),
         "reason_codes": {r["code"]: r for r in _load(os.path.join(TRIAGE, "reason_codes.yaml"))["reason_codes"]},
         "questions": _with_broker_side(_by_id("triage/questions/Q-*.yaml"), qmap),
         "explanations": {k: _provenance(v) for k, v in _by_id("triage/explanations/BE-*.yaml").items()},
@@ -135,7 +142,45 @@ def load():
         "severity": _optional(os.path.join(CONTRACT, "severity.yaml")),
         "severity_map": _optional(os.path.join(INTAKE, "severity-map.yaml")),
         "proposals": _optional(os.path.join(TRIAGE, "proposals.yaml")),
+        "proofs": _proofs(),
+        "replay_coverage": _replay_coverage(),
+        "shared_verifications": _shared_verifications(),
     }
+
+
+def _proofs():
+    """Proof records for close paths (bank/contract/proof.yaml schema), from bank/triage/proofs/*.yaml."""
+    out = []
+    for path in sorted(glob.glob(os.path.join(TRIAGE, "proofs", "*.yaml"))):
+        for rec in (_load(path) or {}).get("proofs") or []:
+            out.append(dict(rec, _file=os.path.relpath(path, ROOT)))
+    return out
+
+
+COVERAGE_REPORT = os.path.join(ROOT, "build", "replay_coverage.json")
+
+
+def _replay_coverage():
+    """The replay gate's per-path coverage report (tools/replay.py writes it), or {} when replay has not run."""
+    import json
+    if not os.path.exists(COVERAGE_REPORT):
+        return {}
+    with open(COVERAGE_REPORT) as fh:
+        return json.load(fh)
+
+
+SHARED_VERIFICATIONS = os.path.join(BROKER, "verifications", "shared")
+
+
+def _shared_verifications():
+    """Shared verifications per product and version (bank/contract/verification.yaml), from
+    bank/broker/verifications/shared/<product>/<version>.yaml: {(product, version): record}."""
+    out = {}
+    for path in sorted(glob.glob(os.path.join(SHARED_VERIFICATIONS, "*", "*.yaml"))):
+        rec = _load(path) or {}
+        rec["_file"] = os.path.relpath(path, ROOT)
+        out[(str(rec.get("product")), str(rec.get("version")))] = rec
+    return out
 
 
 def _optional(path):
@@ -418,13 +463,41 @@ def verification_problems(b, customer, rec, today):
 
 
 def row_verified(b, customer, table, row_id, today):
-    """Verified is per customer: a complete, unexpired verification record for the customer's current product version."""
+    """Checked for this customer (bank/contract/verification.yaml) when either
+    a) a complete, unexpired per-customer verification record exists for the customer's current product version, or
+    b) a shared verification for the product and the customer's current version covers the row (vendor doc plus an
+       in-depth check), and the customer holds a sanity sample of at least verification_shared_sanity_alerts alerts
+       on that same version. A version mismatch in either means not checked."""
     if not customer:
         return False
     for rec in (b["customers"].get(customer) or {}).get("verifications") or []:
         if rec.get("table") == table and rec.get("row") == row_id and not verification_problems(b, customer, rec, today):
             return True
-    return False
+    return shared_verified(b, customer, table, row_id)
+
+
+def shared_problems(b, customer, table, row_id):
+    """Why the shared route (b) does not make this row checked for the customer ([] when it does)."""
+    version = ((b["customers"].get(customer) or {}).get("products") or {}).get(table)
+    if version is None:
+        return [f"the customer runs no {table}"]
+    rec = (b.get("shared_verifications") or {}).get((table, str(version)))
+    if not rec:
+        return [f"no shared verification for {table} {version}"]
+    out = [f"shared verification missing {k}" for k in ("vendor_doc", "in_depth_check", "checked_by", "checked_on") if not rec.get(k)]
+    if row_id not in (rec.get("covers") or []):
+        out.append(f"shared verification for {table} {version} does not cover {row_id}")
+    need = E.param_value(b, "verification_shared_sanity_alerts", customer=customer)
+    samples = [s for s in (b["customers"].get(customer) or {}).get("sanity_samples") or [] if s.get("product") == table]
+    good = [s for s in samples if str(s.get("product_version")) == str(version) and int(s.get("alerts") or 0) >= need]
+    if not good:
+        out.append(f"no sanity sample of at least {need} alerts on {table} {version}"
+                   + (f" (samples on versions {sorted({str(s.get('product_version')) for s in samples})})" if samples else ""))
+    return out
+
+
+def shared_verified(b, customer, table, row_id):
+    return not shared_problems(b, customer, table, row_id)
 
 
 def row_answer(b, cls, value, row, answers=None, ctx=None):

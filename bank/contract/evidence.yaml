@@ -6,10 +6,16 @@ human_evidence:
     manual_shadow_close: an analyst closed the alert themselves in Shadow, where the Triage agent's close was not shown to them
     analyst_override: an analyst closed the alert with a disposition or reason different from the Triage agent's recommendation
     audited_close: a close that a human audit sampled and confirmed (the audited false-close rate, docs/design-decisions.md §19)
+    flag_own_close: an analyst closed a flagged alert where no suggested disposition was shown; their own judgement (#28)
+    flag_override: an analyst closed a flagged alert with a disposition different from the one suggested; an override (#28)
   never:
     accepted_recommendation: an analyst accepting the Triage agent's recommended close in Recommend; it is the agent's judgement, not independent evidence
     auto_close: the Triage agent's own close in Auto
     precedent_match: a close by precedent (Q0); precedents never chain
+    flag_accepted_suggestion: an analyst closed a flagged alert by accepting the suggested disposition shown with it; an accept (#28)
+  flag_closes: 'how an analyst''s close of a flag is classified, from the decision log''s suggestion_shown and suggests: no suggestion shown,
+    flag_own_close; the suggested disposition accepted, flag_accepted_suggestion; another disposition, flag_override'
+  independent_kinds: [manual_shadow_close, analyst_override, flag_own_close, flag_override]   # counted per distinct analyst
   independent: closes by distinct analysts; one analyst's repeated closes count once
   auto_mode: in Auto, a precedent (Q0) needs at least one audited_close; manual closes and overrides alone are not enough
   counted_by:   # every place that counts closes; each declares evidence: human_evidence

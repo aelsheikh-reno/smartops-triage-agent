@@ -1,6 +1,6 @@
 detection: D-0026
-name: 'Defender API prevented, low-risk, rows verified for the customer, Auto: mitigated close'
-reason: 'Defender API prevented, low-risk, rows verified for the customer, Auto: mitigated close'
+name: 'Defender API prevented, low-risk, rows verified for the customer, Auto: the mitigated close flags because the path is unproven (suggests it)'
+reason: 'Defender API prevented, low-risk, rows verified for the customer, Auto: the mitigated close flags because the path is unproven (suggests it)'
 mode: auto
 verified:
 - microsoft-defender-for-endpoint
@@ -25,5 +25,7 @@ alert:
           sha256: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
         detectionStatus: prevented
 expect:
-  outcome: close:mitigated_true_positive
+  outcome: flag
+  suggests: close:mitigated_true_positive
+  blocked_by: unproven_path
 order: 9

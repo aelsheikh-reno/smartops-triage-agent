@@ -1,16 +1,18 @@
 # Capability specification
 
+Status: (designed, not built). The capabilities, measurements and Triage-side rules below are the design for the Tool Broker and recipes; none runs yet. Parameter bounds and rating changes marked as such are proposals for the next bank change.
+
 One entry per capability in `bank/capabilities.yaml`. The list is the batch-1 set (PR #6), which adds `alert.field`, `url.reputation`, `vuln.not_applicable`, `email.*`, `traffic.denied_only`, `alert.history` and `scan.job_active` to the pilot set.
 
-Each capability is split between the two sides of the broker (design-decisions §5):
+Each capability is split between the two sides of the broker (design-decisions §6):
 - **Measures** is what the Tool Broker returns, with evidence.
-- **Triage rule** is how the Triage agent turns that measurement into yes, no or unknown. Its threshold comes from the parameter table (§8).
+- **Triage rule** is how the Triage agent turns that measurement into yes, no or unknown. Its threshold comes from the parameter table (§9).
 
 No threshold lives in a recipe.
 
 Parameter bounds are proposals. The bank does not carry minimums and maximums yet; the bank migration issue adds them to `bank/parameters.yaml`, and validation will reject values outside them. Lowering scrutiny (a lower count, a longer validity, a wider list) needs human approval with an owner and an expiry. Parameters marked *proposed* do not exist in the bank yet.
 
-Template kinds (§6):
+Template kinds (§7):
 - **Sigma**: an event search compiled to SPL by pySigma with the customer's pipeline.
 - **lookup**: a typed template against a list, lookup table or index.
 - **API**: a typed template against a tool's API.
@@ -23,13 +25,14 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 ## case.precedent
 - **Measures:** closed cases with the same fingerprint inside the validity window. For each case: ID, disposition, reason, who closed it (analyst or a non-precedent flow step), when, and whether it was a mitigated close. Also returns whether the precedent entity is a crown jewel, and the number of other alerts on that entity in the window.
 - **Triage rule:** yes if at least one original-decision closure lies within `precedent_validity`, the entity is not a crown jewel, there are no other alerts on the entity, and (for a mitigated precedent) the current alert's action is blocked.
-  - `precedent_validity` is per detection: default 24h, min 1h, max 7d.
+  - `precedent_validity` is per detection: default 24h, min 1h, max 72h (designed, not built; the bank still allows up to 7d).
+  - Designed, not built: only closes that passed audit, or at least 2 independent analyst closes of the same fingerprint, may be inherited; and the entity must have no alert of higher severity in the window (instead of no other alert).
   - Closures with reason `precedent_match` are never returned, so precedents never chain.
 - **Template kind:** lookup (case memory, Reno's database on premises).
 - **Splunk:** none.
 - **Known-answer tests:** a seeded test case with a known fingerprint returns one match. A closure made by a precedent is not returned. A crown-jewel test entity returns no match.
 - **Unknown when:** case memory is unreachable (unavailable).
-- **Attacker influence:** set per detection from the fingerprint fields (Q0 rating, §9). If every field is attacker-chosen, the precedent never closes or flags by itself (the flow proceeds). Where a fingerprint field can fall back (asset ID to hostname), Q0 takes its fallback rating.
+- **Attacker influence:** set per detection from the fingerprint fields (Q0 rating, §10). If every field is attacker-chosen, the precedent never closes or flags by itself (the flow proceeds). Where a fingerprint field can fall back (asset ID to hostname), Q0 takes its fallback rating.
 - **Owner:** Tool Broker core (no specialist).
 
 ## list.lookup
@@ -103,7 +106,7 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Splunk:** the Enterprise Security identity lookup (`identity`, `category`).
 - **Known-answer tests:** a known test account is reported in its known group, and is not reported in a group it was never in.
 - **Unknown when:** the account is not found in the directory.
-- **Attacker influence:** low. Changing group membership needs directory rights, which an attacker with those rights already has, so a yes never stands alone on sensitive flows.
+- **Attacker influence:** low. Changing group membership needs directory rights, which an attacker with those rights already has. Designed, not built: group membership is never the only low-rated answer on a close path.
 - **Owner:** identity specialist.
 
 ## identity.risk
@@ -129,7 +132,7 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Unknown when:**
   - the data model is not accelerated, or retention does not cover the lookback
   - the entity or behavior field is empty
-- **Attacker influence:** rated per question; often high, because an attacker can build history. The validator requires a low-rated yes elsewhere on every close path.
+- **Attacker influence:** defaults to high, because an attacker can build history (designed, not built: a lower rating needs a written reason and is flagged for review). The validator requires a low-rated yes elsewhere on every close path.
 - **Owner:** endpoint, network or email specialist, by behavior.
 
 ## org.prevalence
@@ -158,11 +161,11 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Splunk:** change records, if indexed. These are not the CIM Change data model, which records change events, not tickets.
 - **Known-answer tests:** a known past test change returns covered at its time, with its implementer, and not covered an hour after it ends.
 - **Unknown when:** the covering change has no implementer data, or the ITSM is unreachable.
-- **Attacker influence:** none. Approved change records are out of the attacker's reach.
+- **Attacker influence:** low, and only for approved changes whose approver is not the implementer (designed, not built; the bank rates it none today). A change the implementer approved themselves gives no benign evidence.
 - **Owner:** Splunk specialist, when change records are in Splunk. Otherwise ITSM access is an open question, since none of the six specialists covers it.
 
 ## alert.field
-- **Measures:** the alert's normalized field value. Raw vendor values go through the customer's value table (§6).
+- **Measures:** the alert's normalized field value. Raw vendor values go through the customer's value table (§7).
 - **Triage rule:** `op` (in, not_in, gte, cidr, matches) against `values`, which comes from a parameter. It answers unknown on `unknown_op` against `unknown_values`, or when the field is empty. Each parameter's bounds are listed with it, for example `dlp_record_count_flag` (default 1000, min 1, max 100000) and `usb_files_written_flag` (default 50, min 1, max 10000).
 - **Template kind:** alert field (local to the Triage agent; no broker call, outside the call budget).
 - **Splunk:** Enterprise Security notable fields after CIM normalization.
@@ -257,13 +260,13 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Splunk:** none.
 - **Known-answer tests:** a dry-run proposal appears in the approval queue and is withdrawn. An increase-scrutiny test change notifies the fact owner.
 - **Unknown when:** not applicable; a failure is an error, not an answer.
-- **Attacker influence:** not applicable. The anti-poisoning evidence rule (§16) guards proposals.
+- **Attacker influence:** not applicable. The anti-poisoning evidence rule (§23) guards proposals.
 - **Owner:** Use Case Manager, through the Tool Broker core.
 
 ---
 
 ## Data readiness checklist
-Owned by the Splunk specialist (design-decisions §7). It runs at onboarding, before any recipe is built, and produces the customer's data health report.
+Owned by the Splunk specialist (design-decisions §8). It runs at onboarding, before any recipe is built, and produces the customer's data health report.
 
 1. **CIM data models**
    - Enabled and accelerated: Endpoint (Processes, Filesystem, Registry), Network_Traffic, Intrusion_Detection, Web, Email, Malware, Authentication, Vulnerabilities, as the customer's detections need them.
@@ -280,6 +283,10 @@ Owned by the Splunk specialist (design-decisions §7). It runs at onboarding, be
    - Populated, with priority, owner and category.
    - The share of alert hosts and users that resolve.
    - Asset IDs available, for matching by asset ID rather than hostname.
-5. **Notables:** the notable index reachable, with the fields `alert.history` keys on.
+5. **Notables:** the notable index reachable, with the fields `alert.history` keys on, and notable volume per rule.
+6. **Search head:** concurrency headroom for our searches (feeds the concurrency cap, design-decisions §17), and a search-load test before Shadow.
+7. **EDR agent coverage:** the share of hosts with an EDR agent reporting.
+8. **Risk-based alerting:** whether the customer uses it (risk notables change what an alert means and how often it repeats).
+9. **Asset IDs in the Malware data model:** whether AV alerts carry a device or agent ID. Without it, AV precedents rate medium (the fingerprint falls back to the hostname).
 
 The report lists each capability as buildable, buildable with gaps (named), or blocked, and feeds the coverage report.

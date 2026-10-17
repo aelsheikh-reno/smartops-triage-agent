@@ -20,8 +20,11 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 - The broker measures, the Triage agent judges; no threshold lives in a recipe.
 - Runtime runs only frozen recipes; a live or unproven answer can only raise scrutiny.
 - Every parameter has bounds; removing scrutiny needs human approval.
+- The promotion gate is the audited false-close rate, never agreement.
+- The falsifier can only reopen or flag.
+- Unbuilt items are labelled "(designed, not built)".
 - No language model output decides a verdict.
-- Every language-model step that reads alert or customer content goes through the injection classifier first. A hit escalates.
+- Every language-model step that reads alert or customer content goes through the injection classifier first. A hit flags; in Auto it escalates only with a second signal. The text never reaches a model.
 - At runtime a language model may only raise scrutiny (close → flag), never lower it.
 - Every model that touches customer data runs on the customer's premises. The design names model roles, never one fixed model.
 - Public source repos are cloned into `sources/`, which is git-ignored. Never commit them.

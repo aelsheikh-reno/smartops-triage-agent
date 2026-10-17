@@ -6,7 +6,10 @@ Agents (see `docs/design-decisions.md` §4):
 - **Domain specialists** (under the Tool Broker): endpoint, network, identity, email, threat intel and Splunk; build recipes at onboarding and in Shadow, run them per question.
 - **Detection Engineer** (onboarding and rule change): works out what each detection is for; read-only for now.
 - **Use Case Manager** (continuously): keeps facts, lists, questions, runbooks and recipes current; proposes threshold changes.
+- **Falsifier** (after the fact): tries to prove sampled closes wrong and prepares approval packets; can only reopen or flag.
 - **Tier-2 analyst** (later phase): agentic investigation; a human reads the result.
+
+All agents are (designed, not built). A Reno Product Operator runs the system for the first six months (`docs/design-decisions.md` §5); pilot terms are in `docs/pilot-terms.md`.
 
 Design, workflows and question bank for the SmartOps triage agent. The question bank is the core: for each detection, the few yes/no questions that rule out its common benign explanations, plus the customer context needed to answer them.
 
@@ -21,4 +24,4 @@ Workflow pages: `docs/workflows/triage-workflow.html` (alert-level) and `docs/wo
 - Alert-level workflow: https://claude.ai/artifact/1MtZNSiYtydwf6SQd4JKWo
 - Customer onboarding: https://claude.ai/artifact/WTXaT6y6N7ot174GVRGaBX
 
-Status: design settled; bank not yet built. Next step is the pilot in `docs/build-question-bank-prompt.md`.
+Status: the question bank (pilot plus batch 1 vendor alerts) and its offline gates are built. The runtime agents, Tool Broker, recipes and integrations are (designed, not built).

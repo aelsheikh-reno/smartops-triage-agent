@@ -150,6 +150,8 @@ td.k{font-weight:500;white-space:nowrap}
 const NS='http://www.w3.org/2000/svg';
 const LANES=[
  {id:'reno',name:['Reno delivery','team'],rows:1,g:'people'},
+ {id:'pop',name:['Reno Product','Operator'],rows:1,g:'people'},
+ {id:'cop',name:['Customer operator','(shadow)'],rows:1,g:'people'},
  {id:'soc',name:['Customer SOC'],rows:1,g:'people'},
  {id:'it',name:['Customer IT &','data owners'],rows:1,g:'people'},
  {id:'es',name:['Splunk ES'],rows:1,g:'run'},
@@ -163,8 +165,8 @@ const LANES=[
  {id:'stw',name:['Use Case','Manager'],rows:4,g:'learn'},
  {id:'cur',name:['Curation','& audit'],rows:2,g:'learn'}
 ];
-const SHORT={reno:'Reno team',soc:'Customer SOC',it:'Customer IT',es:'Splunk ES',mcp:'Tool Broker',intent:'Detection Eng.',bank:'Question bank',ctx:'Context store',base:'Baseline engine',agent:'Triage agent',ctl:'Autonomy ctl',stw:'Use Case Mgr',cur:'Curation & audit'};
-const ROW=62,NH=44,NW=142,COL=178,PX=24,HEAD=62,LW=140,LAST=11;
+const SHORT={reno:'Reno team',pop:'Product Operator',cop:'Customer operator',soc:'Customer SOC',it:'Customer IT',es:'Splunk ES',mcp:'Tool Broker',intent:'Detection Eng.',bank:'Question bank',ctx:'Context store',base:'Baseline engine',agent:'Triage agent',ctl:'Autonomy ctl',stw:'Use Case Mgr',cur:'Curation & audit'};
+const ROW=62,NH=44,NW=142,COL=178,PX=24,HEAD=62,LW=140,LAST=13;
 let y=HEAD; LANES.forEach(l=>{l.top=y;l.h=l.rows*ROW;y+=l.h;});
 const H=y+8; const L=Object.fromEntries(LANES.map(l=>[l.id,l]));
 const nx=c=>PX+c*COL, cy=(lane,row)=>L[lane].top+row*ROW+ROW/2, gx=c=>nx(c)+NW+(COL-NW)/2;
@@ -174,21 +176,23 @@ const PHASES=[
  {id:'p0',name:'Prepare',when:'Week 0',a:0,b:1,gate:'A',goal:'Agree what success looks like and get the agent running inside the customer’s environment, with no access to anything it doesn’t need.'},
  {id:'p1',name:'Discover',when:'Week 1',a:2,b:3,gate:'B',goal:'Find out what the customer already has: their rules, their closure history, their runbooks and their asset lists. Ask people only for what can’t be mined.'},
  {id:'p2',name:'Fill gaps',when:'Week 2',a:4,b:5,gate:'C',goal:'Collect the missing context in priority order, approve how custom rules are mapped, and prove the agent works on real alerts before it sees live traffic.'},
- {id:'p3',name:'Shadow',when:'Weeks 3–4',a:6,b:7,gate:'D',goal:'The agent triages every alert in the background. Analysts work as usual, and their decisions become the answer key the agent is measured against.'},
+ {id:'p3',name:'Shadow',when:'Weeks 3–4',a:6,b:7,gate:'D',goal:'The agent triages every alert in the background. Analysts work as usual. The Product Operator audits a sample of the closes the agent would have made; agreement with analysts is reported as a diagnostic only.'},
  {id:'p4',name:'Recommend',when:'Months 2–3',a:8,b:9,gate:'E',goal:'Detections that earned trust in Shadow now show their verdict to analysts, who accept or override it with one click.'},
- {id:'p5',name:'Production',when:'Month 3 onward',a:10,b:11,gate:null,goal:'Detections with a sustained record close or escalate on their own. Everything else stays in Recommend or Shadow until it earns more.'}
+ {id:'p5',name:'Production',when:'Months 3–6',a:10,b:11,gate:'F',goal:'Detections that passed the audited false-close gate close or escalate on their own. Everything else stays in Recommend or Shadow until it earns more. The customer operator takes over the weekly cycle.'},
+ {id:'p6',name:'After handover',when:'Month 6 onward',a:12,b:13,gate:null,goal:'The customer operator runs the system. Reno senior auditing continues remotely as a subscription.'}
 ];
 const GATES={
  A:{when:'End of week 0',pass:'Agent reads notables and writes a test comment; Tool Broker reaches the customer’s tools read-only through the specialists’ MCP gateways; models run on the customer’s premises; data stays on premises.',by:'Customer IT + Reno'},
  B:{when:'End of week 1',pass:'Every enabled rule is mapped (known, technique or none) and classified; capabilities discovered; vendor alerts confirmed normalized for each family; coverage report reviewed.',by:'SOC lead'},
- C:{when:'End of week 2',pass:'Top-ranked facts loaded with owners; custom-rule intents confirmed by rule owners or the SOC lead; dry run checked by hand.',by:'SOC lead + Reno'},
- D:{when:'End of month 1',pass:'Shadow results reviewed; list of detections moving to Recommend agreed (e.g. ≥95% agreement over 50+ alerts); injection classifier enabled and tested on the customer’s alert text, its false-positive rate measured in Shadow; close reviewer measured in Shadow and switched off where its flags are unhelpful.',by:'SOC lead'},
- E:{when:'End of month 3, or when ready',pass:'Auto list approved detection by detection; crown jewels excluded; audit sampling switched on; Use Case Manager proposals reviewed weekly; no unapproved reduce-scrutiny change.',by:'SOC lead (and CISO where required)'}
+ C:{when:'End of week 2',pass:'Top-ranked facts loaded with owners; custom-rule intents confirmed by rule owners or the SOC lead; dry run checked by hand; search-load test passed on the customer’s search head.',by:'SOC lead + Reno'},
+ D:{when:'End of month 1',pass:'A sample of each detection’s Shadow closes audited by the Product Operator with no confirmed false close; agreement with analysts reported as a diagnostic only; injection classifier enabled and tested on the customer’s alert text, its false-positive rate measured in Shadow; close reviewer measured in Shadow and switched off where its flags are unhelpful.',by:'SOC lead'},
+ E:{when:'End of month 3, or when ready',pass:'Audited false-close gate passed per detection: at least 200 sampled closes (all closes for low-volume detections), Falsifier findings reviewed by a human, zero confirmed false closes; the customer’s named owner co-signs each promotion and is the detection’s accountable owner; crown jewels excluded; audit sampling switched on; Use Case Manager proposals reviewed weekly; no unapproved reduce-scrutiny change.',by:'Customer’s named owner (co-sign) + SOC lead (and CISO where required)'},
+ F:{when:'Month 6 (an exit test, not a date)',pass:'Handover exit test: the customer operator has run the weekly cycle alone for 4 consecutive weeks, cleared the approval queue within its SLA, and passed one audit with no confirmed false close.',by:'Customer’s named owner + Reno'}
 };
 
 /* one-time steps: [num, lane, row, col, label lines, detail] */
 const NODES=[
- [1,'reno',0,0,['Kickoff: scope and','success metrics'],'Agree which notables are in scope, how success is measured (agreement rate, analyst hours saved) and who owns what on each side.'],
+ [1,'reno',0,0,['Kickoff: scope and','success metrics'],'Agree which notables are in scope, how success is measured (audited false-close rate, analyst hours saved) and who owns what on each side.'],
  [2,'agent',0,0,['Pick local model per','role (eval harness)'],'Run the evaluation harness on Reno’s test sets within the customer’s hardware and pick a model for each role: a small fast one for per-alert roles, the largest that fits for per-rule roles. Check each model’s license.'],
  [3,'it',0,0,['Approve access and','data residency'],'Approve the service accounts and confirm the data and every model that touches it stay on the customer’s premises.'],
  [4,'reno',0,1,['Deploy agent and','local models'],'Install the triage agent and the local model picked for each role on the customer’s GPU hosts. Nothing that touches customer data leaves the premises.'],
@@ -218,13 +222,15 @@ const NODES=[
  [28,'ctx',0,5,['Load facts with','owner and expiry'],'Every fact gets an owner and a date to re-check it, because IP ranges and roles change.'],
  [29,'reno',0,5,['Tuning tickets for','noisy rules'],'Rules firing hundreds of times on one entity get throttling or risk-based alerting. That is a detection problem, not a triage problem.'],
  [30,'agent',0,5,['Dry run on','sample notables'],'Run the agent on recent notables and check its answers by hand before it sees live traffic.'],
- [31,'mcp',1,5,['Build and test','recipes'],'Each specialist binds the bank’s templates to the customer’s tools (Sigma compiled by pySigma with the customer’s pipeline; typed lookup and API templates), then runs known-answer tests: a known value must return the expected result and the data source must show recent events. Recipes start in Shadow.'],
- [32,'ctl',0,6,['All detections','start in Shadow'],'The agent triages every alert, but analysts don’t see its verdicts, so their decisions stay unbiased.'],
- [33,'reno',0,7,['Month-1 review','with customer'],'Review agreement per detection, the questions that came back unknown (and why: no capability, tool down, or no data), and the facts still missing.'],
- [34,'ctl',0,8,['Promote eligible','to Recommend'],'Detections that passed gate D now show their verdict to analysts.'],
- [35,'mcp',1,8,['Freeze recipes','at promotion'],'Promotion freezes the recipes each promoted detection uses. Runtime runs only frozen recipes; a live or unproven answer can only raise scrutiny.'],
- [36,'ctl',0,10,['Promote eligible','to Auto'],'Detections that kept their agreement rate in Recommend move to Auto, never on crown-jewel assets.'],
- [37,'es',0,10,['Allow agent to','close notables'],'The Splunk account gets permission to close notables, used only for detections in Auto.']
+ [31,'es',0,5,['Search-load test','(before Shadow)'],'Run our searches against the customer’s search head at the expected alert rate, under the concurrency cap, and confirm the customer’s own scheduled searches are unaffected. An onboarding gate before Shadow.'],
+ [32,'mcp',1,5,['Build and test','recipes'],'Each specialist binds the bank’s templates to the customer’s tools (Sigma compiled by pySigma with the customer’s pipeline; typed lookup and API templates), then runs known-answer tests: a known value must return the expected result and the data source must show recent events. Recipes start in Shadow.'],
+ [33,'ctl',0,6,['All detections','start in Shadow'],'The agent triages every alert, but analysts don’t see its verdicts, so their decisions stay unbiased.'],
+ [34,'reno',0,7,['Month-1 review','with customer'],'Review each detection’s audited Shadow sample (agreement with analysts as a diagnostic only), the questions that came back unknown (and why: no capability, tool down, or no data), and the facts still missing.'],
+ [35,'ctl',0,8,['Promote eligible','to Recommend'],'Detections that passed gate D now show their verdict to analysts.'],
+ [36,'mcp',1,8,['Freeze recipes','at promotion'],'Promotion freezes the recipes each promoted detection uses. Runtime runs only frozen recipes; a live or unproven answer can only raise scrutiny.'],
+ [37,'ctl',0,10,['Promote eligible','to Auto'],'Detections that pass the audited false-close gate (zero confirmed false closes in at least 200 sampled closes, or all closes for low-volume detections) move to Auto, co-signed by the customer’s named owner, never on crown-jewel assets.'],
+ [38,'es',0,10,['Allow agent to','close notables'],'The Splunk account gets permission to close notables, used only for detections in Auto.'],
+ [39,'cop',0,11,['Run weekly cycle','alone (4 weeks)'],'The customer operator runs the weekly cycle without the Product Operator for 4 consecutive weeks, clears the approval queue within its SLA and passes one audit with no confirmed false close. This is the handover exit test (gate F), not a date.']
 ].map(a=>({num:a[0],lane:a[1],row:a[2],col:a[3],lines:a[4],detail:a[5]}));
 
 /* ongoing processes: [id, lane, row, startCol, endCol, label, cadence, owner, why] */
@@ -237,7 +243,7 @@ const BARS=[
  ['b6','intent',0,6,LAST,'Re-map new or changed rules','on change','Platform + rule owner (Use Case Manager asks)','A new or edited rule always restarts in Shadow.'],
  ['b7','it',0,8,LAST,'Owners confirm facts when the Use Case Manager asks','per fact','Fact owners','Stale facts cause confident wrong answers; an expired fact stops being used.'],
  ['b8','bank',0,8,LAST,'Base bank releases + customer layer','monthly','Reno','New public detections and improved questions reach every customer.'],
- ['b9','reno',0,8,LAST,'Report: coverage, agreement, hours saved','monthly','Reno','Shows the customer the value and where gaps remain.'],
+ ['b9','reno',0,8,LAST,'Report: coverage, false-close rate, hours saved','monthly','Reno','Shows the customer the value and where gaps remain.'],
  ['b10','cur',1,10,LAST,'Audit 5–10% of auto-closures','weekly','Senior analyst','Half the sample is the closes the close reviewer ranks oddest, half is random. Humans do every audit. Catches silent errors in Auto mode.'],
  ['b11','ctl',0,11,LAST,'Promote / demote','weekly','Platform','A failed audit sample sends a detection back to Recommend.'],
  ['b13','stw',0,6,LAST,'Re-confirm expiring facts with owners','daily','Use Case Manager','Finds facts near expiry or with an owner who has left, and asks the right person to re-confirm. Expired facts stop being used.'],
@@ -245,6 +251,10 @@ const BARS=[
  ['b15','stw',2,6,LAST,'Keep runbooks in sync','on every bank change','Use Case Manager','Runbooks are regenerated from the bank, so documentation never drifts from what the agent does.'],
  ['b16','mcp',2,6,LAST,'Daily recipe tests','daily','Tool Broker specialists','Known-answer and data-recency tests on every recipe; a failure sends that capability back to Shadow.'],
  ['b17','stw',3,6,LAST,'Repair failed recipes','on test failure','Use Case Manager + specialist','The Use Case Manager has the owning specialist repair the recipe; it stays in Shadow until its tests pass and it is frozen again.'],
+ ['b18','pop',0,0,11,'Runs onboarding, recipes, approval desk, audits, tuning','every day','Reno Product Operator','Prepares and runs everything for the first six months; the customer’s named owner co-signs reduce-scrutiny changes and promotions to Auto.'],
+ ['b19','pop',0,12,LAST,'Remote senior audit (subscription)','weekly','Reno senior auditor','After handover: reviews the Falsifier’s findings and the audit sample remotely.'],
+ ['b20','cop',0,0,10,'Shadows the Product Operator','every day','Customer operator','Learns the approval desk, audits and tuning by doing them alongside the operator.'],
+ ['b21','cop',0,12,LAST,'Runs the weekly cycle','weekly','Customer operator','The customer operator owns the system after the handover exit test.'],
  ['b12','mcp',0,3,LAST,'Tool health check; re-discover on change','every few minutes','Platform','A disconnected tool turns its answers into “unknown, unavailable”: nothing closes on it, and affected detections drop from Auto to Recommend until it’s back.']
 ].map(a=>({id:a[0],lane:a[1],row:a[2],a:a[3],b:a[4],label:a[5],cad:a[6],owner:a[7],why:a[8]}));
 

@@ -9,7 +9,7 @@ Status: draft. Each mapping row records `verified`. Only the Defender rows are v
 the replay dataset). The other rows were recalled from public event references and must be checked
 against the product's documentation and the customer's version.
 
-Rule (design-decisions §5, enforced by `tools/validate.py`): the cap is per customer. A detection is
+Rule (design-decisions §6, enforced by `tools/validate.py`): the cap is per customer. A detection is
 capped at Recommend for a customer while that customer's product rows for its family are unverified;
 the onboarding check "Check vendor alerts are normalized" records which products each customer runs.
 Any family with unverified rows must declare `auto_requires: [vendor_mapping_verified]`. Each table

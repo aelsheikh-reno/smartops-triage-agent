@@ -1,0 +1,16 @@
+detection: D-0012
+source_rule: escu:remote_process_instantiation_via_winrm_and_powershell
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: process_name
+    op: in
+    value:
+    - powershell.exe
+    - pwsh.exe
+  - field: process
+    op: matches
+    value: invoke-command
+  - field: process
+    op: matches
+    value: -computername

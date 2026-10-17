@@ -8,10 +8,12 @@ import yaml
 
 import roles as ROLES_MOD
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from engine import executor as E  # noqa: E402  the flow executor: outcomes, guards, rules, envelope, context rules
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BANK = os.path.join(ROOT, "bank")
 REF = ROLES_MOD.REF
-OUTCOME = re.compile(r"^(next|escalate|flag|close:(\w+):(\w+))$")
 
 
 def _load(path):
@@ -140,83 +142,6 @@ def _optional(path):
     return (_load(path) or {}) if os.path.exists(path) else {}
 
 
-def auto_excluded(d, st=None):
-    """The auto_excluded_reason codes of a detection (max_mode recommend) or of one of its close steps (bank/triage/auto_exclusions.yaml)."""
-    x = (st if st is not None else d).get("auto_excluded_reason")
-    return [] if not x else [x] if isinstance(x, str) else list(x)
-
-
-def auto_eligible_path(d, path):
-    """A close path can close in Auto only if the detection is not capped at Recommend and no step on it is auto-excluded."""
-    return d.get("max_mode") != "recommend" and not any(auto_excluded(d, st) for st, _ in path if st["on_" + _].startswith("close"))
-
-
-ENVELOPE_REQUEST = ("request_id", "question_id", "scope_profile", "deadline")
-ENVELOPE_ANSWER = ("request_id", "measurement_id", "answer", "status", "trust", "provenance")
-
-
-def envelope_missing(msg, kind):
-    """Required envelope fields a request or answer lacks (contract/envelope.yaml), with run_or_window: exactly one of
-    run_id or entity_window_id."""
-    need = ENVELOPE_REQUEST if kind == "request" else ENVELOPE_ANSWER
-    out = [k for k in need if k not in msg or msg[k] in (None, "")]
-    if ("run_id" in msg) == ("entity_window_id" in msg):
-        out.append("run_id or entity_window_id (exactly one)")
-    return out
-
-
-def accept_answer(pending, msg, received_at):
-    """The Triage agent's acceptance rule for one broker answer (contract/envelope.yaml). pending: {request_id: request}.
-    Returns (accepted, reason). Rejected answers are logged; a late answer is logged and discarded, never applied."""
-    missing = envelope_missing(msg, "answer")
-    if missing:
-        return False, f"missing {', '.join(missing)}"
-    req = pending.get(msg["request_id"])
-    if not req:
-        return False, "no pending request"
-    for k in ("run_id", "entity_window_id"):
-        if req.get(k) != msg.get(k):
-            return False, f"{k.replace('_', ' ').replace('entity window id', 'entity_window_id').replace('run id', 'run_id')} does not match the pending request"
-    if _ts(received_at) > _ts(req["deadline"]):
-        return False, "late"
-    return True, "accepted"
-
-
-def _ts(t):
-    from datetime import datetime
-    return datetime.fromisoformat(str(t).replace("Z", "+00:00")).timestamp()
-
-
-def resolve_request(b, request, events):
-    """What the Triage agent records for one request (contract/envelope.yaml deadline, defer_rule): the status of the
-    accepted answer, or source_unavailable when no answer was accepted by the effective deadline. events: [{at, defer: {...}}
-    or {at, answer: {...}}] in time order. A defer (overload or rate limiting) makes the request wait: its deadline moves to
-    the first defer plus defer_max_wait_seconds and never further; it is never answered unknown.
-    Returns (status, reason)."""
-    env = b["contract"]["envelope"]
-    deadline, first_defer = _ts(request["deadline"]), None
-    max_wait = float(param_value(b, env["defer_rule"]["max_wait_parameter"]))
-    for ev in events:
-        at = _ts(ev["at"])
-        if "defer" in ev:
-            if at > deadline:
-                break
-            if (ev["defer"].get("reason") not in env["defer"]["reasons"]):
-                return env["deadline"]["on_miss"], f"defer reason {ev['defer'].get('reason')!r} is not overload or rate limiting"
-            first_defer = at if first_defer is None else first_defer
-            deadline = first_defer + max_wait
-            continue
-        ok, why = accept_answer({request["request_id"]: dict(request, deadline=_iso(deadline))}, ev["answer"], ev["at"])
-        if ok:
-            return ev["answer"]["status"], "accepted"
-    if first_defer is not None:
-        return env["defer_rule"]["past_max_wait"], "deferred past defer_max_wait_seconds"
-    return env["deadline"]["on_miss"], "no answer by the deadline"
-
-
-def _iso(ts):
-    from datetime import datetime, timezone
-    return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def cache_problems(b, served):
@@ -313,43 +238,22 @@ def list_refs(question):
     return ids
 
 
-def close_paths(b, flow):
-    """For each non-precedent close: (step, edge, steps whose answer it rests on).
-
-    A close at step k rests on step k and on every earlier gate step (yes goes on;
-    no and unknown both stop the flow), since only a yes gets past a gate.
-    """
-    paths, gates = [], []
-    for st in flow[1:]:
-        for edge in ("on_yes", "on_no"):
-            if st[edge].startswith("close"):
-                paths.append((st["step"], edge, gates + [st["step"]]))
-        if st["on_yes"] == "next" and st["on_no"] != "next" and st["on_unknown"] != "next":
-            gates.append(st["step"])
-    return paths
-
-
 def tainted_closes(b, flow):
     """Closes that flag until onboarding: reached through a yes (a step's, or a guard's that needs one)
     that reads unverified seed data. Returns (step, edge, [steps or 'step:guard Q-xxxx'])."""
     unverified = {fid for fid, f in b["facts"].items() if has_unverified_seed(f)}
     reads = lambda qid: set(list_refs(b["questions"][qid])) & unverified
     out = {}
-    for path, outcome, guards in enumerate_paths(flow):
+    for path, outcome, guards in E.enumerate_paths(flow):
         last, ans = path[-1]
         if not outcome.startswith("close") or last["step"] == 1:
             continue
         bad = [st["step"] for st, a in path if a == "yes" and reads(st["question"])]
-        bad += [f"{last['step']}:guard {g['question']}" for g in guards if guard_requires_yes(g) and reads(g["question"])]
+        bad += [f"{last['step']}:guard {g['question']}" for g in guards if E.guard_requires_yes(g) and reads(g["question"])]
         if bad:
             key = (last["step"], "on_" + ans)
             out[key] = sorted(set(out.get(key, [])) | set(bad), key=str)
     return [(s, e, bad) for (s, e), bad in sorted(out.items())]
-
-
-def close_edges(flow):
-    """Distinct (step, edge) pairs that close, outside Q0."""
-    return sorted({(st["step"], e) for st in flow[1:] for e in ("on_yes", "on_no") if st[e].startswith("close")})
 
 
 def has_unverified_seed(fact):
@@ -364,8 +268,7 @@ def has_unverified_seed(fact):
     return scan(fact.get("seed"))
 
 
-# ---------- flow execution model shared by the gates ----------
-ANS = (("yes", "on_yes"), ("no", "on_no"), ("unknown", "on_unknown"))
+# ---------- gate helpers over flows (ratings, call budget); the flow walk itself is engine/executor.py ----------
 RATING_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3}
 LOCAL_KINDS = {"alert"}   # answered from the normalized alert (source: alert): no tool call, no call budget
 
@@ -376,53 +279,6 @@ def is_local(b, qid):
     cap = b["capability_by_name"].get(b["questions"][qid]["capability"]["name"], {})
     outside = set(b["capabilities"]["scope"].get("budget_counts_sources") or [])
     return cap.get("kind") in LOCAL_KINDS or (cap.get("source_authority") or {}).get("authoritative") not in outside
-
-
-def guard_requires_yes(g):
-    """A guard that fires on 'no' (and always on unknown) means the close needs a yes from it."""
-    return "no" in g.get("when", ["yes"])
-
-
-SEVERITY = {"close": 0, "flag": 1, "escalate": 2}
-
-
-def outcome_kind(out):
-    return "close" if out.startswith("close") else out
-
-
-def guard_applies(g, out):
-    """Guards attach to close outcomes by default; applies_to may add flag. Never escalate."""
-    return outcome_kind(out) in g.get("applies_to", ["close"])
-
-
-def raise_outcome(out, guard_results):
-    """Apply guard answers to an outcome: the strongest result wins, order does not matter.
-    guard_results: [(guard, answer)]. An unknown answer raises to flag; a triggered guard to its then."""
-    best = SEVERITY[outcome_kind(out)]
-    for g, a in guard_results:
-        if a == "unknown":
-            best = max(best, SEVERITY["flag"])
-        elif a in g.get("when", ["yes"]):
-            best = max(best, SEVERITY[g["then"]])
-    if best == SEVERITY[outcome_kind(out)]:
-        return out
-    return {1: "flag", 2: "escalate"}[best]
-
-
-def enumerate_paths(flow):
-    """Yield (path, outcome, guards). path = [(step, answer)]; guards = the step's guards that apply to that outcome."""
-    def walk(i, path):
-        if i >= len(flow):
-            return
-        st = flow[i]
-        for ans, edge in ANS:
-            out = st[edge]
-            here = path + [(st, ans)]
-            if out == "next":
-                yield from walk(i + 1, here)
-            else:
-                yield here, out, [g for g in st.get("guards") or [] if guard_applies(g, out)]
-    yield from walk(0, [])
 
 
 def _call_key(item):
@@ -451,7 +307,7 @@ def yes_ratings(b, path, outcome, guards, profile=None):
     """Ratings of every yes a close rests on: yes answers on the path, plus guards that need a yes."""
     out = [(st["question"], rating(b, st, profile)) for st, a in path if a == "yes"]
     if outcome.startswith("close"):
-        out += [(g["question"], rating(b, g, profile)) for g in guards if guard_requires_yes(g)]
+        out += [(g["question"], rating(b, g, profile)) for g in guards if E.guard_requires_yes(g)]
     return out
 
 
@@ -482,142 +338,6 @@ def _q0(d, fallback):
 
 
 # ---------- typed answers and Triage-side rules ----------
-def answer_type(b, qid):
-    q = b["questions"].get(qid) or b["context_questions"].get(qid)
-    return b["capability_by_name"][q["capability"]["name"]]["answer"]["type"]
-
-
-def param_value(b, name, detection=None, customer=None, entity_class=None):
-    """Resolve a parameter by precedence: customer + detection > customer > detection > global.
-    A parameter with by_entity_class takes the entity's class value (C-08) at the global level."""
-    ov = (b["overlays"].get(customer) or {}).get("overrides") or [] if customer else []
-    did = (detection or {}).get("id")
-    for want_det in (True, False):
-        for o in ov:
-            if o.get("param") == name and bool(o.get("detection")) == want_det and (not want_det or o["detection"] == did):
-                return o["value"]
-    if detection and name in (detection.get("parameters") or {}):
-        return detection["parameters"][name]
-    p = b["parameters"][name]
-    if entity_class and entity_class in (p.get("by_entity_class") or {}):
-        return p["by_entity_class"][entity_class]
-    return p["default"]
-
-
-def _vals(b, v, detection):
-    if isinstance(v, dict) and "param" in v:
-        v = param_value(b, v["param"], detection)
-    return v if isinstance(v, list) else [v]
-
-
-def apply_rule(b, rule, value, atype, detection=None):
-    """Turn a typed broker value into yes / no / unknown on the Triage side. value None means status unknown."""
-    if value is None:
-        return "unknown"
-    if atype == "bool":
-        return "yes" if value else "no"
-    if not rule:
-        raise ValueError(f"a {atype} answer needs a step rule")
-    if atype in ("count", "number"):
-        if "gte" in rule:
-            return "yes" if float(value) >= float(_vals(b, rule["gte"], detection)[0]) else "no"
-        if "lte" in rule:
-            return "yes" if float(value) <= float(_vals(b, rule["lte"], detection)[0]) else "no"
-        raise ValueError(f"count rule needs gte or lte: {rule}")
-    if atype == "enum":
-        v = str(value).lower()
-        if "unknown" in rule and v in {str(x).lower() for x in _vals(b, rule["unknown"], detection)}:
-            return "unknown"
-        if "yes" in rule:
-            return "yes" if v in {str(x).lower() for x in _vals(b, rule["yes"], detection)} else "no"
-        if "yes_unless" in rule:
-            return "no" if v in {str(x).lower() for x in _vals(b, rule["yes_unless"], detection)} else "yes"
-        raise ValueError(f"enum rule needs yes or yes_unless: {rule}")
-    raise ValueError(atype)
-
-
-def severity_rank(b, level):
-    """Position of a normalized severity (bank/contract/severity.yaml) on the scale, or None for anything else (raw or unmapped)."""
-    scale = (b.get("severity") or {}).get("scale") or []
-    return scale.index(level) if level in scale else None
-
-
-def context_rule(b, rule, answers):
-    """Evaluate a Triage-side rule over cached context answers ({"C-06": False, "C-08": "workstation", "C-02": {...}}), in three
-    values: True, False, or None when the result depends on a context answer that is unknown (missing, or None for source
-    unavailable). None makes the step or guard answer unknown, which flags (context_unknown); missing context never escalates.
-    answers may also hold _mode (shadow, recommend, auto), _severity (this alert's normalized severity), _detection and
-    _customer (for parameter values). A key C-xx.component reads one component of a count answer. Operators: in, gte, lte,
-    not_above (normalized severity only), sum_of_severities (adds the day_detections_<severity> components) and modes (the
-    condition holds only in those modes; elsewhere it is false)."""
-    if "any" in rule:
-        got = [context_rule(b, r, answers) for r in rule["any"]]
-        return True if True in got else (None if None in got else False)
-    if "all" in rule:
-        got = [context_rule(b, r, answers) for r in rule["all"]]
-        return False if False in got else (None if None in got else True)
-    (key, want), = rule.items()
-    cid, _, comp = key.partition(".")
-    if isinstance(want, dict) and "modes" in want and answers.get("_mode", "recommend") not in want["modes"]:
-        return False
-    got = answers.get(cid)
-    if got is None or got == "unknown":
-        return None
-    if comp and not (isinstance(want, dict) and "sum_of_severities" in want):
-        got = got.get(comp) if isinstance(got, dict) else None
-        if got is None:
-            return None
-    pv = lambda v: param_value(b, v["param"], answers.get("_detection"), answers.get("_customer"), answers.get("_entity_class")) if isinstance(v, dict) and "param" in v else v
-    if not isinstance(want, dict):
-        return got == want
-    if "in" in want:
-        return got in want["in"]
-    if "not_above" in want:
-        if want["not_above"] != "this_alert_severity":
-            raise ValueError(f"not_above compares with this_alert_severity only: {want}")
-        if got == "none":
-            return True
-        mine, other = severity_rank(b, answers.get("_severity")), severity_rank(b, got)
-        return None if mine is None or other is None else other <= mine
-    if "sum_of_severities" in want:
-        if not isinstance(got, dict):
-            return None
-        levels = pv(want["sum_of_severities"])
-        if any(severity_rank(b, lv) is None for lv in levels):
-            raise ValueError(f"sum_of_severities lists a value outside the normalized scale: {levels}")
-        parts = [got.get(f"{comp}_{lv}") for lv in levels]
-        if None in parts:
-            return None
-        got = sum(parts)
-    if "gte" in want:
-        return float(got) >= float(pv(want["gte"]))
-    if "lte" in want:
-        return float(got) <= float(pv(want["lte"]))
-    raise ValueError(f"unknown context rule operator: {want}")
-
-
-def entity_hot(b, answers):
-    """The entity guard (bank/triage/context_rules.yaml entity_guard): True (hot), False, or None (unknown: closes flag)."""
-    return context_rule(b, b["context_rules"]["entity_guard"]["hot_when"], answers)
-
-
-def q0(b, answers):
-    """Q0 from the context answers (bank/triage/context_rules.yaml q0)."""
-    return context_rule(b, b["context_rules"]["q0"]["yes_when"], answers)
-
-
-def human_evidence(b, closures, analysts_distinct=True):
-    """C-04's components from a list of recorded closes ({kind, analyst, ...}), by the one definition in
-    bank/contract/evidence.yaml: audited closes, and independent human closes (manual closes in Shadow and analyst
-    overrides, by distinct analysts). Kinds the definition lists under never (accepted recommendations, Auto closes,
-    precedent matches) are not counted."""
-    he = b["evidence"]["human_evidence"]
-    counted = [c for c in closures if c["kind"] in he["counts"] and c["kind"] not in he["never"]]
-    audited = sum(1 for c in counted if c["kind"] == "audited_close")
-    human = [c for c in counted if c["kind"] in ("manual_shadow_close", "analyst_override")]
-    return {"audited": audited, "independent_human": len({c.get("analyst") for c in human}) if analysts_distinct else len(human)}
-
-
 def norm_value(v):
     """How a raw value is compared with a translation row: case-insensitive, surrounding space and trailing periods
     trimmed, inner whitespace collapsed ("Prevention, process killed." matches "Prevention, process killed")."""
@@ -674,7 +394,6 @@ def class_values(b, cls, answers=None):
     return spec["values"], set(spec.get("raise_only") or [])
 
 
-MODES = ("shadow", "recommend", "auto")
 VERIFICATION_FIELDS = ("table", "row", "vendor_doc", "spot_check_alerts", "checked_by", "checked_on", "product_version", "expires")
 
 
@@ -687,7 +406,7 @@ def verification_problems(b, customer, rec, today):
         out.append(f"no row {rec.get('table')}/{rec.get('row')}")
     elif row.get("kind") == "ambiguous":
         out.append("an ambiguous row cannot be verified")
-    need = param_value(b, "verification_min_spot_check_alerts", customer=customer)
+    need = E.param_value(b, "verification_min_spot_check_alerts", customer=customer)
     if isinstance(rec.get("spot_check_alerts"), int) and rec["spot_check_alerts"] < need:
         out.append(f"spot check of {rec['spot_check_alerts']} alerts, below verification_min_spot_check_alerts ({need})")
     if rec.get("expires") and str(rec["expires"]) < str(today):
@@ -706,9 +425,6 @@ def row_verified(b, customer, table, row_id, today):
         if rec.get("table") == table and rec.get("row") == row_id and not verification_problems(b, customer, rec, today):
             return True
     return False
-
-
-TRUST = ("checked", "not_checked")
 
 
 def row_answer(b, cls, value, row, answers=None, ctx=None):
@@ -759,7 +475,7 @@ def close_path_rows(b, path, guards, customer=None, detection=None):
                 if r.get("kind") in ("ambiguous", "standards_defined"):
                     continue
                 try:
-                    got = apply_rule(b, it.get("rule"), r.get("value"), "enum", detection)
+                    got = E.apply_rule(b, it.get("rule"), r.get("value"), "enum", detection)
                 except ValueError:
                     got = None
                 stands = got == taken if taken else (got not in (it.get("when") or ["yes"]) and got != "unknown")

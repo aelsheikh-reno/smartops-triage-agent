@@ -1,0 +1,12 @@
+detection: D-0002
+source_rule: escu:bitsadmin_download_file
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: process_name
+    op: in
+    value:
+    - bitsadmin.exe
+  - field: process
+    op: matches
+    value: transfer|addfile

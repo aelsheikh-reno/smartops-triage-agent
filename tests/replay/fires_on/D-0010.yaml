@@ -1,0 +1,13 @@
+detection: D-0010
+source_rule: escu:process_execution_via_wmi
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: parent_process_name
+    op: in
+    value:
+    - wmiprvse.exe
+  - not:
+      field: process
+      op: matches
+      value: dismhost\.exe

@@ -1,0 +1,20 @@
+detection: D-0034
+name: 'removable media, C-06 unavailable and C-08 workstation: flag (context_unknown)'
+reason: 'removable media, C-06 unavailable and C-08 workstation: flag (context_unknown)'
+mode: recommend
+coverage:
+- device_control_write_events
+context:
+  C-06: null
+  C-08: workstation
+alert:
+  host.name: srv-01
+  user.name: u1
+  event.time: '2026-10-17T00:00:00Z'
+  device.event_type: connect
+  device.class: storage
+  reporting_control.action: allowed
+  device.files_written: 0
+expect:
+  outcome: flag
+order: 25

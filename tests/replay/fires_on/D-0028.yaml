@@ -1,0 +1,8 @@
+detection: D-0028
+source_rule: product_alert:ids_signature
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  field: _kind
+  op: in
+  value:
+  - ids

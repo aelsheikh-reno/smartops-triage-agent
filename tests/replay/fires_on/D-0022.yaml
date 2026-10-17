@@ -1,0 +1,18 @@
+detection: D-0022
+source_rule: escu:windows_schtasks_create_run_as_system
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: process_name
+    op: in
+    value:
+    - schtasks.exe
+  - field: process
+    op: matches
+    value: '/create '
+  - field: process
+    op: matches
+    value: '/ru '
+  - field: process
+    op: matches
+    value: system

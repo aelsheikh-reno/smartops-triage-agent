@@ -1,0 +1,16 @@
+detection: D-0026
+name: no hash, high-risk class, detected (not blocked) must escalate
+reason: no hash, high-risk class, detected (not blocked) must escalate
+mode: recommend
+alert:
+  host.name: ws-01
+  user.name: u1
+  event.time: '2026-10-17T00:00:00Z'
+  file.path: C:\Users\Public\m.exe
+  file.name: m.exe
+  reporting_control.signature: HackTool:Win32/Mimikatz
+  reporting_control.category: hacktool
+  reporting_control.action_raw: detected
+expect:
+  outcome: escalate
+order: 1

@@ -25,6 +25,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bank as B  # noqa: E402
+from engine import executor as E  # noqa: E402
 import export_bundle  # noqa: E402
 import field_names  # noqa: E402
 import roles as R  # noqa: E402
@@ -145,6 +146,33 @@ def neutrality_hits(path):
     for p, kind, hit in scan_leaks(doc):
         if kind != "schema field name" or FIELD_SHAPED.search(hit):
             out.append((p, kind, hit))
+    return out
+
+
+# The executor (engine/) is held to the same neutrality as the triage layer, plus: no detection or technique IDs, no file
+# formats (it reads the bank as loaded dictionaries and never opens or parses a file), and no schema field names anywhere.
+ENGINE_DETECTION_ID = re.compile(r"\b(D-\d{4}|T\d{4}(\.\d{3})?|Q-\d{4}|C-\d{2})\b")   # detection, technique, question or context question
+ENGINE_FILE_FORMAT = re.compile(r"^\s*(import|from)\s+(yaml|json|csv|xml|configparser|tomllib|glob|pathlib)\b|\bopen\(", re.M)
+
+
+def engine_hits(path):
+    """(kind, hit) for every neutrality violation in one engine/ source file."""
+    text = open(path).read()
+    out = []
+    for kind, fn in (("vendor or product name", vendors.find), ("rule library name", vendors.find_library),
+                     ("reference to the broker's internals", lambda t: (BROKER_REF.search(t) or [None])[0]),
+                     ("detection, technique, question or context-question ID", lambda t: (ENGINE_DETECTION_ID.search(t) or [None])[0]),
+                     ("file format", lambda t: (ENGINE_FILE_FORMAT.search(t) or [None])[0])):
+        hit = fn(text)
+        if hit:
+            out.append((kind, hit.strip()))
+    for tok in re.findall(r"[A-Za-z_@][A-Za-z0-9_.@]*", R.REF.sub(" ", text)):
+        if tok.rstrip(".") in DISTINCT_FIELD and FIELD_SHAPED.search(tok.rstrip(".")):
+            out.append(("schema field name", tok.rstrip(".")))
+            break
+    m = QUERY_LANGUAGE.search(text) or PRODUCT_TERMS.search(text)
+    if m:
+        out.append(("query-language token or SIEM product term", m.group(0)))
     return out
 
 
@@ -533,6 +561,25 @@ def main():
         err("bank/intake/severity-map.yaml", "needs the Splunk ES mapping (version 1 SIEM)")
     if (b["reason_codes"].get("severity_unmapped") or {}).get("disposition") != "flag":
         err("bank/triage/reason_codes.yaml", "severity_unmapped must exist with disposition flag")
+    # the executor names no context question: the entity class and the answers every close needs are declared here
+    ec = (cr.get("entity_guard") or {}).get("entity_class") or {}
+    ec_q = ec.get("question")
+    if ec_q not in b["context_questions"]:
+        err("bank/triage/context_rules.yaml entity_guard", "entity_class.question must name a context question (the one that gives the asset class)")
+    else:
+        enum = (b["contract"]["questions"].get(ec_q) or {}).get("answer", {}).get("values") or []
+        if not ec.get("classes") or set(ec["classes"]) - set(enum) or "unknown" in ec["classes"]:
+            err("bank/triage/context_rules.yaml entity_guard", f"entity_class.classes must be known answers of {ec_q} (never unknown)")
+        for pname, p_ in params.items():
+            extra = set((p_.get("by_entity_class") or {})) - set(ec.get("classes") or [])
+            if extra:
+                err(f"parameters {pname}", f"by_entity_class names {sorted(extra)}, not entity classes in context_rules entity_guard.entity_class")
+    needs = cr.get("closes_need_known")
+    if not isinstance(needs, list) or not needs:
+        err("bank/triage/context_rules.yaml", "closes_need_known must list the context questions every close needs (at least the crown-jewel one)")
+    for nd in needs or []:
+        if nd.get("question") not in b["context_questions"] or (b["reason_codes"].get(nd.get("reason")) or {}).get("disposition") != "flag":
+            err("bank/triage/context_rules.yaml closes_need_known", f"{nd}: needs a context question and a flag reason code")
     if "CF-0030" not in b["facts"] or not {"owner", "approved_by", "expiry"} <= set(b["facts"]["CF-0030"].get("fields") or []):
         err("bank/facts", "routine (entity, detection) pairs need CF-0030 with owner, approved_by and expiry")
     em = b["reason_codes"].get("entity_missing")
@@ -553,6 +600,37 @@ def main():
         for where, kind, hit in neutrality_hits(path):
             err(rel, f"triage-neutral layer: {kind} '{hit}' ({where}); vendors, libraries and the broker's internals belong to the broker or intake (derived_from is the only exception)")
 
+    # replay coverage (tests/replay/coverage.yaml): every detection is listed; a detection that is not replayable has a reason
+    # and is capped at Recommend (no_tp_replay_data); a replayable one names its test files and has a fires_on rule
+    cov_path = os.path.join(B.ROOT, "tests", "replay", "coverage.yaml")
+    cov = ((yaml.safe_load(open(cov_path)) or {}).get("detections") or {}) if os.path.exists(cov_path) else {}
+    fires = {os.path.basename(p)[:-5] for p in glob.glob(os.path.join(B.ROOT, "tests", "replay", "fires_on", "D-*.yaml"))}
+    py_rules = os.path.join(B.ROOT, "tests", "replay", "fires_on_python.py")
+    fires |= set(re.findall(r'"(D-\d{4})"\s*:', open(py_rules).read())) if os.path.exists(py_rules) else set()
+    for did, d in sorted(b["detections"].items()):
+        c = cov.get(did)
+        if c is None:
+            err("tests/replay/coverage.yaml", f"{did} is not listed (replayable, or not replayable with a reason)")
+        elif not c.get("replayable"):
+            if not str(c.get("reason") or "").strip():
+                err("tests/replay/coverage.yaml", f"{did}: not replayable needs a reason")
+            if d.get("max_mode") != "recommend" or "no_tp_replay_data" not in E.auto_excluded(d):
+                err("tests/replay/coverage.yaml", f"{did}: not replayable, so it must be capped at Recommend with auto_excluded_reason no_tp_replay_data")
+        else:
+            if not c.get("tests_from"):
+                err("tests/replay/coverage.yaml", f"{did}: replayable needs tests_from (the security_content test files)")
+            if did not in fires:
+                err("tests/replay/coverage.yaml", f"{did}: replayable needs a fires_on rule (tests/replay/fires_on/{did}.yaml)")
+    for did in sorted(set(cov) - set(b["detections"])):
+        err("tests/replay/coverage.yaml", f"{did} is not a detection in the bank")
+
+    for path in sorted(glob.glob(os.path.join(B.ROOT, "engine", "**", "*.py"), recursive=True)):
+        rel = os.path.relpath(path, B.ROOT)
+        for kind, hit in engine_hits(path):
+            err(rel, f"neutral executor: {kind} '{hit}'; the executor names no vendor, detection, file format, field or broker internal")
+    if not glob.glob(os.path.join(B.ROOT, "engine", "executor.py")):
+        err("engine/executor.py", "missing: the executor is the only flow-walking code")
+
     # ---------- contract: question IDs and answer types, status and trust, message envelope ----------
     con = b["contract"]
     cq = con["questions"]
@@ -562,7 +640,7 @@ def main():
     ans = con.get("answer") or {}
     if set(ans.get("status") or {}) != {"answered", "unknown", "source_unavailable", "sources_disagree"}:
         err("bank/contract/answer.yaml", "status values are answered, unknown, source_unavailable, sources_disagree")
-    if set(ans.get("trust") or {}) != set(B.TRUST):
+    if set(ans.get("trust") or {}) != set(E.TRUST):
         err("bank/contract/answer.yaml", "trust values are checked and not_checked")
     for qid in sorted(asked & set(cq)):
         q = b["questions"].get(qid) or b["context_questions"][qid]
@@ -576,7 +654,7 @@ def main():
         if got != want:
             err("bank/contract/questions.yaml", f"{qid}: contract answer {got} differs from what the broker implements ({want})")
     env = con.get("envelope") or {}
-    for kind, need in (("request", B.ENVELOPE_REQUEST), ("answer", B.ENVELOPE_ANSWER)):
+    for kind, need in (("request", E.ENVELOPE_REQUEST), ("answer", E.ENVELOPE_ANSWER)):
         req = set((env.get(kind) or {}).get("required") or [])
         missing = (set(need) | {"run_or_window"}) - req
         if missing:
@@ -606,20 +684,20 @@ def main():
     exs = con.get("examples") or {}
     pending = {}
     for r in exs.get("pending") or []:
-        for m in B.envelope_missing(r, "request"):
+        for m in E.envelope_missing(r, "request"):
             err("bank/contract/envelope_examples.yaml", f"request {r.get('request_id')}: missing {m}")
         pending[r.get("request_id")] = r
     for a in exs.get("answers") or []:
-        for m in B.envelope_missing(a.get("message") or {}, "answer"):
+        for m in E.envelope_missing(a.get("message") or {}, "answer"):
             err("bank/contract/envelope_examples.yaml", f"answer '{a.get('name')}': missing {m}")
-        ok, why = B.accept_answer(pending, a.get("message") or {}, a.get("received_at"))
+        ok, why = E.accept_answer(pending, a.get("message") or {}, a.get("received_at"))
         if ok != (a.get("expect") == "accept") or (not ok and a.get("reason") and a["reason"] != why):
             err("bank/contract/envelope_examples.yaml", f"answer '{a.get('name')}': expected {a.get('expect')}, the acceptance rule says {why}")
     if not env.get("deadline") or not env.get("defer_rule") or not env.get("cache"):
         pass   # reported above
     else:
         for sq in exs.get("sequences") or []:
-            got, why = B.resolve_request(b, sq["request"], sq.get("events") or [])
+            got, why = E.resolve_request(b, sq["request"], sq.get("events") or [])
             if got != sq.get("expect"):
                 err("bank/contract/envelope_examples.yaml", f"sequence '{sq.get('name')}': expected {sq.get('expect')}, the resolution rule says {got} ({why})")
         for rt in exs.get("retries") or []:
@@ -897,7 +975,7 @@ def main():
         refs_ok = all(st.get("question") in b["questions"] for st in flow) and all(
             gd.get("question") in b["questions"] for st in flow for gd in st.get("guards") or [])
         if refs_ok:
-            calls = max((B.path_calls(b, p, o, gs) for p, o, gs in B.enumerate_paths(flow)), default=0)
+            calls = max((B.path_calls(b, p, o, gs) for p, o, gs in E.enumerate_paths(flow)), default=0)
             if calls > budget:
                 err(w, f"worst path makes {calls} capability calls (steps plus guards), over the budget of {budget}")
 
@@ -964,7 +1042,7 @@ def main():
                 err(where, f"unknown question {st.get('question')}")
                 continue
             check_item(where, st, q)
-            if reads_context(q) and B.outcome_kind(st.get("on_unknown", "")) == "escalate":
+            if reads_context(q) and E.outcome_kind(st.get("on_unknown", "")) == "escalate":
                 err(where, f"{q['id']} reads context: an unknown context answer flags (context_unknown), it never escalates")
             if n == 1:
                 want, got = B.q0_rating(d), (st.get("attacker_influence") or {}).get("rating")
@@ -984,7 +1062,7 @@ def main():
                     err(where, "Q0 must bind entity to the detection's precedent_entity")
             elif st.get("attacker_influence"):
                 err(where, "step-level attacker_influence is only for Q0")
-            kinds = {B.outcome_kind(st.get(e, "")) for e in ("on_yes", "on_no", "on_unknown")} - {"next"}
+            kinds = {E.outcome_kind(st.get(e, "")) for e in ("on_yes", "on_no", "on_unknown")} - {"next"}
             for gd in st.get("guards") or []:
                 gw = f"{where} guard {gd.get('question')}"
                 gq = b["questions"].get(gd.get("question"))
@@ -1002,7 +1080,7 @@ def main():
                 for k in applies:
                     if k not in kinds:
                         err(gw, f"applies to {k}, but the step has no {k} outcome")
-                    elif B.SEVERITY.get(gd.get("then"), -1) <= B.SEVERITY[k]:
+                    elif E.SEVERITY.get(gd.get("then"), -1) <= E.SEVERITY[k]:
                         err(gw, f"then {gd.get('then')} is not stronger than the {k} outcome it guards (guards only raise)")
                 if gd.get("if_entry_type"):
                     lf = (q["capability"].get("inputs") or {}).get("list")
@@ -1018,7 +1096,7 @@ def main():
             cap = caps.get(q["capability"]["name"], {})
             for edge in ("on_yes", "on_no", "on_unknown"):
                 v = st.get(edge)
-                m = B.OUTCOME.match(v or "")
+                m = E.OUTCOME.match(v or "")
                 if not m:
                     err(where, f"{edge} invalid outcome {v!r}")
                     continue
@@ -1036,14 +1114,14 @@ def main():
                 err(where, f"escalate_only capability {cap['name']}: a hit must escalate or flag")
             if n == len(flow) and "next" in (st["on_yes"], st["on_no"], st["on_unknown"]):
                 err(where, "last step cannot fall through with next")
-        if not any(B.OUTCOME.match(st.get(e, "")) and st.get(e, "").startswith("close") for st in flow[1:] for e in ("on_yes", "on_no")):
+        if not any(E.OUTCOME.match(st.get(e, "")) and st.get(e, "").startswith("close") for st in flow[1:] for e in ("on_yes", "on_no")):
             info.append(f"{d['id']}: no close outside Q0 (escalate/flag only)")
         # close paths: usable in Shadow/Recommend; Auto-eligible only with every value-table row on them verified per customer
-        for path, out, guards in B.enumerate_paths(flow):
+        for path, out, guards in E.enumerate_paths(flow):
             if out.startswith("close"):
                 n_close += 1
                 needs = B.close_path_rows(b, path, guards, detection=d)
-                n_auto_today += not needs and B.auto_eligible_path(d, path)
+                n_auto_today += not needs and E.auto_eligible_path(d, path)
 
     # use-case catalog
     ucs = b["use_cases"]
@@ -1113,7 +1191,7 @@ def main():
     for did, d in list(b["detections"].items()) + list(b["techniques"].items()):
         if d.get("max_mode") == "recommend" and not d.get("max_mode_reason"):
             err(d["_file"], "max_mode recommend needs a max_mode_reason")
-        codes = B.auto_excluded(d)
+        codes = E.auto_excluded(d)
         for code in codes:
             if (ax.get(code) or {}).get("applies_to") != "detection":
                 err(d["_file"], f"auto_excluded_reason {code} is not a detection-level code in bank/triage/auto_exclusions.yaml")
@@ -1126,7 +1204,7 @@ def main():
         if did in b["detections"] and set(d.get("techniques") or []) & destructive and "destructive_or_anti_forensic" not in codes:
             err(d["_file"], f"destructive or anti-forensic technique {sorted(set(d['techniques']) & destructive)}: needs max_mode recommend with auto_excluded_reason destructive_or_anti_forensic")
         for st in d["flow"]:
-            for code in B.auto_excluded(d, st):
+            for code in E.auto_excluded(d, st):
                 if (ax.get(code) or {}).get("applies_to") != "step":
                     err(d["_file"], f"step {st['step']}: auto_excluded_reason {code} is not a step-level code in bank/triage/auto_exclusions.yaml")
                 if not any(st[e].startswith("close") for e in ("on_yes", "on_no")):
@@ -1142,7 +1220,7 @@ def main():
                 err(w, f"verification {rec.get('table')}/{rec.get('row')}: {problem}")
         for did, mode in (c.get("modes") or {}).items():
             d = b["detections"].get(did) or b["techniques"].get(did)
-            if mode not in B.MODES or not d:
+            if mode not in E.MODES or not d:
                 err(w, f"mode {did}: {mode} must be shadow, recommend or auto for a detection or technique fallback in the bank")
                 continue
             if mode != "auto":
@@ -1151,7 +1229,7 @@ def main():
                 err(w, f"{did}: technique fallbacks are capped at Recommend (no true-positive replay data)")
             elif d.get("max_mode") == "recommend":
                 err(w, f"{did}: capped at Recommend ({d.get('max_mode_reason')})")
-            missing = sorted({f"{t}/{r}" for path, out, guards in B.enumerate_paths(d["flow"]) if out.startswith("close")
+            missing = sorted({f"{t}/{r}" for path, out, guards in E.enumerate_paths(d["flow"]) if out.startswith("close")
                               for t, r in B.close_path_rows(b, path, guards, customer=cust, detection=d) if not B.row_verified(b, cust, t, r, TODAY)})
             if missing:
                 err(w, f"{did}: set to Auto while unverified value-table rows sit on its close paths: {', '.join(missing[:6])}"
@@ -1163,7 +1241,7 @@ def main():
         gd["question"] for _, d in B.flows(b) for st in d["flow"] for gd in st.get("guards") or []}
     for qid in sorted(set(b["questions"]) - used_q):
         warnings.append(f"{qid}: not used by any flow")
-    used_rc = {B.OUTCOME.match(st[e]).group(3) for _, d in B.flows(b) for st in d["flow"] for e in ("on_yes", "on_no") if st[e].startswith("close")}
+    used_rc = {E.OUTCOME.match(st[e]).group(3) for _, d in B.flows(b) for st in d["flow"] for e in ("on_yes", "on_no") if st[e].startswith("close")}
     for rc in sorted(set(b["reason_codes"]) - used_rc):
         if b["reason_codes"][rc].get("disposition") != "flag" and not b["reason_codes"][rc].get("retired"):
             warnings.append(f"reason code {rc}: not used")

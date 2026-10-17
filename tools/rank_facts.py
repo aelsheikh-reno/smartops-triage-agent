@@ -16,6 +16,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bank as B  # noqa: E402
+from engine import executor as E  # noqa: E402
 
 
 def fact_keys(db, qid, cap):
@@ -42,7 +43,7 @@ def main():
         did = d["id"]
         level = "technique" if level == "technique" else "rule"
         paths = []
-        for path, outcome, guards in B.enumerate_paths(d["flow"]):
+        for path, outcome, guards in E.enumerate_paths(d["flow"]):
             for st, _ in path:
                 if qcap[st["question"]] in esc_only:
                     for k in fact_keys(db, st["question"], qcap[st["question"]]):
@@ -55,7 +56,7 @@ def main():
                 if a == "yes" or st is last:
                     need |= set(fact_keys(db, st["question"], qcap[st["question"]]))
             for g in guards:
-                if B.guard_requires_yes(g):
+                if E.guard_requires_yes(g):
                     need |= set(fact_keys(db, g["question"], qcap[g["question"]]))
             paths.append(need)
         if not paths and level == "rule":
@@ -100,7 +101,7 @@ def main():
     for _, d in B.flows(b):
         t = B.tainted_closes(b, d["flow"])
         if t:
-            total_closes = len(B.close_edges(d["flow"]))
+            total_closes = len(E.close_edges(d["flow"]))
             print(f"  {d['id']}: {len(t)} of {total_closes} closes, via step(s) {sorted({s for _, _, bad in t for s in bad})}")
     if no_close:
         print("\nRule-level detections with no close outside Q0:", ", ".join(no_close))

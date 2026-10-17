@@ -1,0 +1,23 @@
+detection: D-0006
+name: 'Auto: baseline yes from the fallback source (not_checked) would flag; read as unknown the flow reaches Q-0004 and escalates'
+reason: 'Auto: baseline yes from the fallback source (not_checked) would flag; read as unknown the flow reaches Q-0004 and escalates'
+mode: auto
+overrides:
+  Q-0001: false
+  Q-0002: true
+  Q-0003: 30
+  Q-0004: false
+not_checked:
+- Q-0003
+alert:
+  host.name: ws-07
+  user.name: admin1
+  process.parent_name: cmd.exe
+  process.sha256: '7777777777777777777777777777777777777777777777777777777777777777'
+  process.name: psexec.exe
+  process.command_line: psexec.exe -accepteula \\srv-02 cmd
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium
+expect:
+  outcome: escalate
+order: 26

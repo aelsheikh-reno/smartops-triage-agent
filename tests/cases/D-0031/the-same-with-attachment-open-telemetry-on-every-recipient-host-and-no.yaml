@@ -1,0 +1,23 @@
+detection: D-0031
+name: 'the same with attachment-open telemetry on every recipient host and no other alert there: close shown'
+reason: 'the same with attachment-open telemetry on every recipient host and no other alert there: close shown'
+mode: recommend
+overrides:
+  Q-0035: true
+  Q-0036: true
+  Q-0076: none
+coverage:
+- attachment_open_telemetry
+alert:
+  email.sender: a@example.org
+  email.subject: invoice
+  email.recipient: u1@corp.example
+  email.url: http://example.org/x
+  file.sha256: '1111111111111111111111111111111111111111111111111111111111111111'
+  event.time: '2026-10-17T00:00:00Z'
+  reporting_control.action: quarantined
+  email.delivery_stage: post_delivery
+  file.name: invoice.docm
+expect:
+  outcome: close:mitigated_true_positive
+order: 34

@@ -1,0 +1,33 @@
+name: 'S2: PsExec and LSASS access on one host, both medium, 15 minutes apart, each closable alone: both flag'
+reason: 'S2: PsExec and LSASS access on one host, both medium, 15 minutes apart, each closable alone: both flag'
+context:
+  C-06: false
+alerts:
+- detection: D-0006
+  alert:
+    host.name: ws-07
+    user.name: admin1
+    process.parent_name: cmd.exe
+    process.sha256: '7777777777777777777777777777777777777777777777777777777777777777'
+    process.name: psexec.exe
+    process.command_line: psexec.exe -accepteula \\srv-02 cmd
+    event.time: '2026-10-17T08:00:00Z'
+    severity: medium
+  overrides:
+    Q-0001: true
+- detection: D-0020
+  alert:
+    host.name: ws-07
+    user.name: admin1
+    process.path: C:\Tools\procdump.exe
+    process.sha256: '8888888888888888888888888888888888888888888888888888888888888888'
+    process.guid: '{g-1}'
+    target_process.path: C:\Windows\System32\lsass.exe
+    process_access.rights: '0x1010'
+    event.time: '2026-10-17T08:15:00Z'
+    severity: medium
+  overrides:
+    Q-0005: true
+expect:
+  every_alert: flag
+order: 3

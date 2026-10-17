@@ -1,0 +1,48 @@
+name: 'S1 control: the same two D-0026 alerts alone stay closable (the guard needs 3 alerts)'
+reason: 'S1 control: the same two D-0026 alerts alone stay closable (the guard needs 3 alerts)'
+context:
+  C-06: false
+  C-08: workstation
+alerts:
+- detection: D-0026
+  alert:
+    host.name: ws-01
+    user.name: u1
+    event.time: '2026-10-17T10:00:00Z'
+    file.path: C:\Users\Public\m.exe
+    file.name: m.exe
+    reporting_control.signature: PUA:Win32/Presenoker
+    reporting_control.category: pua
+    file.sha256: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+    reporting_control.vendor_alert_id: da-4
+    _api:
+      tables: &id001
+      - microsoft-defender-for-endpoint
+      matches:
+      - evidence:
+        - type: fileEvidence
+          fileDetails:
+            sha256: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+          detectionStatus: prevented
+- detection: D-0026
+  alert:
+    host.name: ws-01
+    user.name: u1
+    event.time: '2026-10-17T10:02:00Z'
+    file.path: C:\Users\Public\m.exe
+    file.name: m.exe
+    reporting_control.signature: PUA:Win32/Presenoker
+    reporting_control.category: pua
+    file.sha256: '9999999999999999999999999999999999999999999999999999999999999999'
+    reporting_control.vendor_alert_id: da-4
+    _api:
+      tables: *id001
+      matches:
+      - evidence:
+        - type: fileEvidence
+          fileDetails:
+            sha256: '9999999999999999999999999999999999999999999999999999999999999999'
+          detectionStatus: prevented
+expect:
+  every_alert: close:mitigated_true_positive
+order: 2

@@ -1,0 +1,35 @@
+detection: D-0019
+source_rule: escu:windows_office_product_spawned_uncommon_process
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: parent_process_name
+    op: in
+    value:
+    - eqnedt32.exe
+    - excel.exe
+    - graph.exe
+    - msaccess.exe
+    - mspub.exe
+    - onenote.exe
+    - onenoteim.exe
+    - onenotem.exe
+    - outlook.exe
+    - powerpnt.exe
+    - visio.exe
+    - winproj.exe
+    - winword.exe
+  - field: process_name
+    op: in
+    value:
+    - bitsadmin.exe
+    - certutil.exe
+    - cmd.exe
+    - cscript.exe
+    - mshta.exe
+    - powershell.exe
+    - pwsh.exe
+    - regsvr32.exe
+    - rundll32.exe
+    - wmic.exe
+    - wscript.exe

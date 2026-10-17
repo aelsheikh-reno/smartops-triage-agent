@@ -1,0 +1,12 @@
+detection: D-0011
+source_rule: escu:registry_keys_used_for_persistence
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: _kind
+    op: in
+    value:
+    - registry
+  - field: registry_path
+    op: matches
+    value: \\currentversion\\run|startupapproved\\run|user shell folders|winlogon\\(shell|userinit)|\\policies\\explorer\\run

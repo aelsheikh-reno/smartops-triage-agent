@@ -1,0 +1,11 @@
+detection: D-0001
+source_rule: escu:add_or_set_windows_defender_exclusion
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: process
+    op: matches
+    value: '(add|set)-mppreference '
+  - field: process
+    op: matches
+    value: -exclusion|-controlledfolderaccessallowedapplications|-attacksurfacereductiononlyexclusions

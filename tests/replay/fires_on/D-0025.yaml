@@ -1,0 +1,21 @@
+detection: D-0025
+source_rule: escu:detect_new_local_admin_account
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  any:
+  - field: _eid
+    op: in
+    value:
+    - '4720'
+  - all:
+    - field: _eid
+      op: in
+      value:
+      - '4732'
+    - any:
+      - field: Group_Name
+        op: matches
+        value: administrators
+      - field: group
+        op: matches
+        value: administrators

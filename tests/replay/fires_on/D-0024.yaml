@@ -1,0 +1,18 @@
+detection: D-0024
+source_rule: escu:windows_vulnerable_driver_installed
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: _kind
+    op: in
+    value:
+    - service
+  - field: ServiceType
+    op: matches
+    value: kernel
+  - field: ImagePath
+    op: lookup
+    value:
+      csv: loldrivers.csv
+      column: driver_name
+      basename: true

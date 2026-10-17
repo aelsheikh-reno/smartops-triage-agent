@@ -1,0 +1,12 @@
+# One-time exemptions from the change-scope rule (tools/check_scope.sh). An exemption applies only while this file is
+# new in the change being checked: once it exists on main, check_scope ignores every entry here, and any later edit to
+# this file is itself a change to the gate code, which a bank PR may not make. So the rule stays strict for every
+# later bank PR; an engine, contract or gate change goes in its own PR.
+exemptions:
+- pr: 30
+  why: 'Moves the crown-jewel and entity-class rules out of the executor into bank/triage/context_rules.yaml (closes_need_known,
+    entity_guard.entity_class), so the PR must change the engine and that one bank file together. No flow, path or gate
+    outcome changes (snapshot compared with 9a69c88).'
+  bank_files: [bank/triage/context_rules.yaml]
+  protected_paths: [tools/bank.py, tools/equivalence.py, tools/gates.sh, tools/rank_facts.py, tools/redteam_paths.py, tools/replay.py,
+                    tools/selftest.py, tools/validate.py]

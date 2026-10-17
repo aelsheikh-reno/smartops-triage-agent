@@ -1,0 +1,13 @@
+detection: D-0018
+source_rule: escu:windows_file_download_via_powershell
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: process_name
+    op: in
+    value:
+    - powershell.exe
+    - pwsh.exe
+  - field: process
+    op: matches
+    value: iwr |invoke-webrequest|wget |curl|\.download(data|file|string)

@@ -1,0 +1,17 @@
+detection: D-0026
+name: 'any product, no API, SIEM copy quarantined only (ambiguous row), low-risk class: flag'
+reason: 'any product, no API, SIEM copy quarantined only (ambiguous row), low-risk class: flag'
+mode: recommend
+alert:
+  host.name: ws-01
+  user.name: u1
+  event.time: '2026-10-17T00:00:00Z'
+  file.path: C:\Users\Public\m.exe
+  file.name: m.exe
+  file.sha256: cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
+  reporting_control.signature: Adware:Win32/X
+  reporting_control.category: adware
+  reporting_control.action_raw: quarantined
+expect:
+  outcome: flag
+order: 5

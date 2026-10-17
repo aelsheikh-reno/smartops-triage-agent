@@ -1,0 +1,21 @@
+detection: D-0034
+name: 'removable media, C-08 workstation, Recommend: close (no data transferred), marked not_checked'
+reason: 'removable media, C-08 workstation, Recommend: close (no data transferred), marked not_checked'
+mode: recommend
+coverage:
+- device_control_write_events
+context:
+  C-06: false
+  C-08: workstation
+alert:
+  host.name: srv-01
+  user.name: u1
+  event.time: '2026-10-17T00:00:00Z'
+  device.event_type: connect
+  device.class: storage
+  reporting_control.action: allowed
+  device.files_written: 0
+expect:
+  outcome: close:benign_true_positive
+  marked_not_checked: true
+order: 22

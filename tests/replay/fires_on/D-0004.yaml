@@ -1,0 +1,16 @@
+detection: D-0004
+source_rule: escu:deleting_shadow_copies
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: process_name
+    op: in
+    value:
+    - vssadmin.exe
+    - wmic.exe
+  - field: process
+    op: matches
+    value: delete
+  - field: process
+    op: matches
+    value: shadow

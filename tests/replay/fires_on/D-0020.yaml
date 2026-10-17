@@ -1,0 +1,25 @@
+detection: D-0020
+source_rule: escu:windows_possible_credential_dumping
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: _kind
+    op: in
+    value:
+    - access
+  - field: TargetImage
+    op: endswith
+    value: lsass.exe
+  - field: user_id
+    op: not_in
+    value:
+    - NT AUTHORITY\SYSTEM
+    - NT AUTHORITY\NETWORK SERVICE
+  - field: CallTrace
+    op: matches
+    value: dbgcore|dbghelp|kernel32|kernelbase|ntdll
+  - field: granted_access
+    op: bitmask_any
+    value:
+    - 4096
+    - 64

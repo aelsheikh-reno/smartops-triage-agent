@@ -1,0 +1,15 @@
+detection: D-0015
+source_rule: escu:suspicious_scheduled_task_from_public_directory
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: process_name
+    op: in
+    value:
+    - schtasks.exe
+  - field: process
+    op: matches
+    value: /create
+  - field: process
+    op: matches
+    value: \\users\\public\\|\\programdata\\|windows\\temp

@@ -1,0 +1,27 @@
+detection: D-0003
+source_rule: escu:creation_of_shadow_copy
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  any:
+  - all:
+    - field: process_name
+      op: in
+      value:
+      - vssadmin.exe
+    - field: process
+      op: matches
+      value: create
+    - field: process
+      op: matches
+      value: shadow
+  - all:
+    - field: process_name
+      op: in
+      value:
+      - wmic.exe
+    - field: process
+      op: matches
+      value: shadowcopy
+    - field: process
+      op: matches
+      value: create

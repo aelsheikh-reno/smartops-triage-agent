@@ -1,0 +1,22 @@
+detection: D-0032
+name: 'user report, internal sender (own domain) on the approved list, DMARC pass, no URL hit: flag'
+reason: 'user report, internal sender (own domain) on the approved list, DMARC pass, no URL hit: flag'
+mode: recommend
+overrides:
+  Q-0037: false
+  Q-0071: true
+  Q-0070: true
+  Q-0034: false
+  Q-0075: true
+alert:
+  email.message_id: <m1@example.org>
+  email.sender: notice@corp.example
+  email.sender_domain: corp.example
+  email.recipient: u1@corp.example
+  user.name: u1
+  email.url: http://example.org/x
+  event.time: '2026-10-17T00:00:00Z'
+  severity: medium
+expect:
+  outcome: flag
+order: 30

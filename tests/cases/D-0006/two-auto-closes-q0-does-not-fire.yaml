@@ -1,0 +1,21 @@
+detection: D-0006
+name: 'two Auto closes: Q0 does not fire'
+reason: 'two Auto closes: Q0 does not fire'
+mode: recommend
+closures:
+- kind: auto_close
+  analyst: null
+- kind: auto_close
+  analyst: null
+alert:
+  host.name: ws-07
+  user.name: admin1
+  process.parent_name: cmd.exe
+  process.sha256: '7777777777777777777777777777777777777777777777777777777777777777'
+  process.name: psexec.exe
+  process.command_line: psexec.exe -accepteula \\srv-02 cmd
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium
+expect:
+  not: close:inherit
+order: 37

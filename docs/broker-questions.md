@@ -40,7 +40,7 @@ The Detection Engineer's own reads (running a rule over 30 days, sampling its al
 
 | Capability | Questions today | Kind | Reason |
 |---|---|---|---|
-| `alert.field` | 20 | Not a broker question (local) | Reads the normalized alert itself, which came in through the normalizer. No tool is touched, so the Triage agent answers it locally (§9). |
+| `alert.field` (now `alert.class` and `alert.measure`) | 20 | Triage | The normalized alert is a broker source (`source: alert`, no tool call). The broker answers through a recipe and a value table and returns a typed answer, so the Triage agent never sees field names. Detection-specific; can lead to a close. |
 | `list.lookup` | 25 | Triage | Membership in a detection-specific list (sanctioned tools, approved scanners, exceptions) decides a close. The exception is crown-jewel and asset lists (`CF-0007`, `CF-0029`), which become context questions C-05 and C-06. |
 | `entity.baseline` | 6 | Triage | "Has this entity done this before?" is about the detection's behavior and can lead to a close. |
 | `org.prevalence` | 3 | Triage | Pattern-specific and can lead to a close. |
@@ -63,8 +63,8 @@ The Detection Engineer's own reads (running a rule over 30 days, sampling its al
 | `list.propose_update` | 0 (`flow_use: forbidden`) | Not a question | A write proposal to the context store, never asked in a flow. |
 | (new) asset priority, crown jewel, open case | 0 | Context | C-05, C-06, C-01. Capabilities `asset.lookup` and `case.open` (designed, not built). |
 
-## Where today's bank breaks these rules
-To fix on the bank-migration issue (#12):
+## Where the bank used to break these rules
+Fixed by the bank migration (PR "Bank migration: roles, typed answers, parameters, context questions", #12); `validate` now rejects each of these:
 - **Thresholds in questions.** `alert.history` passes `min_count`, `org.prevalence` passes `min_hosts`, `min_weeks` and `of_weeks`, and `entity.baseline` passes `min_days` to the broker (rule 4). They should ask for the count and apply the parameter on the Triage side.
 - **Answer type.** `bank/capabilities.yaml` returns `answer: yes | no | unknown` from the broker. It should return the typed measurement with `status` and `provenance` (rule 3).
 - **No context/triage tag**, and no C-xx questions.

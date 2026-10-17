@@ -5,9 +5,11 @@ import re
 
 import yaml
 
+import roles as ROLES_MOD
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 BANK = os.path.join(ROOT, "bank")
-REF = re.compile(r"\b(process|module|file|value):([A-Za-z_][A-Za-z0-9_]*)")
+REF = ROLES_MOD.REF
 OUTCOME = re.compile(r"^(next|escalate|flag|close:(\w+):(\w+))$")
 
 
@@ -35,11 +37,25 @@ def load():
         seeds[doc["fact"]] = doc
         if doc["fact"] in facts:
             facts[doc["fact"]]["seed"] = doc.get("entries", doc.get("data"))
+    tables = {}
+    for path in sorted(glob.glob(os.path.join(BANK, "recipes", "value_tables", "*.yaml"))):
+        doc = _load(path)
+        doc["_file"] = os.path.relpath(path, ROOT)
+        tables[os.path.basename(path)[:-5]] = doc
+    overlays = {}
+    for path in sorted(glob.glob(os.path.join(BANK, "overlays", "customer", "*", "parameters.yaml"))):
+        overlays[os.path.basename(os.path.dirname(path))] = dict(_load(path) or {}, _file=os.path.relpath(path, ROOT))
+    params_doc = _load(os.path.join(BANK, "parameters.yaml"))
     return {
         "seeds": seeds,
+        "value_tables": tables,
+        "overlays": overlays,
+        "context_questions": _by_id("context/C-*.yaml"),
+        "context_rules": _load(os.path.join(BANK, "context_rules.yaml")),
+        "precedence": params_doc.get("precedence"),
         "capabilities": caps,
         "capability_by_name": {c["name"]: c for c in caps["capabilities"]},
-        "parameters": _load(os.path.join(BANK, "parameters.yaml"))["parameters"],
+        "parameters": params_doc["parameters"],
         "reason_codes": {r["code"]: r for r in _load(os.path.join(BANK, "reason_codes.yaml"))["reason_codes"]},
         "questions": _by_id("questions/Q-*.yaml"),
         "explanations": _by_id("explanations/BE-*.yaml"),
@@ -159,7 +175,7 @@ def has_unverified_seed(fact):
 # ---------- flow execution model shared by the gates ----------
 ANS = (("yes", "on_yes"), ("no", "on_no"), ("unknown", "on_unknown"))
 RATING_ORDER = {"none": 0, "low": 1, "medium": 2, "high": 3}
-LOCAL_KINDS = {"local"}
+LOCAL_KINDS = {"alert"}   # answered from the normalized alert (source: alert): no tool call, no call budget
 
 
 def is_local(b, qid):
@@ -268,3 +284,89 @@ def _q0(d, fallback):
         # A fallback field weakens the precedent entity itself, so it caps how good Q0 can be.
         best = max([best] + [RATING_ORDER[fi[f]["fallback"]["rating"]] for f in d.get("fingerprint", []) if "fallback" in (fi.get(f) or {})])
     return {0: "low", 1: "low", 2: "medium", 3: "high"}[best]
+
+
+# ---------- typed answers and Triage-side rules ----------
+def answer_type(b, qid):
+    q = b["questions"].get(qid) or b["context_questions"].get(qid)
+    return b["capability_by_name"][q["capability"]["name"]]["answer"]["type"]
+
+
+def param_value(b, name, detection=None, customer=None):
+    """Resolve a parameter by precedence: customer + detection > customer > detection > global."""
+    ov = (b["overlays"].get(customer) or {}).get("overrides") or [] if customer else []
+    did = (detection or {}).get("id")
+    for want_det in (True, False):
+        for o in ov:
+            if o.get("param") == name and bool(o.get("detection")) == want_det and (not want_det or o["detection"] == did):
+                return o["value"]
+    if detection and name in (detection.get("parameters") or {}):
+        return detection["parameters"][name]
+    return b["parameters"][name]["default"]
+
+
+def _vals(b, v, detection):
+    if isinstance(v, dict) and "param" in v:
+        v = param_value(b, v["param"], detection)
+    return v if isinstance(v, list) else [v]
+
+
+def apply_rule(b, rule, value, atype, detection=None):
+    """Turn a typed broker value into yes / no / unknown on the Triage side. value None means status unknown."""
+    if value is None:
+        return "unknown"
+    if atype == "bool":
+        return "yes" if value else "no"
+    if not rule:
+        raise ValueError(f"a {atype} answer needs a step rule")
+    if atype in ("count", "number"):
+        if "gte" in rule:
+            return "yes" if float(value) >= float(_vals(b, rule["gte"], detection)[0]) else "no"
+        if "lte" in rule:
+            return "yes" if float(value) <= float(_vals(b, rule["lte"], detection)[0]) else "no"
+        raise ValueError(f"count rule needs gte or lte: {rule}")
+    if atype == "enum":
+        v = str(value).lower()
+        if "unknown" in rule and v in {str(x).lower() for x in _vals(b, rule["unknown"], detection)}:
+            return "unknown"
+        if "yes" in rule:
+            return "yes" if v in {str(x).lower() for x in _vals(b, rule["yes"], detection)} else "no"
+        if "yes_unless" in rule:
+            return "no" if v in {str(x).lower() for x in _vals(b, rule["yes_unless"], detection)} else "yes"
+        raise ValueError(f"enum rule needs yes or yes_unless: {rule}")
+    raise ValueError(atype)
+
+
+def classify(b, cls, values, product_tables=(), params=None):
+    """Map raw alert values to an alert-class value through value tables. A product table that defines the class
+    is authoritative (no row matched gives the class default); otherwise the generic table applies.
+    values: ordered dict of the raw properties or role values the class reads ("value" in a row means the first one).
+    Returns (class value, matching row with its table, or None)."""
+    import ipaddress
+    params = params or {}
+    first = str(next(iter(values.values()), "") or "")
+    joined = " ".join(str(v or "") for v in values.values()).strip()
+    default = b["capabilities"]["alert_classes"][cls]["default"]
+    for tname in [t for t in product_tables if t in b["value_tables"]] + ["generic"]:
+        spec = (b["value_tables"][tname].get("classes") or {}).get(cls)
+        if not spec:
+            continue
+        for r in spec["rows"]:
+            m, ok = r["match"], True
+            if "pattern" in m:
+                ok = bool(joined) and re.search(m["pattern"], joined, re.I) is not None
+            elif "cidr_param" in m:
+                try:
+                    ip = ipaddress.ip_address(first)
+                    ok = any(ip in ipaddress.ip_network(c) for c in params.get(m["cidr_param"], []))
+                except ValueError:
+                    ok = False
+            else:
+                for k, want in m.items():
+                    got = (first if k == "value" else str(values.get(k, "") or "")).lower()
+                    if got not in {str(w).lower() for w in (want if isinstance(want, list) else [want])}:
+                        ok = False
+            if ok:
+                return r["value"], dict(r, table=tname)
+        return spec.get("default", default), None
+    return default, None

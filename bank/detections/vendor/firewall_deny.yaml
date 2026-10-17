@@ -10,14 +10,12 @@ data_source:
 sigma_logsource:
 - category: firewall
 sigma_refs: []
-required_alert_fields:
+required_roles:
 - src
 - dest
-- dest_port
-- transport
-- action
-- rule
-- _time
+- network
+- reporting_control
+- event
 intent: 'Generic: a firewall reports denied connections or a scan pattern from a source (normalized network-traffic alert, any product).'
 fp_quality: generic
 explanations:
@@ -28,45 +26,50 @@ explanations:
 - BE-0033
 - BE-0037
 fingerprint:
-- src
-- dest
-- dest_port
-- rule
-precedent_validity: 24h
+- role:src.ip
+- role:dest.ip
+- role:dest.port
+- role:network.rule
 notes: 'Internal sources never close on denied traffic; they flag. The denied check covers every connection from the source, to any destination. An approved scanner closes only while a scan job targeting
   the destination was running; an approved tester only under a covering change or engagement record. Allowed connections elsewhere from the source flag rather than escalate: they show the source is not
   only probing, not that the denied connection got through.'
-precedent_entity: src
+precedent_entity: role:src.ip
 fingerprint_influence:
-  src:
+  role:src.ip:
     rating: medium
     reason: 'Spoofable in denied traffic: no handshake completes.'
-  dest:
+  role:dest.ip:
     rating: high
     reason: Target chosen by the initiator.
-  dest_port:
+  role:dest.port:
     rating: high
     reason: Chosen by the initiator.
-  rule:
+  role:network.rule:
     rating: high
     reason: Selected by the firewall from the initiator's traffic.
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:src
-    current_action: value:action
+    entity: role:src.ip
+    current_action: role:reporting_control.action
   attacker_influence:
     rating: medium
-    reason: The least attacker-chosen fingerprint field (src) can still be forged; the close also needs a low-rated yes from a guard.
+    reason: The least attacker-chosen fingerprint field (the source address) can still be forged; the close also needs a low-rated yes from a guard.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
   guards:
   - question: Q-0045
     then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
   - question: Q-0050
     then: flag
+    rule:
+      'yes':
+      - internal
   - question: Q-0042
     when:
     - 'no'
@@ -107,6 +110,9 @@ flow:
   guards:
   - question: Q-0050
     then: flag
+    rule:
+      'yes':
+      - internal
   - question: Q-0032
     then: escalate
 source:

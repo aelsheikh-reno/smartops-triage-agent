@@ -20,17 +20,11 @@ sigma_refs:
 - id: d85873ef-a0f8-4c48-a53a-6b621f11729d
   title: Remote Access Tool - LogMeIn Execution
   relation: closest
-required_alert_fields:
-- dest
+required_roles:
+- host
 - user
-- process_name
-- process_path
-- process_hash
-- process_guid
-- parent_process_name
-- parent_process_path
-- parent_process_guid
-- _time
+- process
+- event
 intent: Detects execution of a known remote access tool (the source rule's remote-access tool list) on an endpoint from process creation logs.
 fp_quality: good
 explanations:
@@ -38,35 +32,37 @@ explanations:
 - BE-0007
 - BE-0003
 fingerprint:
-- dest
-- process_name
-- process_hash
+- role:host.name
+- role:process.name
+- role:process.sha256
 fingerprint_influence:
-  dest:
+  role:host.name:
     rating: low
     reason: Host that reported the event.
-  process_name:
+  role:process.name:
     rating: high
     reason: File name the attacker can choose.
-  process_hash:
+  role:process.sha256:
     rating: low
     reason: Computed by the sensor; reproducing it means running the same binary.
-precedent_entity: dest
-precedent_validity: 7d
+precedent_entity: role:host.name
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:dest
+    entity: role:host.name
   attacker_influence:
     rating: low
-    reason: An attacker cannot freely reproduce dest, process_hash in the fingerprint.
+    reason: An attacker cannot freely reproduce the fingerprint's host, process hash.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
   guards:
   - question: Q-0045
     then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
 - step: 2
   question: Q-0008
   on_yes: next
@@ -79,6 +75,9 @@ flow:
   on_unknown: next
 - step: 4
   question: Q-0010
+  rule:
+    gte:
+      param: entity_baseline_min_days
   on_yes: close:benign_true_positive:sanctioned_rmm_baselined
   on_no: next
   on_unknown: next
@@ -94,3 +93,5 @@ source:
 license: Apache-2.0
 status: draft
 version: 7
+parameters:
+  precedent_validity_hours: 72

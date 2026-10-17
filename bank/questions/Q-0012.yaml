@@ -1,14 +1,13 @@
 id: Q-0012
-text: Has this user run the same normalized command line on any host on at least 3 distinct days in the 30 days before the alert window?
+text: Has this user run the same normalized command line on any host on at least the customer's minimum number of distinct days in the lookback before the alert window?
 tests: BE-0007
 capability:
   name: entity.baseline
   inputs:
-    entity: value:user
-    behavior: ran the normalized command line value:process on any host
-  params:
-    min_days: 3
-    lookback: 30d
+    entity: role:user.name
+    behavior: ran the normalized command line role:process.command_line on any host
+    lookback_days:
+      param: entity_baseline_lookback_days
 attacker_influence:
   rating: high
   reason: The command line is attacker-chosen; copying a routine one is enough.
@@ -20,3 +19,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 3
+kind: triage

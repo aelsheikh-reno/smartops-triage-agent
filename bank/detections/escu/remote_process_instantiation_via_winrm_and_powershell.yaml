@@ -14,11 +14,9 @@ sigma_refs:
 - id: 7b836d7f-179c-4ba4-90a7-a7e60afb48e6
   title: Execute Invoke-command on Remote Host
   relation: closest
-required_alert_fields:
-- _time
-- dest
-- parent_process_guid
-- parent_process_path
+required_roles:
+- event
+- host
 - process
 - user
 intent: Detects PowerShell Invoke-Command -ComputerName starting a process on a remote host from process creation logs.
@@ -30,39 +28,41 @@ explanations:
 - BE-0003
 derived_fields:
   target_host:
-    from: process
+    from: role:process.command_line
     pattern: -ComputerName\s+['\"]?([^\s'\"]+)
     note: value of -ComputerName
 fingerprint:
-- dest
-- user
-- target_host
+- role:host.name
+- role:user.name
+- derived:target_host
 fingerprint_influence:
-  dest:
+  role:host.name:
     rating: low
     reason: Host that reported the event.
-  user:
+  role:user.name:
     rating: low
     reason: Account recorded by the OS.
-  target_host:
+  derived:target_host:
     rating: high
     reason: Target named in an attacker-written command line.
-precedent_entity: dest
-precedent_validity: 72h
+precedent_entity: role:host.name
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:dest
+    entity: role:host.name
   attacker_influence:
     rating: low
-    reason: An attacker cannot freely reproduce dest, user in the fingerprint.
+    reason: An attacker cannot freely reproduce the fingerprint's host, user.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
   guards:
   - question: Q-0045
     then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
 - step: 2
   question: Q-0001
   on_yes: close:benign_true_positive:sanctioned_deployment_tool
@@ -75,9 +75,14 @@ flow:
   on_unknown: flag
 - step: 4
   question: Q-0012
-  on_yes: close:benign_true_positive:admin_activity_baselined
+  rule:
+    gte:
+      param: entity_baseline_min_days
+  on_yes: flag
   on_no: next
   on_unknown: next
+  note: 'Was close:benign_true_positive:admin_activity_baselined. Its only none/low yes was identity group membership (Q-0002) plus a baseline rated high, so it flags: group membership is never the only
+    low-rated answer on a close path.'
 - step: 5
   question: Q-0004
   on_yes: close:benign_true_positive:approved_change
@@ -89,4 +94,6 @@ source:
   title: Remote Process Instantiation via WinRM and PowerShell
 license: Apache-2.0
 status: draft
-version: 6
+version: 7
+parameters:
+  precedent_validity_hours: 72

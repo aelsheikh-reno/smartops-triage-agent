@@ -6,10 +6,10 @@ capability:
   inputs:
     list: CF-0020
     entity:
-    - value:src_user
-    - value:signature
-    - value:recipient_domain
-    at_time: value:_time
+    - role:user.name
+    - role:reporting_control.signature
+    - derived:destination_domain
+    at_time: role:event.time
 attacker_influence:
   rating: none
   reason: Approved exception record with an owner and expiry.
@@ -23,3 +23,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

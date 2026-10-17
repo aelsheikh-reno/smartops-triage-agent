@@ -2,15 +2,9 @@ id: Q-0049
 text: Was the file blocked before it executed?
 tests: BE-0019
 capability:
-  name: alert.field
+  name: alert.class
   inputs:
-    field: value:action
-    op: in
-    values:
-      param: av_pre_execution_block_values
-    unknown_op: in
-    unknown_values:
-      param: av_post_execution_values
+    class: av_execution_state
 attacker_influence:
   rating: low
   reason: Recorded by the endpoint product.
@@ -24,3 +18,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

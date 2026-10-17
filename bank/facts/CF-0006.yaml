@@ -3,20 +3,20 @@ name: sanctioned_remote_access_tools
 description: Remote access and RMM tools the customer has approved, with expected install path, signer, and the processes that normally launch them.
 fields:
 - tool_name
-- process_path
+- install_path
 - signer
 - sha256
 - expected_parents
-match_rule: sha256, or signer plus process_path. Never name or path alone. expected_parents entries use the same rule.
+match_rule: sha256, or signer plus install_path. Never name or path alone. expected_parents entries use the same rule.
 collected_by: customer
 supply_effort: medium
 supply_effort_reason: Needs signer plus path for each approved remote-access tool.
 example:
   tool_name: Example remote support client
-  process_path: C:\Program Files (x86)\ExampleRemote\client-service.exe
+  install_path: C:\Program Files (x86)\ExampleRemote\client-service.exe
   signer: Example Remote Ltd
   sha256: null
   expected_parents:
-  - process_path: C:\Windows\System32\services.exe
+  - install_path: C:\Windows\System32\services.exe
     signer: (OS publisher)
 version: 4

@@ -6,9 +6,9 @@ capability:
   inputs:
     list: CF-0014
     entity:
-    - value:dest
-    - value:user
-    at_time: value:_time
+    - role:host.name
+    - role:user.name
+    at_time: role:event.time
 attacker_influence:
   rating: low
   reason: Approved engagement record, but a real attacker active on an in-scope host during the window would also match.
@@ -23,3 +23,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 3
+kind: triage

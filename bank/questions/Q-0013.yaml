@@ -5,7 +5,7 @@ capability:
   name: list.lookup
   inputs:
     list: CF-0001
-    entity: process:subject_guid
+    entity: entity:subject
 attacker_influence:
   rating: low
   reason: Matched on hash or OS-verified signer plus path.
@@ -22,3 +22,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 3
+kind: triage

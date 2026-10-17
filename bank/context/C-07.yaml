@@ -1,0 +1,22 @@
+id: C-07
+text: Is the user privileged?
+kind: context
+capability:
+  name: identity.privileged
+  inputs:
+    user: role:user.identity_id
+    list: CF-0002
+feeds:
+- priority
+attacker_influence:
+  rating: low
+  reason: Identity data; changing it needs directory rights.
+when_not_answered: The user is treated as privileged for the window.
+source:
+- docs/intake/context-questions.md
+- docs/design-decisions.md §5
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

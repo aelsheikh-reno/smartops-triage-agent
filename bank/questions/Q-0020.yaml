@@ -5,7 +5,7 @@ capability:
   name: list.lookup
   inputs:
     list: CF-0013
-    entity: value:src_user
+    entity: role:actor.name
 attacker_influence:
   rating: low
   reason: The acting account is recorded by the directory, but a compromised provisioning account would match.
@@ -20,3 +20,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 3
+kind: triage

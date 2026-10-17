@@ -8,9 +8,9 @@ capability:
     - CF-0028
     - CF-0021
     entity:
-    - value:recipient_domain
-    - value:signature
-    at_time: value:_time
+    - derived:destination_domain
+    - role:reporting_control.signature
+    at_time: role:event.time
 attacker_influence:
   rating: low
   reason: The sender picks the destination, but it must be an approved partner domain.
@@ -25,3 +25,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 2
+kind: triage

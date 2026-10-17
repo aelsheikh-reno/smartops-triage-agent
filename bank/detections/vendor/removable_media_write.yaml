@@ -10,15 +10,12 @@ data_source:
 sigma_logsource: []
 sigma_logsource_none: Sigma has no log-source category for this alert type.
 sigma_refs: []
-required_alert_fields:
-- dest
+required_roles:
+- host
 - user
-- device_id
-- device_class
-- event_type
-- action
-- files_written
-- _time
+- device
+- reporting_control
+- event
 intent: 'Generic: an endpoint device-control or DLP product reports files written to removable storage (any product).'
 fp_quality: generic
 notes: Write events only. Blocked writes and approved exceptions close; more files than the customer's threshold flag even with an exception. Non-storage devices flag; servers and crown jewels escalate.
@@ -28,55 +25,69 @@ explanations:
 - BE-0029
 - BE-0037
 fingerprint:
-- dest
-- user
-- device_id
-- event_type
-precedent_validity: 7d
-precedent_entity: dest
+- role:host.name
+- role:user.name
+- role:device.id
+- role:device.event_type
+precedent_entity: role:host.name
 fingerprint_influence:
-  dest:
+  role:host.name:
     rating: low
     reason: Host that reported the event.
-  user:
+  role:user.name:
     rating: low
     reason: Account recorded by the OS.
-  device_id:
+  role:device.id:
     rating: high
     reason: Reported by the device; programmable devices can spoof it.
-  event_type:
+  role:device.event_type:
     rating: low
     reason: Recorded by the endpoint control.
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:dest
-    current_action: value:action
+    entity: role:host.name
+    current_action: role:reporting_control.action
   attacker_influence:
     rating: low
-    reason: An attacker cannot freely reproduce dest, user, event_type in the fingerprint.
+    reason: An attacker cannot freely reproduce the fingerprint's host, user, event type.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
   guards:
   - question: Q-0045
     then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
   - question: Q-0069
     when:
     - 'no'
     then: flag
+    rule:
+      'yes':
+      - write
   - question: Q-0066
     then: flag
+    rule:
+      'yes':
+        param: usb_non_storage_classes
   - question: Q-0067
     then: escalate
 - step: 2
   question: Q-0066
+  rule:
+    'yes':
+      param: usb_non_storage_classes
   on_yes: flag
   on_no: next
   on_unknown: flag
 - step: 3
   question: Q-0027
+  rule:
+    'yes':
+      param: blocked_action_values
   on_yes: close:mitigated_true_positive:blocked_by_control
   on_no: next
   on_unknown: next
@@ -85,12 +96,18 @@ flow:
     when:
     - 'no'
     then: flag
+    rule:
+      'yes':
+      - write
   - question: Q-0067
     then: escalate
   - question: Q-0046
     then: flag
     bind:
-      key: value:user
+      key: role:user.name
+    rule:
+      gte:
+        param: alert_history_min_count
 - step: 4
   question: Q-0043
   on_yes: close:benign_true_positive:approved_business_exception
@@ -101,10 +118,16 @@ flow:
     when:
     - 'no'
     then: flag
+    rule:
+      'yes':
+      - write
   - question: Q-0067
     then: escalate
   - question: Q-0068
     then: flag
+    rule:
+      gte:
+        param: usb_files_written_flag
 source:
   repo: internal
   path: bank/use_cases.yaml#UC-016
@@ -112,3 +135,5 @@ source:
 license: internal
 status: draft
 version: 1
+parameters:
+  precedent_validity_hours: 72

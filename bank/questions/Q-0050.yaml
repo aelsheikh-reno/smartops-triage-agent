@@ -2,12 +2,10 @@ id: Q-0050
 text: Is the source address inside the customer's internal networks?
 tests: BE-0021
 capability:
-  name: alert.field
+  name: alert.class
   inputs:
-    field: value:src
-    op: cidr
-    values:
-      param: internal_networks
+    class: address_zone
+    of: role:src.ip
 attacker_influence:
   rating: none
   reason: Compared with the customer's own address plan.
@@ -19,3 +17,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

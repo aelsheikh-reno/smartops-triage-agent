@@ -1,19 +1,19 @@
 id: Q-0003
-text: Has this user run this same binary (same hash, or same signer and path) on this host on at least 3 distinct days in the 30 days before the alert window?
+text: Has this user run this same binary (same hash, or same signer and path) on this host on at least the customer's minimum number of distinct days in the lookback before the alert window?
 tests: BE-0007
 capability:
   name: entity.baseline
   inputs:
     entity:
-    - value:user
-    - value:dest
-    behavior: ran the binary of process:process_guid
-  params:
-    min_days: 3
-    lookback: 30d
+    - role:user.name
+    - role:host.name
+    behavior: ran the binary of entity:process
+    lookback_days:
+      param: entity_baseline_lookback_days
 attacker_influence:
-  rating: low
-  reason: Needs the same user, host and binary identity on 3+ earlier days; only a long-standing compromise of that admin's host satisfies it.
+  rating: high
+  reason: An attacker who already runs code as this user can build the history by running the same binary on several days; baselines default to high (capability-spec).
+  changed_in_migration: low -> high
 source:
 - elastic/detection-rules rules/windows/execution_psexec_lateral_movement_command.toml
 license:
@@ -22,3 +22,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 4
+kind: triage

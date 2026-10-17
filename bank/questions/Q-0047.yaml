@@ -1,13 +1,11 @@
 id: Q-0047
-text: Has this client hit at least the customer's threshold (default 5) of distinct rules in the triage window?
+text: Has this client hit at least the customer's threshold of distinct rules in the triage window?
 tests: BE-0037
 capability:
   name: alert.history
   inputs:
-    key: value:client_ip
-    distinct: signature
-    min_count:
-      param: waf_distinct_signatures_min
+    key: derived:client_ip
+    distinct: role:reporting_control.signature
 attacker_influence:
   rating: none
   reason: Counts alerts already raised.
@@ -18,3 +16,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

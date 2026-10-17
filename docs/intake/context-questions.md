@@ -1,6 +1,6 @@
 # Context questions
 
-Status: (designed, not built). Design reference: `docs/design-decisions.md` §5. Rules every broker question follows: `docs/broker-questions.md`.
+Status: in the bank as `bank/context/C-01.yaml`…`C-07.yaml` and `bank/context_rules.yaml` (draft); the runtime that asks them is (designed, not built). Design reference: `docs/design-decisions.md` §5. Rules every broker question follows: `docs/broker-questions.md`.
 
 There is no separate context service. Context is a small fixed set of broker questions that the Triage agent asks once per entity per grouping window, at the "Group by entity" step (§6). The Tool Broker batches them, answers them from frozen recipes, and caches the answers per entity (§21). Every alert on the entity in the window reads the same cached answers.
 
@@ -8,15 +8,15 @@ Context questions feed the entity guard (§6), Q0 (§14) and priority (§20). Th
 
 ## The set
 
-| ID | Question | Answer type | Key | Capability (today / designed) | Feeds |
+| ID | Question | Answer type | Key | Capability | Feeds |
 |---|---|---|---|---|---|
-| C-01 | Is there an open escalation or case on the entity? | yes/no | entity | `alert.history` (open cases) / `case.open` (designed, not built) | entity guard: hot if yes; repeat attach (§15) |
-| C-02 | How many alerts fired on the entity in the window, and from how many distinct detections? | count, count | entity, window | `alert.history` | entity guard: N alerts from ≥2 detections; noisy-entity routine list applied by the Triage agent |
-| C-03 | What is the highest severity of any other alert on the entity in the last 24h? | value from a fixed list: informational, low, medium, high, critical, none | entity, 24h | `alert.history` | Q0: no alert of higher severity on the entity in the window. The Triage agent compares it with this alert's severity. |
+| C-01 | Is there an open escalation or case on the entity? | yes/no | entity | `case.open` | entity guard: hot if yes; repeat attach (§15) |
+| C-02 | How many alerts fired on the entity in the window, and from how many distinct detections? | count, count | entity, window | `entity.alerts` | entity guard: N alerts from ≥2 detections; noisy-entity routine list applied by the Triage agent |
+| C-03 | What is the highest severity of any other alert on the entity in the last 24h? | value from a fixed list: informational, low, medium, high, critical, none | entity, 24h | `entity.max_severity` | Q0: no alert of higher severity on the entity in the window. The Triage agent compares it with this alert's severity. |
 | C-04 | How many audited closes, and how many independent analyst closes, does this fingerprint have in the validity window? | count, count | fingerprint | `case.precedent` | Q0: inherit only audited closes, or at least 2 independent analyst closes |
-| C-05 | What is the asset's priority? | value from a fixed list: critical, high, medium, low | host asset ID | `list.lookup` (asset) / `asset.lookup` (designed, not built) | priority (§20) |
-| C-06 | Is the asset a crown jewel? | yes/no | host asset ID | `list.lookup` (asset) / `asset.lookup` (designed, not built) | no auto-close on crown jewels (§19); Q0 |
-| C-07 | Is the user privileged? | yes/no | user identity ID | `identity.groups` / `identity.lookup` (designed, not built) | priority (§20) |
+| C-05 | What is the asset's priority? | value from a fixed list: critical, high, medium, low | host asset ID | `asset.priority` | priority (§20) |
+| C-06 | Is the asset a crown jewel? | yes/no | host asset ID | `asset.crown_jewel` (list CF-0007) | no auto-close on crown jewels (§19); Q0 |
+| C-07 | Is the user privileged? | yes/no | user identity ID | `identity.privileged` (list CF-0002) | priority (§20) |
 
 C-03 deviates from a plain yes/no on purpose. "Higher than this alert" depends on the alert, so a yes/no could not be cached once per entity. The broker returns the highest severity, which is the same for every alert on the entity, and the Triage agent compares it with each alert's own severity. That comparison is not a threshold, so there is still no threshold in the recipe.
 

@@ -5,9 +5,9 @@ capability:
   name: list.lookup
   inputs:
     list: CF-0017
-    entity: file:ImagePath
-    host: value:dest
-    at_time: value:_time
+    entity: entity:file
+    host: role:host.name
+    at_time: role:event.time
 attacker_influence:
   rating: low
   reason: Exception keyed on driver hash and host.
@@ -22,3 +22,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 3
+kind: triage

@@ -4,7 +4,7 @@ tests: BE-0030
 capability:
   name: url.reputation
   inputs:
-    entity: value:url
+    entity: role:web.url
 attacker_influence:
   rating: low
   reason: URL comes from the alert record.
@@ -16,3 +16,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

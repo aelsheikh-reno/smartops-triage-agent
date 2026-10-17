@@ -1,0 +1,39 @@
+# How the Triage agent uses the context questions (bank/context/C-*.yaml). They are asked once per entity per
+# grouping window, at "Group by entity", batched and cached by the Tool Broker. They never close an alert: they
+# only raise scrutiny or set priority. Status other than answered is handled as each question's when_not_answered.
+
+entity_guard:
+  runs: once per entity per grouping window, before Q0
+  reads: [C-01, C-02]
+  hot_when:
+    any:
+    - C-01: true
+    - all:
+      - {C-02.alerts: {gte: {param: entity_guard_min_alerts}}}
+      - {C-02.distinct_detections: {gte: {param: entity_guard_min_detections}}}
+  effect: every close on the entity becomes a flag, and its priority is raised. Raise-only; each alert's flow still runs.
+  routine:
+    list: CF-0030
+    meaning: an alert from an (entity, detection) pair on the routine list does not count toward entity_guard_min_alerts (C-02 excludes it).
+    never_routine:
+    - alerts of high or critical severity (always counted)
+    - any detection not on that entity's routine list
+    - any alert on an entity with an open escalation (C-01)
+    approval: reduce-scrutiny. The Use Case Manager proposes a pair from at least 4 weeks of consistent, audited benign closes, with an approval packet; a human approves it with an owner and an expiry.
+
+q0:
+  question: Q-0000
+  reads: [C-03, C-04, C-06]
+  yes_when:
+    all:
+    - any:
+      - {C-04.audited: {gte: 1}}
+      - {C-04.independent_analyst: {gte: {param: q0_min_independent_closes}}}
+    - {C-03: {not_above: this_alert_severity}}
+    - C-06: false
+  validity: {param: precedent_validity_hours}
+  notes: A close with reason precedent_match is never itself a precedent. A mitigated precedent counts only when this alert was also stopped (C-04 current_action). In Shadow and Recommend the precedent is shown to the analyst instead of closing.
+
+priority:
+  reads: [C-05, C-06, C-07]
+  rule: the SIEM's own urgency or severity, raised by asset priority (C-05), by a crown jewel (C-06), by a privileged user (C-07) and by the entity being hot; adjusted by the verdict (docs/design-decisions.md §20). Never lowered below the SIEM's own urgency.

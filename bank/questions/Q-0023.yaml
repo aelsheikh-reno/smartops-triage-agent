@@ -5,8 +5,8 @@ capability:
   name: list.lookup
   inputs:
     list: CF-0015
-    entity: value:dest
-    at_time: value:_time
+    entity: role:host.name
+    at_time: role:event.time
 attacker_influence:
   rating: none
   reason: Asset lifecycle record maintained by IT.
@@ -21,3 +21,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 3
+kind: triage

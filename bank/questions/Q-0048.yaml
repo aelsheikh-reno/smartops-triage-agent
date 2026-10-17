@@ -6,9 +6,9 @@ capability:
   inputs:
     list: CF-0023
     entity:
-    - value:file_hash
-    - file:file_path
-    host: value:dest_asset_id
+    - role:file.sha256
+    - entity:file
+    host: role:host.asset_id
 attacker_influence:
   rating: low
   reason: Matched on hash or signer plus path and scoped by asset ID, which a host rename cannot change; analysis hosts are a deliberate, listed exception.
@@ -26,3 +26,4 @@ status: draft
 version: 4
 notes: 'The file entity lets the Tool Broker resolve the signer. A quarantined or unreadable file with no hash in the alert answers unknown: the approved-tooling close cannot apply and the flow continues
   to the high-risk and pre-execution checks.'
+kind: triage

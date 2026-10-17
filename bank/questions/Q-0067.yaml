@@ -7,7 +7,7 @@ capability:
     list:
     - CF-0029
     - CF-0007
-    entity: value:dest
+    entity: role:host.name
 attacker_influence:
   rating: none
   reason: Asset inventory records.
@@ -22,3 +22,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

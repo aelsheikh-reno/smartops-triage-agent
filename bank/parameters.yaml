@@ -1,33 +1,232 @@
+# Triage-side parameters. Thresholds live only here, never in a question or a recipe; the Tool Broker returns
+# counts and classes, and the Triage agent applies these (docs/broker-questions.md).
+#
+# Every parameter has a default, bounds (min/max for numbers; min_items/max_items and the allowed values for lists)
+# and the direction that reduces scrutiny. Precedence: customer + detection > customer > detection > global (this file).
+# Detections set detection defaults under `parameters:`. Customer overrides live in bank/overlays/customer/<customer>/
+# parameters.yaml; validate rejects any value outside its bounds, and any override in the reduce-scrutiny direction
+# without approved_by, owner and expiry (a human approves; the Use Case Manager only proposes).
+precedence: [customer_detection, customer, detection, global]
 parameters:
+  precedent_validity_hours:
+    default: 24
+    bounds:
+      min: 1
+      max: 72
+    reduces_scrutiny_when: higher
+    description: How long a qualifying close of the same fingerprint stays a precedent (Q0). Detections may set a shorter or longer value up to the maximum.
+    unit: hours
+  q0_min_independent_closes:
+    default: 2
+    bounds:
+      min: 2
+      max: 5
+    reduces_scrutiny_when: lower
+    description: Independent analyst closes of the fingerprint (distinct analysts) that make a precedent when no close passed audit.
+  entity_grouping_window_minutes:
+    default: 10
+    bounds:
+      min: 5
+      max: 60
+    reduces_scrutiny_when: lower
+    description: Window over which intake groups alerts by entity; context questions are asked once per entity per window.
+    unit: minutes
+  entity_guard_min_alerts:
+    default: 3
+    bounds:
+      min: 2
+      max: 10
+    reduces_scrutiny_when: higher
+    description: Counted alerts on the entity in the grouping window (C-02) that, with entity_guard_min_detections, make the entity hot.
+  entity_guard_min_detections:
+    default: 2
+    bounds:
+      min: 2
+      max: 5
+    reduces_scrutiny_when: higher
+    description: Distinct detections among them (C-02) that, with entity_guard_min_alerts, make the entity hot.
+  triage_lookback_hours:
+    default: 24
+    bounds:
+      min: 24
+      max: 24
+    reduces_scrutiny_when: lower
+    description: 'The triage window: look-back only, ending at the alert time. Fixed at 24h (C-03 and event lookups).'
+    unit: hours
+  alert_history_min_count:
+    default: 3
+    bounds:
+      min: 2
+      max: 20
+    reduces_scrutiny_when: higher
+    description: Earlier alerts with the same key in the triage window that turn a close into a flag (a burst is not noise)
+  ids_history_min_count:
+    default: 5
+    bounds:
+      min: 2
+      max: 50
+    reduces_scrutiny_when: higher
+    description: Earlier IDS alerts from the same source in the triage window that flag
+  proxy_history_min_count:
+    default: 10
+    bounds:
+      min: 3
+      max: 50
+    reduces_scrutiny_when: higher
+    description: Earlier proxy blocks with the same fingerprint, or from one host to one domain, in the triage window that turn a close into a flag (proxy alerts repeat more than other families)
+  waf_distinct_signatures_min:
+    default: 5
+    bounds:
+      min: 2
+      max: 50
+    reduces_scrutiny_when: higher
+    description: Distinct WAF rules hit by one client in the triage window that flag
+  entity_baseline_min_days:
+    default: 3
+    bounds:
+      min: 3
+      max: 30
+    reduces_scrutiny_when: lower
+    description: Distinct days in the lookback the entity must have shown the same behavior for a baseline yes
+  entity_baseline_lookback_days:
+    default: 30
+    bounds:
+      min: 14
+      max: 90
+    reduces_scrutiny_when: higher
+    description: Lookback for entity.baseline, ending before the triage window (a window sent to the broker, not a threshold)
+    unit: days
   org_prevalence_min_hosts:
     default: 5
-    description: Minimum distinct hosts for org.prevalence to answer yes
-  org_prevalence_min_weeks:
-    default: 3
-    description: Minimum weeks (of the 4 before the alert window) with the pattern present
-  org_prevalence_of_weeks:
+    bounds:
+      min: 3
+      max: 50
+    reduces_scrutiny_when: lower
+    description: Hosts the pattern must reach in every week of the lookback for a prevalence yes
+  org_prevalence_lookback_weeks:
     default: 4
-    description: Weeks examined before the alert window
-  av_low_risk_categories:
+    bounds:
+      min: 3
+      max: 8
+    reduces_scrutiny_when: lower
+    description: Weeks examined before the alert window for org.prevalence (a window sent to the broker, not a threshold). Fewer weeks are easier to meet, so lowering it reduces scrutiny.
+    unit: weeks
+  org_prevalence_escape_min_hosts:
+    default: 1
+    bounds:
+      min: 1
+      max: 1
+    reduces_scrutiny_when: higher
+    description: Hosts outside the approved security-tooling and analysis hosts on which the file's hash may appear in the alert window before the guard fires. Fixed at 1.
+  vuln_data_max_age_days:
+    default: 30
+    bounds:
+      min: 1
+      max: 90
+    reduces_scrutiny_when: higher
+    description: Oldest vulnerability data vuln.not_applicable may rely on (a window sent to the broker)
+    unit: days
+  dlp_record_count_flag:
+    default: 1000
+    bounds:
+      min: 10
+      max: 100000
+    reduces_scrutiny_when: higher
+    description: Records or matches in one DLP event that flag even to approved destinations
+  usb_files_written_flag:
+    default: 50
+    bounds:
+      min: 1
+      max: 10000
+    reduces_scrutiny_when: higher
+    description: Files written in one event that flag even with an approved exception
+  blocked_action_values:
     default:
-    - pua
-    - potentially unwanted
-    - adware
-    - tracking cookie
-    - grayware
-    description: Detection classes treated as low risk once blocked
-  av_high_risk_categories:
+    - blocked
+    - dropped
+    - denied
+    - rejected
+    - prevented
+    - reset
+    bounds:
+      min_items: 1
+      max_items: 18
+      allowed: &id001
+      - allowed
+      - delivered
+      - detected
+      - alerted
+      - blocked
+      - dropped
+      - denied
+      - rejected
+      - prevented
+      - reset
+      - deleted
+      - quarantined
+      - held
+      - pending
+      - pending release
+      - encrypted pending
+      - justification pending
+      - other
+    reduces_scrutiny_when: grows
+    description: Normalized action values meaning the control stopped the item before it took effect
+  email_blocked_action_values:
     default:
-    - hacktool
-    - password dumper
-    - credential theft
-    - ransomware
-    - web shell
-    - exploit
-    - exploit framework
-    - remote access trojan
-    - backdoor
-    description: Detection classes that always escalate, blocked or not
+    - blocked
+    - rejected
+    - quarantined
+    - deleted
+    - dropped
+    bounds:
+      min_items: 1
+      max_items: 18
+      allowed: *id001
+    reduces_scrutiny_when: grows
+    description: Email gateway actions meaning the message was stopped before delivery (quarantine at the gateway counts; every-mailbox status is checked separately)
+  dlp_final_block_values:
+    default:
+    - blocked
+    - denied
+    - deleted
+    - prevented
+    bounds:
+      min_items: 1
+      max_items: 18
+      allowed: *id001
+    reduces_scrutiny_when: grows
+    description: DLP actions that are final
+  dlp_pending_values:
+    default:
+    - quarantined
+    - held
+    - pending
+    - pending release
+    - encrypted pending
+    - justification pending
+    bounds:
+      min_items: 0
+      max_items: 18
+      allowed: *id001
+    reduces_scrutiny_when: shrinks
+    description: 'DLP states that are not final: unknown unless a later status confirms them'
+  dlp_high_severity_values:
+    default:
+    - critical
+    - high
+    bounds:
+      min_items: 1
+      max_items: 6
+      allowed:
+      - informational
+      - low
+      - medium
+      - high
+      - critical
+      - other
+    reduces_scrutiny_when: shrinks
+    description: DLP severities that flag even to approved destinations
   web_low_risk_categories:
     default:
     - advertising
@@ -40,62 +239,69 @@ parameters:
     - sports
     - travel
     - news and media
+    bounds:
+      min_items: 0
+      max_items: 27
+      allowed: &id002
+      - advertising
+      - web ads
+      - streaming media
+      - social networking
+      - games
+      - shopping
+      - entertainment
+      - sports
+      - travel
+      - news and media
+      - malware
+      - malicious
+      - phishing
+      - command and control
+      - botnet
+      - spyware
+      - cryptomining
+      - newly registered
+      - newly observed
+      - parked
+      - dynamic dns
+      - proxy avoidance
+      - uncategorized
+      - unknown
+      - unrated
+      - not rated
+      - other
+    reduces_scrutiny_when: grows
     description: Normalized web categories treated as low risk once blocked
-  vuln_data_max_age:
-    default: 30d
-    description: Oldest vulnerability data vuln.not_applicable may rely on
-  blocked_action_values:
+  web_high_risk_categories:
     default:
-    - blocked
-    - dropped
-    - denied
-    - rejected
-    - prevented
-    - reset
-    description: Normalized action values meaning the control stopped the item before it took effect
-  av_pre_execution_block_values:
+    - malware
+    - malicious
+    - phishing
+    - command and control
+    - botnet
+    - spyware
+    - cryptomining
+    - newly registered
+    - dynamic dns
+    - parked
+    bounds:
+      min_items: 1
+      max_items: 27
+      allowed: *id002
+    reduces_scrutiny_when: shrinks
+    description: Web categories that escalate even when blocked
+  web_uncategorized_values:
     default:
-    - blocked
-    - prevented
-    - blocked_pre_execution
-    - deleted_pre_execution
-    description: Normalized antivirus action values meaning the file was stopped before it ran
-  av_post_execution_values:
-    default:
-    - quarantined_post_execution
-    - cleaned_post_execution
-    - pending_reboot
-    - partially_remediated
-    - remediation_failed
-    - quarantined
-    - cleaned
-    description: 'Antivirus states the bank refuses to judge: the file may have run, or remediation is not final. These answer unknown and flag.'
-  av_high_risk_pattern:
-    default: hacktool|hack tool|password ?dump|credential|mimikatz|ransom|web ?shell|exploit|remote ?access|\brat\b|backdoor|remoteadmin|remote ?admin|miner|coin ?min|proxy|crack|keygen
-    description: Detection class or name fragments that always escalate, blocked or not
-  av_low_risk_pattern:
-    default: \b(pua|potentially unwanted|adware|grayware|greyware)\b
-    description: Detection classes treated as low risk once blocked before execution
-  av_test_file_pattern:
-    default: eicar|test[ _-]?file|testfile
-    description: 'Test files never close: attackers drop them to provoke antivirus actions'
-  alert_history_min_count:
-    default: 3
-    description: Earlier alerts with the same key in the triage window that turn a close into a flag
-  ids_history_min_count:
-    default: 5
-    description: Earlier IDS alerts from the same source in the triage window that flag
-  waf_distinct_signatures_min:
-    default: 5
-    description: Distinct WAF rules hit by one client in the triage window that flag
-  internal_networks:
-    default:
-    - 10.0.0.0/8
-    - 172.16.0.0/12
-    - 192.168.0.0/16
-    - 100.64.0.0/10
-    - fc00::/7
-    description: Customer internal address ranges; internal sources never close on denied, blocked or patched
+    - uncategorized
+    - unknown
+    - unrated
+    - not rated
+    bounds:
+      min_items: 1
+      max_items: 27
+      allowed: *id002
+    reduces_scrutiny_when: grows
+    description: Values meaning the filtering service has not categorised the site
   ids_exploit_class_values:
     default:
     - attempted-admin
@@ -109,94 +315,80 @@ parameters:
     - command-and-control
     - malware-cnc
     - exploit
+    bounds:
+      min_items: 1
+      max_items: 22
+      allowed:
+      - attempted-admin
+      - attempted-user
+      - successful-admin
+      - successful-user
+      - web-application-attack
+      - shellcode-detect
+      - trojan-activity
+      - exploit-kit
+      - command-and-control
+      - attempted-dos
+      - successful-dos
+      - attempted-recon
+      - successful-recon-limited
+      - successful-recon-largescale
+      - network-scan
+      - policy-violation
+      - misc-activity
+      - misc-attack
+      - bad-unknown
+      - malware-cnc
+      - exploit
+      - other
+    reduces_scrutiny_when: shrinks
     description: IDS signature classes for which a block flags instead of closing (only recon and policy classes close on block)
-  web_success_status_pattern:
-    default: ^2\d\d$
-    description: HTTP status meaning the request succeeded
-  web_high_risk_categories:
-    default:
-    - malware
-    - malicious
-    - phishing
-    - command and control
-    - botnet
-    - spyware
-    - cryptomining
-    - newly registered
-    - dynamic dns
-    - parked
-    description: Web categories that escalate even when blocked
-  web_uncategorized_values:
-    default:
-    - uncategorized
-    - unknown
-    - unrated
-    - not rated
-    description: Values meaning the filtering service has not categorised the site
-  browser_user_agent_pattern:
-    default: ^Mozilla/5\.0 \(.+\) .*(Chrome|Firefox|Safari|Edg)/\d+
-    description: Mainstream browser user agents; anything else (scripts, tools, empty) flags
-  dlp_final_block_values:
-    default:
-    - blocked
-    - denied
-    - deleted
-    - prevented
-    description: DLP actions that are final
-  dlp_pending_values:
-    default:
-    - quarantined
-    - held
-    - pending
-    - pending release
-    - encrypted pending
-    - justification pending
-    description: 'DLP states that are not final: unknown unless a later status confirms them'
-  dlp_high_severity_values:
-    default:
-    - critical
-    - high
-    description: DLP severities that flag even to approved destinations
-  dlp_record_count_flag:
-    default: 1000
-    description: Records or matches in one DLP event that flag even to approved destinations
-  usb_connect_event_values:
-    default:
-    - connect
-    - connected
-    - insert
-    - inserted
-    - mount
-    - mounted
-    - plugged
-    description: Device-control event types meaning a device was connected
-  usb_write_event_values:
-    default:
-    - write
-    - file write
-    - copy
-    - file copied
-    description: Device-control event types meaning data was written to the device
   usb_non_storage_classes:
     default:
     - hid
     - keyboard
     - mouse
     - composite
-    - human interface device
     - network adapter
+    bounds:
+      min_items: 1
+      max_items: 7
+      allowed:
+      - storage
+      - hid
+      - keyboard
+      - mouse
+      - composite
+      - network adapter
+      - other
+    reduces_scrutiny_when: shrinks
     description: Device classes that are not storage; a non-storage device in a storage alert flags (possible keystroke injector)
-  usb_files_written_flag:
-    default: 50
-    description: Files written in one event that flag even with an approved exception
-  email_blocked_action_values:
+  internal_networks:
     default:
-    - blocked
-    - rejected
-    - quarantined
-    - deleted
-    - dropped
-    description: Email gateway actions meaning the message was stopped before delivery (quarantine at the gateway counts; every-mailbox status is checked separately)
-  proxy_history_min_count:
-    default: 10
-    description: Earlier proxy blocks with the same fingerprint, or from one host to one domain, in the triage window that turn a close into a flag (proxy alerts repeat more than other families)
+    - 10.0.0.0/8
+    - 172.16.0.0/12
+    - 192.168.0.0/16
+    - 100.64.0.0/10
+    - fc00::/7
+    bounds:
+      min_items: 1
+      max_items: 1000
+    reduces_scrutiny_when: shrinks
+    description: Customer internal address ranges; internal sources never close on denied, blocked or patched Read by the alert-source recipe for address_zone; internal sources never close on denied, blocked
+      or patched, so removing a range reduces scrutiny.
+
+# Retired in the bank migration (kept so reviewers can trace them):
+#   av_low_risk_pattern: moved to the value tables (bank/recipes/value_tables/)
+#   av_high_risk_pattern: moved to the value tables (bank/recipes/value_tables/)
+#   av_test_file_pattern: moved to the value tables (bank/recipes/value_tables/)
+#   av_pre_execution_block_values: moved to the value tables (bank/recipes/value_tables/)
+#   av_post_execution_values: moved to the value tables (bank/recipes/value_tables/)
+#   browser_user_agent_pattern: moved to the value tables (bank/recipes/value_tables/)
+#   usb_connect_event_values: moved to the value tables (bank/recipes/value_tables/)
+#   usb_write_event_values: moved to the value tables (bank/recipes/value_tables/)
+#   web_success_status_pattern: moved to the value tables (bank/recipes/value_tables/)
+#   av_low_risk_categories: unused; replaced by the av_risk_class value tables
+#   av_high_risk_categories: unused; replaced by the av_risk_class value tables
+#   org_prevalence_min_weeks: replaced: org.prevalence now measures the weakest week of the lookback (every week must reach the host count)
+#   org_prevalence_of_weeks: renamed org_prevalence_lookback_weeks
+#   vuln_data_max_age: renamed vuln_data_max_age_days

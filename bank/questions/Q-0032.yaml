@@ -4,7 +4,7 @@ tests: BE-0030
 capability:
   name: ip.reputation
   inputs:
-    ip: value:src
+    ip: role:src.ip
 attacker_influence:
   rating: low
   reason: Address comes from the network record.
@@ -16,3 +16,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

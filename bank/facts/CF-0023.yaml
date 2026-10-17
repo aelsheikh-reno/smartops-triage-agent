@@ -5,7 +5,7 @@ fields:
 - entry_type
 - sha256
 - signer
-- process_path
+- install_path
 - asset_ids
 - owner
 - expires

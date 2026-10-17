@@ -1,0 +1,35 @@
+# Vendor value table (recipe layer). Maps one product's raw alert values to the bank's alert classes
+# (bank/capabilities.yaml alert_classes). Rows are tried in order; the first match wins; no match gives the class default.
+# match: {<raw property>: <value or list>} compares case-insensitively; {pattern: <regex>} searches the class's role values joined by a space.
+# May name products: it is recipe data, not bank logic, and never enters the runtime bundle. Each row is verified or not;
+# a detection family whose classes have unverified rows for a customer's product is capped at Recommend for that customer.
+vendor: CrowdStrike
+product: Falcon
+feed: Detection events, PatternDispositionDescription
+source:
+- docs/normalization.md (recalled from public event references; not checked)
+license: internal
+classes:
+  av_execution_state:
+    reads:
+    - PatternDispositionDescription
+    rows:
+    - match:
+        PatternDispositionDescription: Prevention, process blocked from execution
+      value: pre_execution
+      verified: false
+    - match:
+        PatternDispositionDescription: Prevention, process killed
+      value: ran
+      verified: false
+      note: The process started.
+    - match:
+        PatternDispositionDescription: Quarantine, file quarantined
+      value: unknown
+      verified: false
+      note: Timing not stated.
+    - match:
+        PatternDispositionDescription: Detection, standard detection
+      value: ran
+      verified: false
+    default: unknown

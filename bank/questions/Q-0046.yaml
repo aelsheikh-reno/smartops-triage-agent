@@ -4,9 +4,7 @@ tests: BE-0037
 capability:
   name: alert.history
   inputs:
-    key: value:history_key
-    min_count:
-      param: alert_history_min_count
+    key: bind:history_key
 attacker_influence:
   rating: none
   reason: Counts alerts already raised; the activity cannot remove them.
@@ -18,3 +16,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

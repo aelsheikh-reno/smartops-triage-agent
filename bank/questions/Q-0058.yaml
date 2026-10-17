@@ -2,12 +2,10 @@ id: Q-0058
 text: Is the user agent a mainstream browser?
 tests: BE-0027
 capability:
-  name: alert.field
+  name: alert.class
   inputs:
-    field: value:http_user_agent
-    op: matches
-    values:
-      param: browser_user_agent_pattern
+    class: user_agent_class
+    of: role:web.user_agent
 attacker_influence:
   rating: high
   reason: The user agent is set by the client; malware copies browser strings.
@@ -19,3 +17,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

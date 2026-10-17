@@ -5,11 +5,12 @@ capability:
   name: change.window
   inputs:
     entities:
-    - value:src
-    at_time: value:_time
+    - role:src.ip
+    at_time: role:event.time
 attacker_influence:
-  rating: none
-  reason: Approved change record naming the source.
+  rating: low
+  reason: Approved change or test-engagement records the traffic cannot touch; a yes needs an approver who is not an implementer.
+  changed_in_migration: none -> low
 needs:
   context:
   - CF-0003
@@ -21,3 +22,4 @@ legal_review: false
 status: draft
 version: 3
 notes: Penetration-test, red-team and QA engagements must be logged as approved changes naming the tester's source addresses (onboarding checklist); otherwise alerts from approved testers flag.
+kind: triage

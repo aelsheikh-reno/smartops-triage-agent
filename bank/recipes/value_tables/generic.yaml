@@ -1,0 +1,497 @@
+# Vendor value table (recipe layer). Maps one product's raw alert values to the bank's alert classes
+# (bank/capabilities.yaml alert_classes). Rows are tried in order; the first match wins; no match gives the class default.
+# match: {<raw property>: <value or list>} compares case-insensitively; {pattern: <regex>} searches the class's role values joined by a space.
+# May name products: it is recipe data, not bank logic, and never enters the runtime bundle. Each row is verified or not;
+# a detection family whose classes have unverified rows for a customer's product is capped at Recommend for that customer.
+vendor: any
+product: any
+scope: generic
+feed: 'Vendor-neutral rows: normalized names and bank-authored patterns that apply to any product. Product tables take precedence; onboarding confirms each product''s wording.'
+source:
+- bank parameters before the migration (av_*_pattern, usb_*_event_values, browser_user_agent_pattern, web_success_status_pattern)
+- bank/use_cases.yaml triage_hints
+license: internal
+classes:
+  av_risk_class:
+    reads:
+    - reporting_control.category
+    - reporting_control.signature
+    rows:
+    - match:
+        pattern: hacktool|hack tool|password ?dump|credential|mimikatz|ransom|web ?shell|exploit|remote ?access|\brat\b|backdoor|remoteadmin|remote ?admin|miner|coin ?min|proxy|crack|keygen
+      value: high_risk
+      verified: false
+      note: High-risk families escalate even when blocked. Matched on class and name together.
+    - match:
+        pattern: eicar|test[ _-]?file|testfile
+      value: other
+      verified: false
+      note: 'Test files never close as low risk: attackers drop them to provoke antivirus actions.'
+    - match:
+        pattern: \b(pua|potentially unwanted|adware|grayware|greyware)\b
+      value: low_risk
+      verified: false
+    default: other
+  av_execution_state:
+    reads:
+    - reporting_control.action_raw
+    rows:
+    - match:
+        value:
+        - blocked_pre_execution
+        - deleted_pre_execution
+      value: pre_execution
+      verified: false
+    - match:
+        value:
+        - quarantined_post_execution
+        - cleaned_post_execution
+        - pending_reboot
+        - pending reboot
+        - partially_remediated
+        - partially remediated
+        - remediation_failed
+        - remediation failed
+        - quarantined
+        - cleaned
+      value: unknown
+      verified: false
+      note: 'Post-execution or unfinished remediation: the bank refuses to judge, so it flags.'
+    - match:
+        value:
+        - detected
+        - allowed
+      value: ran
+      verified: false
+    default: unknown
+  control_action:
+    reads:
+    - reporting_control.action_raw
+    rows:
+    - match:
+        value:
+        - blocked
+        - block
+      value: blocked
+      verified: false
+    - match:
+        value:
+        - dropped
+        - drop
+      value: dropped
+      verified: false
+    - match:
+        value:
+        - denied
+        - deny
+      value: denied
+      verified: false
+    - match:
+        value:
+        - rejected
+        - reject
+      value: rejected
+      verified: false
+    - match:
+        value:
+        - prevented
+      value: prevented
+      verified: false
+    - match:
+        value:
+        - reset
+        - block with reset
+      value: reset
+      verified: false
+    - match:
+        value:
+        - deleted
+        - delete
+      value: deleted
+      verified: false
+    - match:
+        value:
+        - quarantined
+        - quarantine
+      value: quarantined
+      verified: false
+    - match:
+        value:
+        - held
+        - hold
+      value: held
+      verified: false
+    - match:
+        value:
+        - pending
+      value: pending
+      verified: false
+    - match:
+        value:
+        - pending release
+      value: pending release
+      verified: false
+    - match:
+        value:
+        - encrypted pending
+      value: encrypted pending
+      verified: false
+    - match:
+        value:
+        - justification pending
+      value: justification pending
+      verified: false
+    - match:
+        value:
+        - allowed
+        - allow
+        - permitted
+        - pass
+      value: allowed
+      verified: false
+    - match:
+        value:
+        - delivered
+      value: delivered
+      verified: false
+    - match:
+        value:
+        - detected
+        - alert only
+      value: detected
+      verified: false
+    - match:
+        value:
+        - alerted
+      value: alerted
+      verified: false
+    default: other
+  web_category:
+    reads:
+    - web.category
+    rows:
+    - match:
+        value: advertising
+      value: advertising
+      verified: false
+    - match:
+        value: web ads
+      value: web ads
+      verified: false
+    - match:
+        value: streaming media
+      value: streaming media
+      verified: false
+    - match:
+        value: social networking
+      value: social networking
+      verified: false
+    - match:
+        value: games
+      value: games
+      verified: false
+    - match:
+        value: shopping
+      value: shopping
+      verified: false
+    - match:
+        value: entertainment
+      value: entertainment
+      verified: false
+    - match:
+        value: sports
+      value: sports
+      verified: false
+    - match:
+        value: travel
+      value: travel
+      verified: false
+    - match:
+        value: news and media
+      value: news and media
+      verified: false
+    - match:
+        value: malware
+      value: malware
+      verified: false
+    - match:
+        value: malicious
+      value: malicious
+      verified: false
+    - match:
+        value: phishing
+      value: phishing
+      verified: false
+    - match:
+        value: command and control
+      value: command and control
+      verified: false
+    - match:
+        value: botnet
+      value: botnet
+      verified: false
+    - match:
+        value: spyware
+      value: spyware
+      verified: false
+    - match:
+        value: cryptomining
+      value: cryptomining
+      verified: false
+    - match:
+        value: newly registered
+      value: newly registered
+      verified: false
+    - match:
+        value: newly observed
+      value: newly observed
+      verified: false
+    - match:
+        value: parked
+      value: parked
+      verified: false
+    - match:
+        value: dynamic dns
+      value: dynamic dns
+      verified: false
+    - match:
+        value: proxy avoidance
+      value: proxy avoidance
+      verified: false
+    - match:
+        value: uncategorized
+      value: uncategorized
+      verified: false
+    - match:
+        value: unknown
+      value: unknown
+      verified: false
+    - match:
+        value: unrated
+      value: unrated
+      verified: false
+    - match:
+        value: not rated
+      value: not rated
+      verified: false
+    default: other
+    default_note: Identity rows only; onboarding adds each product's category names.
+  ids_class:
+    reads:
+    - reporting_control.category
+    rows:
+    - match:
+        value: attempted-admin
+      value: attempted-admin
+      verified: false
+    - match:
+        value: attempted-user
+      value: attempted-user
+      verified: false
+    - match:
+        value: successful-admin
+      value: successful-admin
+      verified: false
+    - match:
+        value: successful-user
+      value: successful-user
+      verified: false
+    - match:
+        value: web-application-attack
+      value: web-application-attack
+      verified: false
+    - match:
+        value: shellcode-detect
+      value: shellcode-detect
+      verified: false
+    - match:
+        value: trojan-activity
+      value: trojan-activity
+      verified: false
+    - match:
+        value: exploit-kit
+      value: exploit-kit
+      verified: false
+    - match:
+        value: command-and-control
+      value: command-and-control
+      verified: false
+    - match:
+        value: attempted-dos
+      value: attempted-dos
+      verified: false
+    - match:
+        value: successful-dos
+      value: successful-dos
+      verified: false
+    - match:
+        value: attempted-recon
+      value: attempted-recon
+      verified: false
+    - match:
+        value: successful-recon-limited
+      value: successful-recon-limited
+      verified: false
+    - match:
+        value: successful-recon-largescale
+      value: successful-recon-largescale
+      verified: false
+    - match:
+        value: network-scan
+      value: network-scan
+      verified: false
+    - match:
+        value: policy-violation
+      value: policy-violation
+      verified: false
+    - match:
+        value: misc-activity
+      value: misc-activity
+      verified: false
+    - match:
+        value: misc-attack
+      value: misc-attack
+      verified: false
+    - match:
+        value: bad-unknown
+      value: bad-unknown
+      verified: false
+    - match:
+        value: malware-cnc
+      value: malware-cnc
+      verified: false
+    - match:
+        value: exploit
+      value: exploit
+      verified: false
+    default: other
+  http_status_class:
+    reads:
+    - web.status
+    rows:
+    - match:
+        pattern: ^2\d\d$
+      value: success
+      verified: true
+      note: HTTP status classes (RFC 9110).
+    - match:
+        pattern: ^3\d\d$
+      value: redirect
+      verified: true
+    - match:
+        pattern: ^4\d\d$
+      value: client_error
+      verified: true
+    - match:
+        pattern: ^5\d\d$
+      value: server_error
+      verified: true
+    default: other
+  user_agent_class:
+    reads:
+    - web.user_agent
+    rows:
+    - match:
+        pattern: ^Mozilla/5\.0 \(.+\) .*(Chrome|Firefox|Safari|Edg)/\d+
+      value: browser
+      verified: false
+      note: Mainstream browser user agents; anything else (scripts, tools, empty) is other and flags.
+    default: other
+  severity:
+    reads:
+    - reporting_control.severity
+    rows:
+    - match:
+        value:
+        - informational
+        - info
+      value: informational
+      verified: false
+    - match:
+        value: low
+      value: low
+      verified: false
+    - match:
+        value:
+        - medium
+        - moderate
+      value: medium
+      verified: false
+    - match:
+        value: high
+      value: high
+      verified: false
+    - match:
+        value: critical
+      value: critical
+      verified: false
+    default: other
+  device_event:
+    reads:
+    - device.event_type
+    rows:
+    - match:
+        value:
+        - connect
+        - connected
+        - insert
+        - inserted
+        - mount
+        - mounted
+        - plugged
+      value: connect
+      verified: false
+    - match:
+        value:
+        - write
+        - file write
+        - copy
+        - file copied
+      value: write
+      verified: false
+    default: other
+  device_type:
+    reads:
+    - device.class
+    rows:
+    - match:
+        value:
+        - hid
+        - human interface device
+      value: hid
+      verified: false
+    - match:
+        value: keyboard
+      value: keyboard
+      verified: false
+    - match:
+        value: mouse
+      value: mouse
+      verified: false
+    - match:
+        value: composite
+      value: composite
+      verified: false
+    - match:
+        value: network adapter
+      value: network adapter
+      verified: false
+    - match:
+        value:
+        - storage
+        - mass storage
+        - removable storage
+        - usb storage
+      value: storage
+      verified: false
+    default: other
+  address_zone:
+    reads:
+    - src.ip
+    rows:
+    - match:
+        cidr_param: internal_networks
+      value: internal
+      verified: true
+      note: The customer's internal ranges (parameter internal_networks).
+    default: external

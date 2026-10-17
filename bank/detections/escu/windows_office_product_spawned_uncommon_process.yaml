@@ -14,13 +14,10 @@ sigma_refs:
 - id: 438025f9-5856-4663-83f7-52f878a70a50
   title: Suspicious Microsoft Office Child Process
   relation: equivalent
-required_alert_fields:
-- _time
-- dest
-- parent_process_guid
-- parent_process_name
+required_roles:
+- event
+- host
 - process
-- process_name
 intent: Detects an Office application spawning a shell, script host or LOLBin (cmd, PowerShell, wscript, cscript, mshta, rundll32, regsvr32, certutil, bitsadmin, wmic) from process creation logs.
 fp_quality: none
 notes: 'fp_quality none: The source rule gives no benign cause. The tested causes (routine business macros and add-ins) come from analyst practice and need review. Command-line and registry-value baselines
@@ -29,46 +26,54 @@ explanations:
 - BE-0007
 - BE-0008
 fingerprint:
-- dest
-- parent_process_name
-- process_name
-- process
+- role:host.name
+- role:process.parent_name
+- role:process.name
+- role:process.command_line
 fingerprint_influence:
-  dest:
+  role:host.name:
     rating: low
     reason: Host that reported the event.
-  parent_process_name:
+  role:process.parent_name:
     rating: high
     reason: File name the attacker can choose.
-  process_name:
+  role:process.name:
     rating: high
     reason: File name the attacker can choose.
-  process:
+  role:process.command_line:
     rating: high
     reason: Command line the attacker writes.
-precedent_entity: dest
-precedent_validity: 24h
+precedent_entity: role:host.name
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:dest
+    entity: role:host.name
   attacker_influence:
     rating: low
-    reason: An attacker cannot freely reproduce dest in the fingerprint.
+    reason: An attacker cannot freely reproduce the fingerprint's host.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
   guards:
   - question: Q-0045
     then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
 - step: 2
   question: Q-0014
+  rule:
+    gte:
+      param: entity_baseline_min_days
   on_yes: flag
   on_no: next
   on_unknown: next
 - step: 3
   question: Q-0015
+  rule:
+    gte:
+      param: org_prevalence_min_hosts
   on_yes: flag
   on_no: escalate
   on_unknown: flag

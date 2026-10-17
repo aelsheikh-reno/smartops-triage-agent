@@ -5,6 +5,7 @@
 #                         Never used for high-risk families (hack tools, credential dumpers, ransomware, web shells, exploit frameworks,
 #                         RATs, remote-admin tools, miners, proxyware, cracks): those escalate even when blocked.
 #   inherit               (Q0 only) take the disposition and reason of the cited precedent
+#   flag                  (runtime only) a reason an alert flags before or outside its flow; never a close
 # Outcome grammar for flow steps: next | close:<disposition>:<reason_code> | escalate | flag
 #   flag = stop and hand to an analyst with no verdict (missing context on a decisive question)
 #   An unknown answer never closes an alert.
@@ -18,6 +19,7 @@ reason_codes:
 - code: admin_activity_baselined
   disposition: benign_true_positive
   description: IT admin account doing activity it routinely does on this host.
+  retired: Not used since the bank migration; group membership was its only low-rated yes, which can no longer carry a close.
 - code: approved_change
   disposition: benign_true_positive
   description: Covered by an approved change ticket or maintenance window for this host or user.
@@ -117,3 +119,7 @@ reason_codes:
 - code: no_data_transferred
   disposition: benign_true_positive
   description: Device connected; the control recorded zero files written.
+- code: entity_missing
+  disposition: flag
+  description: A role the detection requires (required_roles, or the precedent entity) could not be filled by the normalizer. The alert flags, and the normalizer opens a fix ticket for the rule's entity mapping or field extraction. It never guesses an entity.
+  fix_ticket: true

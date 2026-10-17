@@ -1,14 +1,14 @@
 id: Q-0014
-text: Has the same normalized command line, with the same parent binary (hash or signer plus path), run on this host on at least 3 distinct days in the 30 days before the alert window?
+text: Has the same normalized command line, with the same parent binary (hash or signer plus path), run on this host on at least the customer's minimum number of distinct days in the lookback before the
+  alert window?
 tests: BE-0007
 capability:
   name: entity.baseline
   inputs:
-    entity: value:dest
-    behavior: ran the normalized command line value:process from the binary of process:parent_process_guid
-  params:
-    min_days: 3
-    lookback: 30d
+    entity: role:host.name
+    behavior: ran the normalized command line role:process.command_line from the binary of entity:parent_process
+    lookback_days:
+      param: entity_baseline_lookback_days
 attacker_influence:
   rating: high
   reason: The command line is attacker-chosen; a routine command can be replayed or its script tampered with.
@@ -20,3 +20,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 3
+kind: triage

@@ -6,10 +6,10 @@ capability:
   inputs:
     list: CF-0024
     entity:
-    - value:signature
-    - value:src
-    - value:dest
-    at_time: value:_time
+    - role:reporting_control.signature
+    - role:src.ip
+    - role:dest.ip
+    at_time: role:event.time
 attacker_influence:
   rating: none
   reason: Approved tuning record with reason and expiry; never matched on signature alone.
@@ -23,3 +23,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

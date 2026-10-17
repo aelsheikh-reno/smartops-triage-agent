@@ -15,45 +15,47 @@ sigma_refs:
 - id: 7aaaf4b8-e47c-4295-92ee-6ed40a6f60c8
   title: Vulnerable Driver Load
   relation: closest
-required_alert_fields:
-- ImagePath
-- _time
-- dest
+required_roles:
+- file
+- event
+- host
 intent: Detects a kernel driver service install (7045) whose file name matches a vulnerable-driver catalogue, from Windows System logs.
 fp_quality: good
 explanations:
 - BE-0015
 - BE-0014
 fingerprint:
-- dest
-- ImagePath
-- driver_hash
+- role:host.name
+- role:file.path
+- role:file.sha256
 fingerprint_influence:
-  dest:
+  role:host.name:
     rating: low
     reason: Host that reported the event.
-  ImagePath:
+  role:file.path:
     rating: high
     reason: Path the attacker can choose.
-  driver_hash:
+  role:file.sha256:
     rating: low
     reason: Computed by the sensor.
-precedent_entity: dest
-precedent_validity: 7d
+precedent_entity: role:host.name
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:dest
+    entity: role:host.name
   attacker_influence:
     rating: low
-    reason: An attacker cannot freely reproduce dest, driver_hash in the fingerprint.
+    reason: An attacker cannot freely reproduce the fingerprint's host, driver hash.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
   guards:
   - question: Q-0045
     then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
 - step: 2
   question: Q-0025
   on_yes: close:benign_true_positive:approved_driver_exception
@@ -66,11 +68,11 @@ flow:
   on_unknown: next
 - step: 4
   question: Q-0019
+  bind:
+    entity: entity:file
   on_yes: flag
   on_no: escalate
   on_unknown: flag
-  bind:
-    entity: file:ImagePath
 source:
   repo: splunk/security_content
   path: detections/endpoint/windows_vulnerable_driver_installed.yml
@@ -80,3 +82,5 @@ status: draft
 version: 6
 notes: The source rule matches the driver catalogue on file name only. A hash miss in the driver catalogue plus a trusted signer is not enough to call it a name collision (vulnerable drivers are trusted-signed
   and the catalogue is incomplete), so that case flags.
+parameters:
+  precedent_validity_hours: 72

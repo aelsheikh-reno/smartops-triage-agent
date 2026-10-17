@@ -18,45 +18,47 @@ sigma_refs:
 - id: f376c8a7-a2d0-4ddc-aa0c-16c17236d962
   title: HackTool - Bloodhound/Sharphound Execution
   relation: closest
-required_alert_fields:
-- _time
-- dest
-- process_hash
+required_roles:
+- event
+- host
+- process
 - user
 intent: Detects SharpHound (BloodHound collector) execution by process or original file name from process creation logs.
 fp_quality: none
 explanations:
 - BE-0016
 fingerprint:
-- dest
-- user
-- process_hash
+- role:host.name
+- role:user.name
+- role:process.sha256
 fingerprint_influence:
-  dest:
+  role:host.name:
     rating: low
     reason: Host that reported the event.
-  user:
+  role:user.name:
     rating: low
     reason: Account recorded by the OS.
-  process_hash:
+  role:process.sha256:
     rating: low
     reason: Computed by the sensor; reproducing it means running the same binary.
-precedent_entity: dest
-precedent_validity: 72h
+precedent_entity: role:host.name
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:dest
+    entity: role:host.name
   attacker_influence:
     rating: low
-    reason: An attacker cannot freely reproduce dest, user, process_hash in the fingerprint.
+    reason: An attacker cannot freely reproduce the fingerprint's host, user, process hash.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
   guards:
   - question: Q-0045
     then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
 - step: 2
   question: Q-0026
   on_yes: close:benign_true_positive:authorized_security_test
@@ -69,3 +71,5 @@ source:
 license: Apache-2.0
 status: draft
 version: 6
+parameters:
+  precedent_validity_hours: 72

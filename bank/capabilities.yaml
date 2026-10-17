@@ -1,221 +1,636 @@
-# Capabilities the agent may ask the MCP server for. The server maps each one to whatever
-# customer tools exist; the bank never names tools or carries queries.
+# Capabilities the Triage agent and the other agents may ask the Tool Broker for (docs/broker-questions.md).
+# The broker maps each one to the customer's frozen recipes and tools; the bank never names tools or carries queries.
 #
-# Entity references used in inputs:
-#   process:<field>  the process identified by the GUID in <field>
-#   module:<field>   the module (DLL or registered file) loaded by the process GUID in <field>
-#   file:<field>     the file at the path in <field>
-#   value:<field>    a literal alert value (or a derived field)
-# File-typed entities are resolved to hash and signer by the server when a list's match_rule needs them.
+# References used in inputs (tools/roles.py; roles are those of docs/intake/normalized-alert-v1.md):
+#   role:<role>.<attr>   a value of the normalized alert, e.g. role:host.asset_id
+#   entity:<kind>        an entity the broker resolves (hash, signer): process, parent_process, module, file, subject
+#   derived:<name>       a value the detection derives from roles (derived_fields)
+#   alert:fingerprint    the detection's fingerprint for this alert
+#   bind:<name>          a placeholder each flow step must bind
+# The bank never names a SIEM, product or schema field; validate rejects known field names.
 
 answer_contract:
-  answer: yes | no | unknown
-  unknown_reason: no_capability | unavailable | no_data   # required when answer is unknown
-  evidence: values compared, matched list entry ids, counts, and verified flag of any seed entry used
-  source_tool: opaque identifier of the tool the server used; recorded for audit, never interpreted by the bank
-  observed_at: RFC3339 timestamp of the data the answer is based on
+  value: one value of the capability's answer type (answer.type); for count answers with components, one count per component
+  status: answered | unknown | source_unavailable | sources_disagree
+  provenance:
+    source: the customer's authoritative source for the capability (opaque id; never interpreted by the bank)
+    observed_at: RFC3339 time of the data the answer is based on
+    ttl: seconds the answer may be cached for the entity
+    recipe_version: frozen recipe that produced the answer (or live, which can only raise scrutiny)
+    evidence_link: link to the raw evidence for the analyst and the decision log; raw text never reaches the Triage agent or a model
+answer_types:
+  bool: true or false; the step answers yes or no directly
+  count: a non-negative integer (or one per component); the step's rule compares it with a Triage-side parameter
+  number: a number; the step's rule compares it with a Triage-side parameter
+  enum: one value from the capability's (or alert class's) fixed list; the step's rule says which values mean yes and which unknown
+  time: an RFC3339 time
+status_semantics:
+  answered: the step's rule turns the value into yes or no (or unknown for enum values the rule lists as unknown)
+  unknown: 'no_data: follow the step''s on_unknown'
+  source_unavailable: never closes. Stop and flag; the detection runs in Recommend until the capability is healthy. Never read as no hit.
+  sources_disagree: 'two sources gave different answers: never closes; the alert flags'
+  no_capability: 'resolved per customer at onboarding: the question is disabled, its step follows on_unknown without a call, and it appears in the coverage report. A question whose needs.coverage item is
+    missing from the customer''s coverage report is no_capability too.'
+step_rules: 'A step (or guard) on a question whose answer is not bool carries a rule, applied by the Triage agent: gte / lte compare a count or number with a parameter (or 0); yes lists the enum values
+  (or a list parameter) that mean yes, yes_unless the values that mean no, unknown the values that mean unknown; any other enum value means no. Thresholds live only here, as parameters with bounds (bank/parameters.yaml),
+  never in a question or recipe.'
+guard_semantics: 'A step may carry guards: extra checks that run only when the step reaches a close or flag outcome. Each guard names a question, the answers that trigger it (when, default [yes]), the result
+  (then: flag or escalate), the outcomes it attaches to (applies_to: close and/or flag, default [close]; never escalate) and, for list.lookup steps, optionally the matched entry types it applies to (if_entry_type).
+  Guards only raise: close becomes flag or escalate, flag becomes escalate, never the reverse. All applicable guards run and the strongest result wins (escalate > flag), whatever their order. An unknown
+  guard answer raises to at least flag. A guard that triggers on no means a close needs a yes from it. Guard calls count against the call budget on the path they belong to.
 
-unknown_semantics:
-  no_data: follow the step's on_unknown.
-  unavailable: never closes. Stop and flag; the detection runs in Recommend until the capability is healthy.
-  no_capability: resolved per customer at onboarding. The question is disabled for that customer, its step follows on_unknown without a call, and it appears in the coverage report. A question whose needs.coverage item is missing from the customer's coverage report is no_capability too.
-guard_semantics: >
-  A step may carry guards: extra checks that run only when the step reaches a close or flag outcome.
-  Each guard names a question, the answers that trigger it (when, default [yes]), the result (then: flag or escalate),
-  the outcomes it attaches to (applies_to: close and/or flag, default [close]; never escalate) and, for list.lookup steps,
-  optionally the matched entry types it applies to (if_entry_type). Guards only raise: close becomes flag or escalate,
-  flag becomes escalate, never the reverse. All applicable guards run and the strongest result wins (escalate > flag),
-  whatever their order. An unknown guard answer raises to at least flag. A guard that triggers on no means a close needs
-  a yes from it. Guard calls count against the call budget on the path they belong to.
-attacker_influence_scale: >
-  none: records the attacker cannot touch (approved change tickets, exception records).
-  low: OS-verified or control-recorded facts.
-  medium: control-recorded facts that can be forged in transit or by a local administrator; cannot carry a close on its own.
-  high: attacker-chosen values (process names, command lines, sender addresses, URLs).
-  Every path to a close must rest on at least one yes rated none or low.
+  '
+attacker_influence_scale: 'none: records the attacker cannot touch (approved change tickets, exception records). low: OS-verified or control-recorded facts. medium: control-recorded facts that can be forged
+  in transit or by a local administrator; cannot carry a close on its own. high: attacker-chosen values (process names, command lines, sender addresses, URLs). Every path to a close must rest on at least
+  one yes rated none or low.
+
+  '
 source_profiles:
   direct: alert retrieved from the product's own API or cloud console
   forwarded: alert forwarded over syslog or a relay; fields can be forged in transit
-  note: Each vendor family's profile is recorded at onboarding. A question may rate its influence per profile (by_source); a close that lacks a none/low yes under the customer's profile becomes a flag at runtime.
+  note: Each vendor family's profile is recorded at onboarding. A question may rate its influence per profile (by_source); a close that lacks a none/low yes under the customer's profile becomes a flag at
+    runtime.
 unverified_seed: A yes whose evidence rests on a seed entry with verified false taints the flow. That step, and any later close reached through it, becomes flag until onboarding verifies the entry.
-
-coverage_items:   # what a customer's coverage report must show before a question may answer (otherwise no_capability)
+coverage_items:
   device_control_write_events: The customer's device-control product also reports file-write events. Without them a connect event that records zero files written proves nothing.
-auto_requirements:   # per-customer conditions a detection needs before it may reach Auto; until met it is capped at Recommend for that customer
+auto_requirements:
   vendor_mapping_verified: Every row of docs/normalization.md for the products this customer runs in the detection's family is verified, as recorded by the onboarding check "Check vendor alerts are normalized".
 
-scope:   # enforced by the MCP server, not by the agent
-  entities: only entities named in the alert (and derived fields parsed from it)
-  windows: event lookups use the fixed ±24h alert window; baseline and prevalence capabilities use their declared lookbacks, always ending before the alert window (or, for org.prevalence with window alert_window, the alert window itself), and return counts, not raw events
-  access: read-only, except list.propose_update, which only creates a proposal
-  timeout_seconds: 10            # a timeout is unknown_reason unavailable
-  max_calls_per_alert: 6         # includes Q0; alert.field and internal hash or signer resolution do not count; exceeding it flags the alert
+scope:   # enforced by the Tool Broker per caller (docs/design-decisions.md §4)
+  profiles:
+    triage: the alert's entities and fingerprint (and derived values parsed from the alert), 24h look-back ending at the alert time; baselines and prevalence use their declared lookbacks, ending before the
+      triage window, and return counts, not raw events
+    falsifier: may look forward up to 72h after the close, pivot to other entities and read raw logs (after the fact, never in the triage path)
+    detection_engineering: rule-wide and historical (for example 30 days, with a row cap), never per alert
+    use_case_manager: read-only reads of fact metadata, list usage, closure history and rule inventory; writes only through list.propose_update
+  refused: a call outside the caller's profile is refused and logged
+  access: read-only, except list.propose_update (a proposal) and the SIEM write-back actions on the broker's fixed allowlist
+  timeout_seconds: 10
+  max_calls_per_alert: 6
+  budget_note: 'includes Q0 and every step and guard on the worst path; context questions are asked once per entity and do not count; alert.class, alert.measure (source: alert) and internal hash or signer
+    resolution do not count; exceeding it flags the alert'
+
+# Classes of alert values (alert.class). Value tables under bank/recipes/value_tables/ map each product's raw values to these.
+alert_classes:
+  av_execution_state:
+    reads:
+    - reporting_control.action_raw
+    values:
+    - pre_execution
+    - ran
+    - unknown
+    default: unknown
+    description: Whether the file was stopped before it ran. Post-execution remediation, quarantine without timing, pending reboot and partial remediation map to unknown.
+  av_risk_class:
+    reads:
+    - reporting_control.category
+    - reporting_control.signature
+    values:
+    - high_risk
+    - low_risk
+    - other
+    - unknown
+    default: other
+    description: Risk class of an antivirus or EDR detection from its class and name together. Test files (EICAR and similar) map to other, so they never close as low risk.
+  control_action:
+    reads:
+    - reporting_control.action_raw
+    default: other
+    values:
+    - allowed
+    - delivered
+    - detected
+    - alerted
+    - blocked
+    - dropped
+    - denied
+    - rejected
+    - prevented
+    - reset
+    - deleted
+    - quarantined
+    - held
+    - pending
+    - pending release
+    - encrypted pending
+    - justification pending
+    - other
+    description: What the reporting control did, normalized.
+  web_category:
+    reads:
+    - web.category
+    default: other
+    values:
+    - advertising
+    - web ads
+    - streaming media
+    - social networking
+    - games
+    - shopping
+    - entertainment
+    - sports
+    - travel
+    - news and media
+    - malware
+    - malicious
+    - phishing
+    - command and control
+    - botnet
+    - spyware
+    - cryptomining
+    - newly registered
+    - newly observed
+    - parked
+    - dynamic dns
+    - proxy avoidance
+    - uncategorized
+    - unknown
+    - unrated
+    - not rated
+    - other
+    description: Normalized web-filtering category. Onboarding maps each product's category list onto these.
+  ids_class:
+    reads:
+    - reporting_control.category
+    default: other
+    values:
+    - attempted-admin
+    - attempted-user
+    - successful-admin
+    - successful-user
+    - web-application-attack
+    - shellcode-detect
+    - trojan-activity
+    - exploit-kit
+    - command-and-control
+    - attempted-dos
+    - successful-dos
+    - attempted-recon
+    - successful-recon-limited
+    - successful-recon-largescale
+    - network-scan
+    - policy-violation
+    - misc-activity
+    - misc-attack
+    - bad-unknown
+    - malware-cnc
+    - exploit
+    - other
+    description: Normalized intrusion-detection signature class.
+  http_status_class:
+    reads:
+    - web.status
+    values:
+    - success
+    - redirect
+    - client_error
+    - server_error
+    - other
+    default: other
+    description: HTTP status class of the application's answer.
+  user_agent_class:
+    reads:
+    - web.user_agent
+    values:
+    - browser
+    - other
+    default: other
+    description: Whether the user agent is a mainstream browser; scripts, tools and empty values are other.
+  severity:
+    reads:
+    - reporting_control.severity
+    values:
+    - informational
+    - low
+    - medium
+    - high
+    - critical
+    - other
+    default: other
+    description: Normalized severity the reporting control assigned.
+  device_event:
+    reads:
+    - device.event_type
+    values:
+    - connect
+    - write
+    - other
+    default: other
+    description: 'Device-control event type: a device connection, or data written to the device.'
+  device_type:
+    reads:
+    - device.class
+    default: other
+    values:
+    - storage
+    - hid
+    - keyboard
+    - mouse
+    - composite
+    - network adapter
+    - other
+    description: Normalized device class.
+  address_zone:
+    reads:
+    - src.ip
+    values:
+    - internal
+    - external
+    default: external
+    description: Whether the address is inside the customer's internal networks (parameter internal_networks, read by the recipe).
 
 capabilities:
-  - name: case.precedent
-    kind: lookup
-    inputs: [fingerprint, entity, current_action (optional)]
-    yes_means: An alert with the same fingerprint was closed by an original decision (an analyst or a non-precedent flow step) with a recorded reason inside the validity window, the precedent entity is not a crown jewel, and no other alert hit that entity in the window. A precedent closed as mitigated_true_positive matches only when current_action shows the current alert was also blocked.
-    no_means: No such closure.
-    escalate_only: false
-
-  - name: list.lookup
-    kind: lookup
-    inputs: [list, entity, host (optional), at_time (optional)]
-    yes_means: The entity matches an entry of the named context list under that list's match_rule (file entities match on sha256, or signer plus path), the entry's host scope includes host when given, and the entry is in force at at_time when the list is time-bound.
-    no_means: No entry matches.
-    escalate_only: false
-
-  - name: file.hash
-    kind: attribute
-    inputs: [entity, reference]
-    yes_means: The file's SHA256 was obtained and equals the reference value or a reference list entry.
-    no_means: The hash was obtained and does not match.
-    escalate_only: false
-    notes: Used directly when a question needs only a hash comparison; also resolved inside list.lookup.
-
-  - name: file.signer
-    kind: attribute
-    inputs: [entity, trusted_list]
-    yes_means: The file has a valid code signature from a publisher on trusted_list and the binary is not on that list's excluded_binaries.
-    no_means: The signature is missing, invalid, from an untrusted publisher, or the binary is excluded.
-    escalate_only: false
-
-  - name: file.reputation
-    kind: reputation
-    inputs: [entity, sources]
-    yes_means: A reputation source (including bank seed lists such as known-bad driver samples) marks the file's hash as known vulnerable or malicious.
-    no_means: No source marks it. Not benign evidence.
-    escalate_only: true   # a hit escalates or flags, never closes; a miss is never benign evidence
-
-  - name: ip.reputation
-    kind: reputation
-    inputs: [ip]
-    yes_means: A reputation source marks the IP as malicious.
-    no_means: No source marks it. Not benign evidence.
-    escalate_only: true   # a hit escalates or flags, never closes; a miss is never benign evidence
-
-  - name: identity.groups
-    kind: lookup
-    inputs: [user, groups]
-    yes_means: The account is one of, or a direct or nested member of, the named accounts or groups.
-    no_means: It is not.
-    escalate_only: false
-
-  - name: identity.risk
-    kind: anomaly
-    inputs: [user]
-    yes_means: The identity provider rates the account as risky or compromised now.
-    no_means: No risk signal. Not benign evidence.
-    escalate_only: true   # a hit escalates or flags, never closes; a miss is never benign evidence
-
-  - name: entity.baseline
-    kind: baseline
-    inputs: [entity, behavior, min_days, lookback]
-    yes_means: The entity showed the same behavior on at least min_days distinct days in the lookback, which ends before the alert window.
-    no_means: It did not.
-    escalate_only: false
-    notes: Behaviors that name a binary compare by hash, or signer plus path. Command lines are normalized (GUIDs, hex, numbers, temp names, user profile names masked).
-
-  - name: org.prevalence
-    kind: baseline
-    inputs: [pattern, min_hosts, min_weeks, of_weeks, window (optional), exclude_list (optional)]
-    yes_means: The pattern occurred on at least min_hosts distinct hosts, and in at least min_weeks of the of_weeks weeks before the alert window. With window alert_window, it counts hosts inside the alert window instead (min_weeks and of_weeks unused). Hosts in exclude_list (a context list's host scopes, by asset ID) are not counted.
-    no_means: It did not.
-    escalate_only: false
-    notes: window and exclude_list were added so one question can ask whether a file seen on approved analysis hosts also appeared anywhere else, without a new capability.
-
-  - name: change.window
-    kind: lookup
-    inputs: [entities, user (optional), at_time]
-    yes_means: An approved change covers one of the entities at at_time and lists user, or a group user belongs to, as an implementer.
-    no_means: No approved change covers the entity and time, or every covering change lists implementers and the user is not among them (directly or by group).
-    unknown_means: A covering change exists but has no implementer data. Returned as unknown with unknown_reason no_data, so it follows on_unknown and never closes.
-    notes: Group membership is resolved by the server, as identity.groups would. For alerts with no user (network alerts), yes requires the change to name the entity explicitly as a source or target of the change.
-    escalate_only: false
-
-  - name: alert.field
-    kind: local
-    inputs: [field, op, values, unknown_op (optional), unknown_values (optional)]
-    ops: {in: value is one of values (case-insensitive), not_in: value is none of values, gte: numeric value >= values,
-          cidr: address falls in one of the networks in values, matches: value matches the regular expression in values}
-    yes_means: The alert's normalized field satisfies op against values.
-    no_means: The field holds a value that does not satisfy op.
-    escalate_only: false
-    notes: Read from the alert itself, not through the MCP server; does not count against the call budget. Unknown when the field is missing or empty, or when it satisfies unknown_op against unknown_values (states the bank deliberately refuses to judge, such as post-execution remediation). Added because vendor alerts carry the decisive fact (the control's action, the product's detection class) in the alert, and no other capability reads it.
-
-  - name: url.reputation
-    kind: reputation
-    inputs: [entity]
-    yes_means: A reputation source marks a URL or domain in the entity as malicious.
-    no_means: No source marks it. Not benign evidence.
-    escalate_only: true   # a hit escalates or flags, never closes; a miss is never benign evidence
-    notes: Added because file.reputation and ip.reputation cannot take URLs or domains, which drive proxy and email alerts.
-
-  - name: vuln.not_applicable
-    kind: lookup
-    inputs: [host, signature, max_age]
-    yes_means: Vulnerability data no older than max_age shows the host is not affected by the vulnerability the signature targets (product or version absent, or patched).
-    no_means: The host is affected, or the data shows the targeted product present and unpatched.
-    escalate_only: false
-    notes: Unknown when the signature maps to no vulnerability or no recent data exists. Added because no existing capability reads vulnerability-management data, the main benign check for exploit signatures.
-
-  - name: email.message_status
-    kind: lookup
-    inputs: [message_id]
-    yes_means: The message is quarantined or removed from every recipient mailbox now.
-    no_means: At least one copy is still in a mailbox.
-    escalate_only: false
-    notes: Added because no existing capability reads mailbox or mail-security state.
-
-  - name: email.no_interaction
-    kind: lookup
-    inputs: [message_id]
-    yes_means: Click and attachment-open records show no recipient followed a link or opened an attachment from the message.
-    no_means: At least one recipient clicked or opened.
-    escalate_only: false
-    notes: Unknown when click or open records are not collected. Added for the same reason as email.message_status.
-
-  - name: traffic.denied_only
-    kind: lookup
-    inputs: [src, dest, window]
-    yes_means: Every connection from src (to dest, when given) in the alert window was denied; none was allowed or established.
-    no_means: At least one connection was allowed or established.
-    escalate_only: false
-    notes: Added because no existing capability summarises allowed versus denied sessions for an address.
-
-  - name: alert.history
-    kind: lookup
-    inputs: [key, min_count, distinct (optional)]
-    yes_means: At least min_count earlier alerts that already fired inside the triage window share the key (the fingerprint, or a source, destination, user or campaign key); with distinct, at least min_count distinct values of that field among them.
-    no_means: Fewer than min_count such alerts.
-    escalate_only: false
-    notes: Existing alerts only, inside the fixed triage window; never raw logs, so it stays within the triage boundary. Added because case.precedent reads closed cases, entity.baseline and org.prevalence read behaviour before the window, and none counts alerts already fired in the window.
-
-  - name: scan.job_active
-    kind: lookup
-    inputs: [scanner, target, at_time]
-    yes_means: An approved scan job from this scanner address that targets this address was running at at_time.
-    no_means: No such job was running.
-    escalate_only: false
-    notes: Added because the approved-scanner list says who may scan and when, not what a scanner was scanning; only the scanner's own job records show that.
-
-  - name: email.auth
-    kind: lookup
-    inputs: [message_id]
-    yes_means: The message passed DMARC with an aligned SPF or DKIM pass for its From domain.
-    no_means: DMARC failed, or no aligned SPF or DKIM pass.
-    escalate_only: false
-    notes: Added because no existing capability reads sender-authentication results, and sender addresses alone are attacker-chosen.
-
-  - name: list.propose_update
-    kind: write
-    inputs: [list, entry, direction, justification, alert_id]
-    yes_means: The proposal was recorded (reduce_scrutiny, enforcement) or applied (increase_scrutiny).
-    no_means: The proposal was rejected by policy.
-    escalate_only: false
-    flow_use: forbidden   # never a flow step; called after a decision
-    policy:
-      reduce_scrutiny: human approval required, with an owner and an expiry (allowlist additions)
-      increase_scrutiny: may be applied automatically (watchlist additions, removing an allowlist entry); removing an allowlist entry must notify the fact's owner
-      enforcement: human approval required (blocks, isolation)
+- name: precedent.check
+  kind: derived
+  group: context
+  source: context
+  inputs:
+  - fingerprint
+  - entity
+  answer:
+    type: bool
+  yes_means: 'Q0, answered by the Triage agent from context questions C-03, C-04 and C-06 (bank/context_rules.yaml q0): the fingerprint has an audited close, or at least q0_min_independent_closes independent
+    analyst closes, inside the validity window; no other alert on the entity has a higher severity than this one; the precedent entity is not a crown jewel. A mitigated precedent counts only when this alert
+    was also stopped.'
+  no_means: No qualifying precedent.
+  rating_floor: per_detection
+  escalate_only: false
+  notes: 'No broker call of its own: it reads cached context answers. It still counts as one call against the budget, as Q0 always has.'
+- name: case.open
+  kind: lookup
+  group: context
+  inputs:
+  - entity
+  answer:
+    type: bool
+  measures: Whether the entity has an open escalation or case.
+  rating_floor: none
+  escalate_only: false
+- name: entity.alerts
+  kind: lookup
+  group: context
+  inputs:
+  - entity
+  - window
+  - routine_list
+  answer:
+    type: count
+    components:
+    - alerts
+    - distinct_detections
+  measures: Alerts that already fired on the entity in the grouping window, and the number of distinct detections among them. Alerts from (entity, detection) pairs on the routine list are not counted, except
+    alerts of high or critical severity, which always count.
+  rating_floor: none
+  escalate_only: false
+- name: entity.max_severity
+  kind: lookup
+  group: context
+  inputs:
+  - entity
+  - lookback_hours
+  answer:
+    type: enum
+    values:
+    - none
+    - informational
+    - low
+    - medium
+    - high
+    - critical
+  measures: The highest severity of any other alert on the entity in the look-back (none when there is none).
+  rating_floor: none
+  escalate_only: false
+- name: asset.priority
+  kind: lookup
+  group: context
+  inputs:
+  - entity
+  answer:
+    type: enum
+    values:
+    - critical
+    - high
+    - medium
+    - low
+  measures: The asset's priority in the customer's asset data.
+  rating_floor: low
+  escalate_only: false
+- name: asset.crown_jewel
+  kind: lookup
+  group: context
+  inputs:
+  - entity
+  answer:
+    type: bool
+  measures: Whether the asset is on the customer's crown-jewel list.
+  rating_floor: none
+  escalate_only: false
+- name: identity.privileged
+  kind: lookup
+  group: context
+  inputs:
+  - user
+  answer:
+    type: bool
+  measures: Whether the account is privileged in the customer's identity data.
+  rating_floor: low
+  escalate_only: false
+- name: case.precedent
+  kind: lookup
+  group: context
+  inputs:
+  - fingerprint
+  - validity_hours
+  - current_action (optional)
+  answer:
+    type: count
+    components:
+    - audited
+    - independent_analyst
+  measures: 'Closes of this fingerprint inside the validity window by an original decision (an analyst or a non-precedent flow step) with a recorded reason: how many passed audit, and how many independent
+    analyst closes (distinct analysts) there were. A close with reason precedent_match never counts. A mitigated_true_positive close counts only when current_action shows this alert was also stopped.'
+  rating_floor: per_detection
+  escalate_only: false
+- name: list.lookup
+  kind: lookup
+  group: triage
+  inputs:
+  - list
+  - entity
+  - host (optional)
+  - at_time (optional)
+  answer:
+    type: bool
+  yes_means: The entity matches an entry of the named context list under that list's match_rule (file entities match on sha256, or signer plus path), the entry's host scope includes host when given, and
+    the entry is in force at at_time when the list is time-bound.
+  no_means: No entry matches.
+  rating_floor: none
+  escalate_only: false
+- name: file.hash
+  kind: attribute
+  group: triage
+  inputs:
+  - entity
+  - reference
+  answer:
+    type: bool
+  yes_means: The file's SHA256 was obtained and equals the reference value or a reference list entry.
+  no_means: The hash was obtained and does not match.
+  rating_floor: low
+  escalate_only: false
+  notes: Used directly when a question needs only a hash comparison; also resolved inside list.lookup.
+- name: file.signer
+  kind: attribute
+  group: triage
+  inputs:
+  - entity
+  - trusted_list
+  answer:
+    type: bool
+  yes_means: The file has a valid code signature from a publisher on trusted_list and the binary is not on that list's excluded_binaries.
+  no_means: The signature is missing, invalid, from an untrusted publisher, or the binary is excluded.
+  rating_floor: low
+  escalate_only: false
+- name: file.reputation
+  kind: reputation
+  group: triage
+  inputs:
+  - entity
+  - sources
+  answer:
+    type: bool
+  yes_means: A reputation source (including bank seed lists such as known-bad driver samples) marks the file's hash as known vulnerable or malicious.
+  no_means: No source marks it. Not benign evidence.
+  rating_floor: low
+  escalate_only: true
+- name: ip.reputation
+  kind: reputation
+  group: triage
+  inputs:
+  - ip
+  answer:
+    type: bool
+  yes_means: A reputation source marks the IP as malicious.
+  no_means: No source marks it. Not benign evidence.
+  rating_floor: low
+  escalate_only: true
+- name: identity.groups
+  kind: lookup
+  group: triage
+  inputs:
+  - user
+  - groups
+  answer:
+    type: bool
+  yes_means: The account is one of, or a direct or nested member of, the named accounts or groups.
+  no_means: It is not.
+  rating_floor: low
+  escalate_only: false
+- name: identity.risk
+  kind: anomaly
+  group: triage
+  inputs:
+  - user
+  answer:
+    type: bool
+  yes_means: The identity provider rates the account as risky or compromised now.
+  no_means: No risk signal. Not benign evidence.
+  rating_floor: low
+  escalate_only: true
+- name: entity.baseline
+  kind: baseline
+  group: triage
+  inputs:
+  - entity
+  - behavior
+  - lookback_days
+  answer:
+    type: count
+  measures: Distinct days in the lookback, ending before the triage window, on which the entity showed the same behavior.
+  rating_floor: high
+  escalate_only: false
+  notes: Behaviors that name a binary compare by hash, or signer plus path. Command lines are normalized (GUIDs, hex, numbers, temp names, user profile names masked).
+- name: org.prevalence
+  kind: baseline
+  group: triage
+  inputs:
+  - pattern
+  - lookback_weeks
+  - window (optional)
+  - exclude_list (optional)
+  answer:
+    type: count
+  measures: 'With lookback_weeks: the smallest weekly count of distinct hosts showing the pattern across the lookback weeks before the alert window (so a yes needs the pattern on enough hosts in every week).
+    With window alert_window: distinct hosts showing it inside the alert window. Hosts in exclude_list (a context list''s host scopes, by asset ID) are not counted.'
+  rating_floor: none
+  escalate_only: false
+  notes: 'window and exclude_list were added so one question can ask whether a file seen on approved analysis hosts also appeared anywhere else, without a new capability. The old min_weeks (3 of 4 weeks)
+    is replaced by every week of the lookback: stricter, and no threshold reaches the broker.'
+- name: change.window
+  kind: lookup
+  group: triage
+  inputs:
+  - entities
+  - user (optional)
+  - at_time
+  answer:
+    type: bool
+  yes_means: An approved change covers one of the entities at at_time and lists user, or a group user belongs to, as an implementer, and the change's approver is not one of its implementers.
+  no_means: No approved change covers the entity and time, or every covering change lists implementers and the user is not among them (directly or by group).
+  unknown_means: A covering change exists but has no implementer or approver data, or its approver is also an implementer (a self-approved change gives no benign evidence). Returned as unknown, so it follows
+    on_unknown and never closes.
+  rating_floor: low
+  escalate_only: false
+  notes: Group membership is resolved by the server, as identity.groups would. For alerts with no user (network alerts), yes requires the change to name the entity explicitly as a source or target of the
+    change.
+  requires_independent_approver: true
+- name: alert.class
+  kind: alert
+  group: triage
+  source: alert
+  inputs:
+  - class
+  - of (optional)
+  answer:
+    type: enum
+    values_from: alert_classes
+  measures: 'The class of an alert value, from the reporting control''s value table (bank/recipes/value_tables/): the table maps the product''s raw value to one of the class''s fixed values (alert_classes
+    below). A raw value no table row matches maps to the class''s default.'
+  rating_floor: none
+  escalate_only: false
+  notes: 'The normalized alert is a broker source (source: alert): no tool call, no call budget. The Triage agent sees only the class value, never a field name or raw value.'
+- name: alert.measure
+  kind: alert
+  group: triage
+  source: alert
+  inputs:
+  - of
+  answer:
+    type: number
+  measures: A number the reporting control recorded on the alert (for example files written, records matched, indicators in a message).
+  rating_floor: none
+  escalate_only: false
+  notes: 'Source: alert. No tool call, no call budget.'
+- name: url.reputation
+  kind: reputation
+  group: triage
+  inputs:
+  - entity
+  answer:
+    type: bool
+  yes_means: A reputation source marks a URL or domain in the entity as malicious.
+  no_means: No source marks it. Not benign evidence.
+  rating_floor: low
+  escalate_only: true
+  notes: Added because file.reputation and ip.reputation cannot take URLs or domains, which drive proxy and email alerts.
+- name: vuln.not_applicable
+  kind: lookup
+  group: triage
+  inputs:
+  - host
+  - signature
+  - max_age_days
+  answer:
+    type: bool
+  yes_means: Vulnerability data no older than max_age shows the host is not affected by the vulnerability the signature targets (product or version absent, or patched).
+  no_means: The host is affected, or the data shows the targeted product present and unpatched.
+  rating_floor: low
+  escalate_only: false
+  notes: Unknown when the signature maps to no vulnerability or no recent data exists. Added because no existing capability reads vulnerability-management data, the main benign check for exploit signatures.
+- name: email.message_status
+  kind: lookup
+  group: triage
+  inputs:
+  - message
+  answer:
+    type: bool
+  yes_means: The message is quarantined or removed from every recipient mailbox now.
+  no_means: At least one copy is still in a mailbox.
+  rating_floor: low
+  escalate_only: false
+  notes: Added because no existing capability reads mailbox or mail-security state.
+- name: email.no_interaction
+  kind: lookup
+  group: triage
+  inputs:
+  - message
+  answer:
+    type: bool
+  yes_means: Click and attachment-open records show no recipient followed a link or opened an attachment from the message.
+  no_means: At least one recipient clicked or opened.
+  rating_floor: low
+  escalate_only: false
+  notes: Unknown when click or open records are not collected. Added for the same reason as email.message_status.
+- name: traffic.denied_only
+  kind: lookup
+  group: triage
+  inputs:
+  - source
+  - destination
+  - window
+  answer:
+    type: bool
+  yes_means: Every connection from the source (to the destination, when given) in the alert window was denied; none was allowed or established.
+  no_means: At least one connection was allowed or established.
+  rating_floor: low
+  escalate_only: false
+  notes: Added because no existing capability summarises allowed versus denied sessions for an address.
+- name: alert.history
+  kind: lookup
+  group: triage
+  inputs:
+  - key
+  - distinct (optional)
+  answer:
+    type: count
+  measures: Earlier alerts that already fired inside the triage window and share the key (or, with distinct, the number of distinct values of that role among them).
+  rating_floor: none
+  escalate_only: false
+  notes: Existing alerts only, inside the fixed triage window; never raw logs, so it stays within the triage boundary. Added because case.precedent reads closed cases, entity.baseline and org.prevalence
+    read behaviour before the window, and none counts alerts already fired in the window.
+- name: scan.job_active
+  kind: lookup
+  group: triage
+  inputs:
+  - scanner
+  - target
+  - at_time
+  answer:
+    type: bool
+  yes_means: An approved scan job from this scanner address that targets this address was running at at_time.
+  no_means: No such job was running.
+  rating_floor: none
+  escalate_only: false
+  notes: Added because the approved-scanner list says who may scan and when, not what a scanner was scanning; only the scanner's own job records show that.
+- name: email.auth
+  kind: lookup
+  group: triage
+  inputs:
+  - message
+  answer:
+    type: bool
+  yes_means: The message passed DMARC with an aligned SPF or DKIM pass for its From domain.
+  no_means: DMARC failed, or no aligned SPF or DKIM pass.
+  rating_floor: low
+  escalate_only: false
+  notes: Added because no existing capability reads sender-authentication results, and sender addresses alone are attacker-chosen.
+- name: list.propose_update
+  kind: write
+  group: write
+  inputs:
+  - list
+  - entry
+  - direction
+  - justification
+  - alert_id
+  answer:
+    type: bool
+  yes_means: The proposal was recorded (reduce_scrutiny, enforcement) or applied (increase_scrutiny).
+  no_means: The proposal was rejected by policy.
+  rating_floor: none
+  escalate_only: false
+  flow_use: forbidden
+  policy:
+    reduce_scrutiny: human approval required, with an owner and an expiry (allowlist additions)
+    increase_scrutiny: may be applied automatically (watchlist additions, removing an allowlist entry); removing an allowlist entry must notify the fact's owner
+    enforcement: human approval required (blocks, isolation)

@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Export the runtime bundle: what the triage agent and MCP server receive.
+"""Export the runtime bundle: what the Triage agent and the Tool Broker receive.
 
 Offline metadata stays out: data_source, sigma_logsource, sigma_refs, source, license,
-text_origin, legal_review and source identifiers. Seed data (bank/seeds/), the use-case
-catalog and the pilot list are not part of the bundle.
+text_origin, legal_review and source identifiers. Seed data (bank/seeds/), vendor value tables
+(bank/recipes/, recipe data that ships with the broker's recipes), the use-case catalog and the pilot
+list are not part of the bundle.
 
 Usage: tools/export_bundle.py [out.json]   (default: build/runtime_bundle.json)
 """
@@ -32,7 +33,10 @@ def build(b=None):
     return strip({
         "bundle_version": 1,
         "answer_contract": caps["answer_contract"],
-        "unknown_semantics": caps["unknown_semantics"],
+        "answer_types": caps["answer_types"],
+        "status_semantics": caps["status_semantics"],
+        "step_rules": caps["step_rules"],
+        "alert_classes": caps["alert_classes"],
         "unverified_seed": caps["unverified_seed"],
         "guard_semantics": caps["guard_semantics"],
         "attacker_influence_scale": caps["attacker_influence_scale"],
@@ -40,6 +44,9 @@ def build(b=None):
         "scope": caps["scope"],
         "capabilities": caps["capabilities"],
         "parameters": b["parameters"],
+        "parameter_precedence": b["precedence"],
+        "context_questions": list(b["context_questions"].values()),
+        "context_rules": b["context_rules"],
         "reason_codes": list(b["reason_codes"].values()),
         "explanations": [{k: e[k] for k in ("id", "name", "description")} for e in b["explanations"].values()],
         "facts": list(b["facts"].values()),

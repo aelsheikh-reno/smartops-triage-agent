@@ -2,12 +2,10 @@ id: Q-0065
 text: Is the device-control event a device connection (not a file write)?
 tests: BE-0029
 capability:
-  name: alert.field
+  name: alert.class
   inputs:
-    field: value:event_type
-    op: in
-    values:
-      param: usb_connect_event_values
+    class: device_event
+    of: role:device.event_type
 attacker_influence:
   rating: low
   reason: Recorded by the endpoint control.
@@ -18,3 +16,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

@@ -1,0 +1,21 @@
+id: C-05
+text: What is the asset's priority?
+kind: context
+capability:
+  name: asset.priority
+  inputs:
+    entity: role:host.asset_id
+feeds:
+- priority
+attacker_influence:
+  rating: low
+  reason: Asset data maintained by the customer.
+when_not_answered: The asset is treated as critical for the window.
+source:
+- docs/intake/context-questions.md
+- docs/design-decisions.md §5
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

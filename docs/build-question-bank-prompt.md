@@ -10,7 +10,7 @@ Layout:
 - tools/validate (refs exist, ≤5 steps, valid outcomes, required fields, license, capability rules), tools/load_sql (YAML → SQLite, Postgres-compatible: detections, questions, flow_steps, question_needs, context_facts), tools/rank_facts (facts ranked by detections unblocked)
 
 Question fields: id, text, tests, capability (exactly one, from bank/capabilities.yaml), needs, source, license, status, version.
-Detection fields: id (escu:/sigma:/elastic:), name, techniques, data_source, required_alert_fields, intent, fp_quality (good|vague|none), flow. Every flow starts with Q0.
+Detection fields: id (escu:/sigma:/elastic:), name, techniques, data_source, required_roles (roles of the normalized alert, never field names), intent, fp_quality (good|vague|none), flow. Every flow starts with Q0.
 
 Steps (stop after each):
 1. Ask me the pilot domain: endpoint Windows, identity/authentication, or network. Select ~25 detections.

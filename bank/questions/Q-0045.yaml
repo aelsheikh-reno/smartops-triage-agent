@@ -1,12 +1,10 @@
 id: Q-0045
-text: Have at least the customer's threshold (default 3) of earlier alerts with this fingerprint already fired in the triage window?
+text: Have at least the customer's threshold of earlier alerts with this fingerprint already fired in the triage window?
 tests: BE-0037
 capability:
   name: alert.history
   inputs:
-    key: value:fingerprint
-    min_count:
-      param: alert_history_min_count
+    key: alert:fingerprint
 attacker_influence:
   rating: none
   reason: Counts alerts already raised; the activity cannot remove them.
@@ -17,3 +15,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

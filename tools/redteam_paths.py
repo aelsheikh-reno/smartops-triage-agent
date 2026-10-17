@@ -12,6 +12,10 @@ failure fails the gate. It is checked again under the forwarded profile (alert r
 where questions with by_source ratings may drop to medium: closes that fail there are reported as
 closes that become flags for customers whose alerts arrive forwarded.
 
+Identity group membership is never the only none/low yes on a close path: a path whose only
+none/low yes answers come from identity.groups questions fails, because changing group membership
+is exactly what an attacker with directory rights can do.
+
 It is also checked under the fingerprint_fallback profile: a detection whose fingerprint field can
 fall back (for example asset ID to hostname) rates Q0 at its fallback rating; precedent closes that
 lose their none/low yes are reported as closes that flag when the fallback is used.
@@ -25,6 +29,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bank as B  # noqa: E402
 
 OK = ("none", "low")
+NEVER_SOLE = {"identity.groups"}
 
 
 def check(b, d, profile="direct"):
@@ -33,7 +38,8 @@ def check(b, d, profile="direct"):
         if not outcome.startswith("close"):
             continue
         yes = B.yes_ratings(b, path, outcome, guards, profile)
-        results.append((any(r in OK for _, r in yes), path, outcome, yes))
+        strong = [qid for qid, r in yes if r in OK and b["questions"][qid]["capability"]["name"] not in NEVER_SOLE]
+        results.append((bool(strong), path, outcome, yes))
     return results
 
 

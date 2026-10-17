@@ -6,9 +6,9 @@ capability:
   inputs:
     list: CF-0022
     entity:
-    - value:user
-    - value:device_class
-    at_time: value:_time
+    - role:user.name
+    - role:device.class
+    at_time: role:event.time
 attacker_influence:
   rating: none
   reason: Approved exception record with an owner and expiry.
@@ -22,3 +22,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

@@ -4,8 +4,8 @@ tests: BE-0028
 capability:
   name: traffic.denied_only
   inputs:
-    src: value:src
-    window: value:_time
+    source: role:src.ip
+    window: role:event.time
 attacker_influence:
   rating: low
   reason: Session outcomes come from the network control's own records.
@@ -16,3 +16,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 2
+kind: triage

@@ -2,12 +2,10 @@ id: Q-0057
 text: Is the blocked site in a high-risk web category (malware, phishing, command and control, botnet, newly registered and similar listed categories)?
 tests: BE-0027
 capability:
-  name: alert.field
+  name: alert.class
   inputs:
-    field: value:category
-    op: in
-    values:
-      param: web_high_risk_categories
+    class: web_category
+    of: role:web.category
 attacker_influence:
   rating: low
   reason: Category assigned by the filtering service.
@@ -20,3 +18,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

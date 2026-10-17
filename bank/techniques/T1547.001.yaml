@@ -1,50 +1,50 @@
 id: T1547.001
 name: Registry Run Keys / Startup Folder
 attack_version: '20.0'
+required_roles:
+- host
+- user
+- process
+- registry
+- event
 template: persistence_registry
 covers: Autostart registry persistence
 max_mode: recommend
-assumed_alert_fields:
-- dest
-- user
-- process_guid
-- registry_path
-- registry_value_name
-- registry_value_data
-- _time
 fingerprint:
-- dest
-- user
+- role:host.name
+- role:user.name
 fingerprint_influence:
-  dest:
+  role:host.name:
     rating: low
     reason: Host that reported the event.
-  user:
+  role:user.name:
     rating: low
     reason: Account recorded by the OS.
-precedent_entity: dest
-precedent_validity: 24h
+precedent_entity: role:host.name
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:dest
+    entity: role:host.name
   attacker_influence:
     rating: low
-    reason: An attacker cannot freely reproduce dest, user in the fingerprint.
+    reason: An attacker cannot freely reproduce the fingerprint's host, user.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
   guards:
   - question: Q-0045
     then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
 - step: 2
   question: Q-0013
+  bind:
+    entity: entity:process
   on_yes: close:benign_true_positive:sanctioned_management_tool
   on_no: next
   on_unknown: next
-  bind:
-    entity: process:process_guid
 - step: 3
   question: Q-0004
   on_yes: close:benign_true_positive:approved_change
@@ -52,6 +52,9 @@ flow:
   on_unknown: next
 - step: 4
   question: Q-0018
+  rule:
+    gte:
+      param: org_prevalence_min_hosts
   on_yes: flag
   on_no: escalate
   on_unknown: flag

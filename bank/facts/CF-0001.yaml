@@ -3,16 +3,16 @@ name: sanctioned_deployment_tools
 description: Software deployment and endpoint management tools the customer uses to run commands remotely (configuration management, patching and software distribution platforms).
 fields:
 - tool_name
-- process_path
+- install_path
 - signer
 - sha256
-match_rule: sha256, or signer plus process_path. Never name or path alone.
+match_rule: sha256, or signer plus install_path. Never name or path alone.
 collected_by: customer
 supply_effort: medium
 supply_effort_reason: Needs each tool's hash, or signer plus install path.
 example:
   tool_name: Example deployment agent
-  process_path: C:\Program Files\ExampleDeploy\agent\deploy-runner.exe
+  install_path: C:\Program Files\ExampleDeploy\agent\deploy-runner.exe
   signer: Example Software Ltd
   sha256: null
 version: 4

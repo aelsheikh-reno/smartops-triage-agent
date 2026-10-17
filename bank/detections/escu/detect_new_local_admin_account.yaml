@@ -13,10 +13,10 @@ sigma_refs:
 - id: c265cf08-3f99-46c1-8d59-328247057d57
   title: User Added to Local Administrator Group
   relation: closest
-required_alert_fields:
-- _time
-- dest
-- src_user
+required_roles:
+- event
+- host
+- actor
 - user
 intent: Detects a new local account (4720) that is added to local Administrators (4732) within 180 minutes, from Windows Security logs.
 fp_quality: good
@@ -25,35 +25,37 @@ explanations:
 - BE-0001
 - BE-0003
 fingerprint:
-- dest
-- src_user
-- user
+- role:host.name
+- role:actor.name
+- role:user.name
 fingerprint_influence:
-  dest:
+  role:host.name:
     rating: low
     reason: Host that reported the event.
-  src_user:
+  role:actor.name:
     rating: low
     reason: Acting account recorded by the OS.
-  user:
+  role:user.name:
     rating: low
     reason: Account recorded by the OS.
-precedent_entity: dest
-precedent_validity: 72h
+precedent_entity: role:host.name
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:dest
+    entity: role:host.name
   attacker_influence:
     rating: low
-    reason: An attacker cannot freely reproduce dest, src_user, user in the fingerprint.
+    reason: An attacker cannot freely reproduce the fingerprint's host, acting account, user.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
   guards:
   - question: Q-0045
     then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
 - step: 2
   question: Q-0020
   on_yes: close:benign_true_positive:provisioning_service_account
@@ -61,18 +63,18 @@ flow:
   on_unknown: next
 - step: 3
   question: Q-0002
+  bind:
+    user: role:actor.name
   on_yes: next
   on_no: escalate
   on_unknown: flag
-  bind:
-    user: value:src_user
 - step: 4
   question: Q-0004
+  bind:
+    user: role:actor.name
   on_yes: close:benign_true_positive:approved_change
   on_no: escalate
   on_unknown: flag
-  bind:
-    user: value:src_user
 source:
   repo: splunk/security_content
   path: detections/endpoint/detect_new_local_admin_account.yml
@@ -80,3 +82,5 @@ source:
 license: Apache-2.0
 status: draft
 version: 6
+parameters:
+  precedent_validity_hours: 72

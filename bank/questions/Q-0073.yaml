@@ -4,11 +4,9 @@ tests: BE-0031
 capability:
   name: org.prevalence
   inputs:
-    pattern: file with hash value:file_hash
+    pattern: file with hash role:file.sha256
     window: alert_window
     exclude_list: CF-0023
-  params:
-    min_hosts: 1
 attacker_influence:
   rating: low
   reason: Hash sightings across the fleet come from sensors; used only as a guard that escalates.
@@ -23,3 +21,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

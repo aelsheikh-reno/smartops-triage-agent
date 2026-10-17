@@ -6,9 +6,9 @@ capability:
   inputs:
     list: CF-0025
     entity:
-    - value:src
-    - value:dest
-    - value:dest_port
+    - role:src.ip
+    - role:dest.ip
+    - role:dest.port
 attacker_influence:
   rating: low
   reason: Source address of a denied connection can be spoofed, but a spoofed probe gains the attacker nothing.
@@ -22,3 +22,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

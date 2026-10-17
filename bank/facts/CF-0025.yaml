@@ -2,18 +2,18 @@ id: CF-0025
 name: approved_infrastructure_sources
 description: Monitoring, backup, replication and health-check sources whose denied connections are expected, with destination and port scope.
 fields:
-- src
+- source_scope
 - purpose
 - dest_scope
 - ports
 - owner
 - expires
-match_rule: src within src, dest within dest_scope, port listed
+match_rule: source address within source_scope, destination within dest_scope, port listed
 collected_by: customer
 supply_effort: low
 supply_effort_reason: Static source addresses with destinations and ports.
 example:
-  src: 10.40.0.10
+  source_scope: 10.40.0.10
   purpose: health check
   dest_scope: 10.50.0.0/16
   ports:

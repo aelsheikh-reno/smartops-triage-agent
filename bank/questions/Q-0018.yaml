@@ -1,17 +1,12 @@
 id: Q-0018
-text: Has the same registry value name with the same normalized data been written on at least the customer's minimum number of hosts (default 5), and in at least 3 of the 4 weeks before the alert window?
+text: Has the same registry value name with the same normalized data been written on at least the customer's minimum number of hosts in every week of the lookback before the alert window?
 tests: BE-0008
 capability:
   name: org.prevalence
   inputs:
-    pattern: registry value value:registry_path value:registry_value_name with normalized value:registry_value_data
-  params:
-    min_hosts:
-      param: org_prevalence_min_hosts
-    min_weeks:
-      param: org_prevalence_min_weeks
-    of_weeks:
-      param: org_prevalence_of_weeks
+    pattern: registry value role:registry.path role:registry.value_name with normalized role:registry.value_data
+    lookback_weeks:
+      param: org_prevalence_lookback_weeks
 attacker_influence:
   rating: high
   reason: Registry value name and data are attacker-chosen; copying a common autostart entry is enough.
@@ -23,3 +18,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 3
+kind: triage

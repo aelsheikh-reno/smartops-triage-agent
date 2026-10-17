@@ -5,8 +5,8 @@ capability:
   name: list.lookup
   inputs:
     list: CF-0012
-    entity: value:av_exclusions
-    host: value:dest
+    entity: derived:av_exclusions
+    host: role:host.name
 attacker_influence:
   rating: low
   reason: The exclusion value is attacker-chosen, but a match means the exclusion is already approved.
@@ -21,3 +21,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 4
+kind: triage

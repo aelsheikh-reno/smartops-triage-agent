@@ -15,6 +15,8 @@ Vulnerability lookups report why they answered unknown: no_cve_mapping when the 
 CVE, otherwise no_data (the clean room holds no vulnerability data).
 
 This is a test harness, not bank content: it names source formats and products.
+Flows run on normalized alert v1 roles (the harness plays the normalizer) and typed broker answers turned into
+yes/no by each step's rule; alert classes go through the bank's value tables.
 Usage: tools/replay.py [--strict] [ids...]
 """
 import csv
@@ -125,22 +127,14 @@ def norm_windows(e):
         act = (e.get("Action Name") or "").lower()
         n.update(signature=e.get("Threat Name"), category=(e.get("Category Name") or "").lower(), file_path=e.get("Path"),
                  file_name=base((e.get("Path") or "").split("->")[-1]), file_hash=None, user=e.get("Detection User"),
-                 action=DEFENDER_ACTION.get(act, act) if eid == "1117" else "detected", _kind="av")
+                 action=DEFENDER_ACTION.get(act, act) if eid == "1117" else "detected", _kind="av",
+                 _raw={"EventID": eid, "Action Name": e.get("Action Name") or ""}, _tables=["microsoft-defender-antivirus-event-log"])
     return n
 
 
-# Vendor value mapping (docs/normalization.md). The Defender event does not say whether the file ran
-# before it was quarantined, removed or cleaned, so those map to post-execution states (unknown).
+# The harness's normalized action for reporting_control.action. Whether the file ran is decided by the bank's
+# value table (bank/recipes/value_tables/), from the raw event ID and Action Name kept in _raw.
 DEFENDER_ACTION = {"block": "blocked", "quarantine": "quarantined", "remove": "removed", "clean": "cleaned", "allow": "allowed", "no action": "detected"}
-# Snort classification descriptions to class types (the bank's ids_exploit_class_values use class types).
-SNORT_CLASS = {"attempted administrator privilege gain": "attempted-admin", "attempted user privilege gain": "attempted-user",
-               "successful administrator privilege gain": "successful-admin", "successful user privilege gain": "successful-user",
-               "web application attack": "web-application-attack", "a network trojan was detected": "trojan-activity",
-               "executable code was detected": "shellcode-detect", "potential corporate policy violation": "policy-violation",
-               "potential corporate privacy violation": "policy-violation", "misc activity": "misc-activity",
-               "attempted information leak": "attempted-recon", "detection of a network scan": "network-scan"}
-
-
 def norm_crowdstrike(e):
     if e.get("event_simpleName") != "ProcessRollup2":
         return {}
@@ -156,7 +150,7 @@ def norm_estreamer(e):
         blocked = (e.get("InlineResult") or "").lower() in ("blocked", "dropped")
         return {"src": e.get("InitiatorIP"), "dest": e.get("ResponderIP"), "dest_port": e.get("ResponderPort"), "signature": e.get("IntrusionRuleMessage"),
                 "signature_id": e.get("SignatureID"), "severity": e.get("PriorityID"), "action": "blocked" if blocked else "allowed", "_kind": "ids",
-                "category": SNORT_CLASS.get((e.get("Classification") or "").lower(), (e.get("Classification") or "").lower()),
+                "category": e.get("Classification"), "_raw": {"Classification": e.get("Classification") or ""}, "_tables": ["cisco-secure-firewall"],
                 "_time": e.get("EventSecond")}
     if e.get("EventType") == "ConnectionEvent":
         return {"src": e.get("InitiatorIP"), "dest": e.get("ResponderIP"), "dest_port": e.get("ResponderPort"), "transport": e.get("Protocol"),
@@ -235,11 +229,61 @@ NOT_REPLAYABLE = {
 }
 
 
-# ---------- derived fields ----------
+# ---------- harness mapping to normalized alert v1 roles ----------
+# The bank refers to roles, never to fields. The harness plays the normalizer: it maps the CIM-like keys the
+# parsers above produce to role attributes, per event kind, and keeps the raw vendor values the value tables read.
+ROLE = {
+    "_time": "event.time", "dest": "host.name", "dest_asset_id": "host.asset_id", "user": "user.name", "user_id": "user.name",
+    "src_user": "actor.name", "src": "src.ip", "dest_port": "dest.port", "transport": "network.transport", "rule": "network.rule",
+    "process": "process.command_line", "process_name": "process.name", "process_path": "process.path", "process_guid": "process.guid",
+    "process_hash": "process.sha256", "parent_process_guid": "process.parent_guid", "parent_process_path": "process.parent_path",
+    "parent_process_name": "process.parent_name", "registry_path": "registry.path", "registry_value_name": "registry.value_name",
+    "registry_value_data": "registry.value_data", "EventCode": "event.code", "ImagePath": "file.path",
+    "SourceImage": "process.path", "SourceProcessGUID": "process.guid", "TargetImage": "target_process.path",
+    "granted_access": "process_access.granted_access", "CallTrace": "process_access.call_trace",
+    "signature": "reporting_control.signature", "signature_id": "reporting_control.signature_id", "category": "reporting_control.category",
+    "severity": "reporting_control.severity", "action": "reporting_control.action", "file_hash": "file.sha256", "file_name": "file.name",
+    "file_path": "file.path",
+}
+NETWORK_KINDS = {"ids", "conn"}
+
+
+def to_roles(n):
+    out = {}
+    for k, v in n.items():
+        if k.startswith("_") or v in (None, ""):
+            continue
+        r = ROLE.get(k)
+        if k == "dest" and n.get("_kind") in NETWORK_KINDS:
+            r = "dest.ip"
+        if r:
+            out[r] = v
+    if n.get("action") is not None:
+        out["reporting_control.action_raw"] = n.get("_action_raw") or n.get("action")
+    for k in ("_time", "_kind", "_idx", "_raw", "_tables"):
+        if k in n:
+            out[k] = n[k]
+    if n.get("_time"):
+        out["event.time"] = n["_time"]
+    return out
+
+
+def ref_value(ref, n):
+    """Value of a role:/derived:/alert: reference, or of the role an entity: reference needs (None if missing)."""
+    kind, _, name = ref.partition(":")
+    if kind in ("role", "derived"):
+        return n.get(name)
+    if kind == "alert":
+        return n.get(name)
+    if kind == "entity":
+        return n.get({"process": "process.guid", "parent_process": "process.parent_guid", "module": "process.guid", "file": "file.path"}[name])
+    return None
+
+
 def derive(d, n):
     for name, spec in (d.get("derived_fields") or {}).items():
         src = spec["from"] if isinstance(spec["from"], list) else [spec["from"]]
-        vals = [str(n.get(f)) for f in src if n.get(f) not in (None, "")]
+        vals = [str(ref_value(f, n)) for f in src if ref_value(f, n) not in (None, "")]
         if "pattern" in spec:
             hits = re.findall(spec["pattern"], vals[0], re.I) if vals else []
             n[name] = (",".join(hits) if spec.get("all") else hits[0]) if hits else None
@@ -247,66 +291,60 @@ def derive(d, n):
             n[name] = vals[0] if vals else None
         else:
             n[name] = spec.get("join", " ").join(vals) if vals else None
-    n["fingerprint"] = "|".join(str(n.get(f)) for f in d["fingerprint"])
+    n["fingerprint"] = "|".join(str(ref_value(f, n)) for f in d["fingerprint"])
     return n
 
 
-# ---------- clean-room customer ----------
-def param(v, ctx):
-    return ctx["params"][v["param"]]["default"] if isinstance(v, dict) and "param" in v else v
-
-
-def op_test(op, val, vals):
-    if op == "in":
-        return str(val).lower() in {str(v).lower() for v in vals}
-    if op == "not_in":
-        return str(val).lower() not in {str(v).lower() for v in vals}
-    if op == "gte":
-        return float(val) >= float(vals)
-    if op == "matches":
-        return re.search(vals, str(val), re.I) is not None
-    if op == "cidr":
-        try:
-            ip = ipaddress.ip_address(str(val))
-        except ValueError:
-            return False
-        return any(ip in ipaddress.ip_network(c) for c in vals)
-    raise ValueError(op)
-
-
-def answer(cap, inputs, n, ctx):
-    fields = [f for _, f in B.walk_refs(inputs)]
-    if any(n.get(f) in (None, "") for f in fields):
-        return "unknown"
-    if cap == "alert.field":
-        val = n.get(inputs["field"].split(":", 1)[1])
-        if "unknown_op" in inputs and op_test(inputs["unknown_op"], val, param(inputs["unknown_values"], ctx)):
-            return "unknown"
-        return "yes" if op_test(inputs["op"], val, param(inputs["values"], ctx)) else "no"
+# ---------- clean-room customer: the Tool Broker's typed answers ----------
+def measure(b, q, inputs, n, ctx):
+    """The broker's typed answer for one question on one alert, or None for status unknown."""
+    cap = q["capability"]["name"]
+    for kind, name in B.walk_refs(inputs):
+        if kind != "bind" and ref_value(f"{kind}:{name}", n) in (None, ""):
+            return None
+    if cap == "alert.class":
+        cls = inputs["class"]
+        tables = [t for t in n.get("_tables", []) if cls in (b["value_tables"].get(t, {}).get("classes") or {})]
+        if tables:
+            values = n.get("_raw") or {}
+        else:
+            reads = [inputs["of"].split(":", 1)[1]] if inputs.get("of") else b["capabilities"]["alert_classes"][cls]["reads"]
+            values = {r: n.get(r) for r in reads}
+            if all(v in (None, "") for v in values.values()):
+                return None
+        params = {"internal_networks": B.param_value(b, "internal_networks")}
+        return B.classify(b, cls, values, tables, params)[0]
+    if cap == "alert.measure":
+        return float(ref_value(inputs["of"], n))
     if cap == "traffic.denied_only":
-        conns = [x for x in ctx["conns"] if x.get("src") == n.get("src")]
-        return "unknown" if not conns else "yes" if all(x.get("action") == "blocked" for x in conns) else "no"
+        conns = [x for x in ctx["conns"] if x.get("src.ip") == n.get("src.ip")]
+        return None if not conns else all(x.get("reporting_control.action") == "blocked" for x in conns)
     if cap == "alert.history":
-        key = inputs["key"].split(":", 1)[1]
-        earlier = [x for x in ctx["alerts"][:n["_idx"]] if x.get(key) == n.get(key)]
-        count = len({x.get(inputs["distinct"]) for x in earlier}) if inputs.get("distinct") else len(earlier)
-        return "yes" if count >= int(param(inputs["min_count"], ctx)) else "no"
+        key = inputs["key"]
+        earlier = [x for x in ctx["alerts"][:n["_idx"]] if ref_value(key, x) == ref_value(key, n)]
+        if inputs.get("distinct"):
+            return len({ref_value(inputs["distinct"], x) for x in earlier})
+        return len(earlier)
     if cap == "vuln.not_applicable":
-        ctx["vuln_unknown"][("no_cve_mapping" if not re.search(r"CVE-\d{4}-\d+", str(n.get("signature")), re.I) else "no_data")] += 1
-        return "unknown"
+        ctx["vuln_unknown"][("no_cve_mapping" if not re.search(r"CVE-\d{4}-\d+", str(n.get("reporting_control.signature")), re.I) else "no_data")] += 1
+        return None
     if cap in ("entity.baseline", "org.prevalence", "email.message_status", "email.no_interaction", "email.auth", "file.signer"):
-        return "unknown"
-    return "no"   # case.precedent, list.lookup, identity.groups, change.window, scan.job_active, *.reputation: empty in a clean room
+        return None
+    return False   # precedent.check, list.lookup, identity.groups, change.window, scan.job_active, *.reputation: empty in a clean room
+
+
+def answer(b, q, item, n, ctx, d):
+    if (q.get("needs") or {}).get("coverage"):
+        return "unknown"   # clean room: no coverage report, so the question is no_capability
+    value = measure(b, q, B.step_inputs(q, item), n, ctx)
+    return B.apply_rule(b, item.get("rule"), value, B.answer_type(b, q["id"]), d)
 
 
 def run_flow(b, d, n, ctx):
     trail = []
     for st in d["flow"]:
         q = b["questions"][st["question"]]
-        if (q.get("needs") or {}).get("coverage"):
-            a = "unknown"   # clean room: no coverage report, so the question is no_capability
-        else:
-            a = answer(q["capability"]["name"], B.step_inputs(q, st), n, ctx)
+        a = answer(b, q, st, n, ctx, d)
         out = st["on_" + a]
         trail.append(f"{st['question']}={a}")
         if out != "next":
@@ -314,9 +352,7 @@ def run_flow(b, d, n, ctx):
             for gd in st.get("guards") or []:
                 if not B.guard_applies(gd, out) or (gd.get("if_entry_type") and n.get("_matched_entry_type") not in gd["if_entry_type"]):
                     continue
-                gq = b["questions"][gd["question"]]
-                ga = answer(gq["capability"]["name"], B.step_inputs(gq, gd), n, ctx)
-                results.append((gd, ga))
+                results.append((gd, answer(b, b["questions"][gd["question"]], gd, n, ctx, d)))
             raised = B.raise_outcome(out, results)
             if raised != out:
                 trail.append("guards " + ",".join(f"{g['question']}={a}" for g, a in results) + f" -> {raised}")
@@ -326,14 +362,26 @@ def run_flow(b, d, n, ctx):
     return "flag", trail
 
 
-# Regression cases: hand-built alerts with a required outcome. They run in the clean room like the datasets.
+# Regression cases: hand-built normalized alerts (roles, plus the raw values the value tables read) with a required outcome.
+GRAPH = ["microsoft-defender-for-endpoint"]
+AV = {"host.name": "ws-01", "user.name": "u1", "event.time": "2026-10-17T00:00:00Z", "file.path": "C:\\Users\\Public\\m.exe", "file.name": "m.exe"}
 REGRESSION = [
  ("vendor:av_detection", "no hash, high-risk class, detected (not blocked) must escalate",
-  {"dest": "ws-01", "signature": "HackTool:Win32/Mimikatz", "category": "hacktool", "action": "detected", "file_path": "C:\\Users\\Public\\m.exe",
-   "file_name": "m.exe", "file_hash": None, "user": "u1", "_time": "2026-10-17T00:00:00Z"}, "escalate"),
+  dict(AV, **{"reporting_control.signature": "HackTool:Win32/Mimikatz", "reporting_control.category": "hacktool", "reporting_control.action_raw": "detected"}), "escalate"),
  ("vendor:av_detection", "no hash, high-risk class, blocked must escalate",
-  {"dest": "ws-01", "signature": "HackTool:Win32/Mimikatz", "category": "hacktool", "action": "blocked", "file_path": "C:\\Users\\Public\\m.exe",
-   "file_name": "m.exe", "file_hash": None, "user": "u1", "_time": "2026-10-17T00:00:00Z"}, "escalate"),
+  dict(AV, **{"reporting_control.signature": "HackTool:Win32/Mimikatz", "reporting_control.category": "hacktool", "reporting_control.action_raw": "blocked_pre_execution"}), "escalate"),
+ ("vendor:av_detection", "Defender detectionStatus blocked (remediated at run time), low-risk class: no close",
+  dict(AV, **{"file.sha256": "a" * 64, "reporting_control.signature": "PUA:Win32/Presenoker", "reporting_control.category": "pua",
+              "_raw": {"detectionStatus": "blocked"}, "_tables": GRAPH}), "escalate"),
+ ("vendor:av_detection", "Defender quarantine only (no detection status), low-risk class: flag",
+  dict(AV, **{"file.sha256": "b" * 64, "reporting_control.signature": "PUA:Win32/Presenoker", "reporting_control.category": "pua",
+              "_raw": {"remediationStatus": "quarantined"}, "_tables": GRAPH}), "flag"),
+ ("vendor:av_detection", "any product, quarantined only, low-risk class: flag",
+  dict(AV, **{"file.sha256": "c" * 64, "reporting_control.signature": "Adware:Win32/X", "reporting_control.category": "adware",
+              "reporting_control.action_raw": "quarantined"}), "flag"),
+ ("vendor:av_detection", "Defender detectionStatus prevented, low-risk class: mitigated close",
+  dict(AV, **{"file.sha256": "d" * 64, "reporting_control.signature": "PUA:Win32/Presenoker", "reporting_control.category": "pua",
+              "_raw": {"detectionStatus": "prevented"}, "_tables": GRAPH}), "close:mitigated_true_positive"),
 ]
 
 
@@ -343,9 +391,10 @@ def run_regression(b, ctx):
         n = derive(b["detections"][did], dict(alert, _idx=0))
         c = dict(ctx, alerts=[n], conns=[])
         out, trail = run_flow(b, b["detections"][did], n, c)
-        got = out.split(":")[0]
-        print(f"  {'ok  ' if got == want else 'FAIL'} {did}: {name} -> {out}  [{' > '.join(trail)}]")
-        if got != want:
+        got = out if want.startswith("close:") and out.startswith(want) else out.split(":")[0]
+        ok = got == want or (want.startswith("close:") and out.startswith(want))
+        print(f"  {'ok  ' if ok else 'FAIL'} {did}: {name} -> {out}  [{' > '.join(trail)}]")
+        if not ok:
             failures.append(name)
     return failures
 
@@ -354,7 +403,7 @@ def main():
     strict = "--strict" in sys.argv
     only = [a for a in sys.argv[1:] if not a.startswith("--")]
     b = B.load()
-    ctx = {"params": b["parameters"], "vuln_unknown": Counter()}
+    ctx = {"vuln_unknown": Counter()}
     rows, cannot, fails, mitigated = [], [], [], []
     for did, d in sorted(b["detections"].items()):
         if only and not any(did.startswith(o) for o in only):
@@ -382,8 +431,8 @@ def main():
             if not any(norm):
                 notes.append(f"{t.get('sourcetype')} not used by this flow's fields")
             evs += [x for x in norm if x]
-        ctx["conns"] = [x for x in evs if x.get("_kind") == "conn"]
-        tp = [derive(d, x) for x in evs if P[did](x)]
+        ctx["conns"] = [to_roles(x) for x in evs if x.get("_kind") == "conn"]
+        tp = [derive(d, to_roles(x)) for x in evs if P[did](x)]
         for i, x in enumerate(tp):
             x["_idx"] = i
         ctx["alerts"] = tp

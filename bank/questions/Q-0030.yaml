@@ -4,7 +4,7 @@ tests: BE-0030
 capability:
   name: file.reputation
   inputs:
-    entity: value:file_hash
+    entity: role:file.sha256
 attacker_influence:
   rating: low
   reason: Hash comes from the product's own record of the file.
@@ -16,3 +16,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

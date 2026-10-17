@@ -1,55 +1,63 @@
 # Vendor alert normalization
 
-The bank's vendor families read normalized alert fields. This page maps each product's raw values to
-the normalized values the bank's parameters use. It is onboarding material, not bank content, so it
-may name products. Onboarding confirms each mapping against the customer's product version and
-records how alerts arrive (direct API or forwarded syslog); forwarded alerts cannot close on their own.
+The bank's vendor families never read a product's raw values. The normalizer fills the alert's roles
+(`docs/intake/normalized-alert-v1.md`), and the Tool Broker answers `alert.class` questions through
+**value tables**: one per vendor and product under `bank/recipes/value_tables/`, plus a generic table for
+vendor-neutral rows. Each table maps the product's raw values to the fixed values of an alert class
+(`alert_classes` in `bank/capabilities.yaml`), and every row is marked `verified: true` or `false`. The
+tables are recipe data: they may name products and never enter the runtime bundle.
 
-Status: draft. Each mapping row records `verified`. Only the Defender rows are verified (against
-the replay dataset). The other rows were recalled from public event references and must be checked
-against the product's documentation and the customer's version.
+This page is the onboarding guide for those tables; the tables themselves are the source of truth.
 
-Rule (design-decisions §9, enforced by `tools/validate.py`): the cap is per customer. A detection is
-capped at Recommend for a customer while that customer's product rows for its family are unverified;
-the onboarding check "Check vendor alerts are normalized" records which products each customer runs.
-Any family with unverified rows must declare `auto_requires: [vendor_mapping_verified]`. Each table
-names the bank detections it feeds on its `Families:` line.
+Rule (design-decisions §9, enforced by `tools/validate.py`): the cap is per customer. A detection whose
+alert classes have unverified product rows declares `auto_requires: [vendor_mapping_verified]`, and is
+capped at Recommend for each customer whose product rows are unverified. The onboarding check "Check
+vendor alerts are normalized" records which products each customer runs and verifies their rows. Today
+`vendor:av_detection` (Defender, CrowdStrike) and `vendor:ids_alert` (Cisco intrusion classifications)
+carry the cap. Generic rows (vendor `any`) do not cap a family; onboarding still confirms each product's
+wording against them.
 
-## Antivirus and EDR action (`action`)
+## Whether the file ran (`av_execution_state`: pre_execution, ran, unknown)
 
-The bank distinguishes a block before execution (`av_pre_execution_block_values`, may close for
-low-risk classes) from post-execution or unfinished remediation (`av_post_execution_values`, answers
-unknown and flags). Any other value answers no and escalates.
+Only `pre_execution` may close, and only for low-risk classes. `ran` escalates; `unknown` flags.
 
-Families: `vendor:av_detection`
+| Table | Raw value | Class value | Verified |
+|---|---|---|---|
+| Microsoft Defender for Endpoint (Graph alert evidence) | `detectionStatus` prevented, `remediationStatus` prevented | pre_execution | false (#20) |
+| | `detectionStatus` blocked ("remediated at run time"), `remediationStatus` blocked ("blocked while executing"), `detectionStatus` detected | ran | false (#20) |
+| | quarantine alone, or anything else | unknown | default |
+| Microsoft Defender Antivirus (event log) | 1116 (detection, no action) | ran | false |
+| | 1117 Quarantine, Remove, Clean | unknown | false |
+| | 1117 Block | unknown | false. Changed in the bank migration: it was mapped to blocked before execution, but the event does not say whether the file ran |
+| CrowdStrike Falcon | Prevention, process blocked from execution | pre_execution | false |
+| | Prevention, process killed; Detection, standard detection | ran | false |
+| | Quarantine, file quarantined | unknown | false |
+| Any product (generic) | blocked_pre_execution, deleted_pre_execution | pre_execution | false |
+| | post-execution quarantine or cleaning, pending reboot, partial or failed remediation | unknown | false |
 
-| Product | Raw value | Normalized | Verified | Note |
-|---|---|---|---|---|
-| Microsoft Defender (event 1117 Action Name) | Block | blocked | true | |
-| Microsoft Defender (event 1117) | Quarantine, Remove, Clean | quarantined, removed, cleaned | true | the event does not say whether the file ran first, so these flag (seen in the replay dataset) |
-| Microsoft Defender (event 1116) | any | detected | true | detection only, no action yet |
-| CrowdStrike Falcon (PatternDispositionDescription) | Prevention, process blocked from execution | blocked_pre_execution | false | |
-| CrowdStrike Falcon | Prevention, process killed | quarantined_post_execution | false | the process started |
-| CrowdStrike Falcon | Quarantine, file quarantined | quarantined | false | timing not stated |
-| CrowdStrike Falcon | Detection, standard detection | detected | false | |
-| Any product | pending reboot, partially remediated, remediation failed | pending_reboot, partially_remediated, remediation_failed | false | generic names; confirm each product's own wording |
+Microsoft's definitions are quoted in `docs/assumptions.md` A4. Which property carries them per evidence
+type in the real feed, and whether it reaches the SIEM, is the lab test in #20.
 
-Other products are mapped at onboarding using the same rule: if the product cannot show the file was
-stopped before it ran, map to a post-execution state.
+## Risk class (`av_risk_class`: high_risk, low_risk, other)
 
-## Detection class (`category`, `signature`)
+Read from the detection class and name together, so a remote-admin tool or miner filed under
+"potentially unwanted" is still high risk. Generic pattern rows: high-risk families first, then test
+files (EICAR and similar) as `other` (they never close as low risk), then low-risk classes.
 
-`av_class` joins the product's category and detection name, so a remote-admin tool or miner filed
-under "potentially unwanted" still matches `av_high_risk_pattern`.
+## IDS signature class (`ids_class`)
 
-## IDS classification (`category`)
+Snort-style class types (`attempted-admin`, `trojan-activity`, `policy-violation`, ...), which
+`ids_exploit_class_values` uses on the step. The Cisco Secure Firewall table maps classification
+descriptions (for example "Attempted Administrator Privilege Gain") to class types.
 
-Normalized to Snort class types (`attempted-admin`, `trojan-activity`, `policy-violation`, ...), which
-`ids_exploit_class_values` uses. The replay maps Cisco Secure Firewall classification descriptions
-(for example "Attempted Administrator Privilege Gain") to class types.
+## Web filtering category (`web_category`)
 
-## Web filtering category (`category`)
+The names in `web_high_risk_categories`, `web_low_risk_categories` and `web_uncategorized_values`.
+Onboarding adds each product's category names to its own table; a category that maps to none is
+`other`, neither low nor high risk, and flags.
 
-Normalized to the names in `web_high_risk_categories`, `web_low_risk_categories` and
-`web_uncategorized_values`. Onboarding maps each product's category list onto these; a category that
-maps to none is neither low nor high risk and flags.
+## Other classes
+
+`control_action` (what the control did), `severity`, `http_status_class`, `user_agent_class`,
+`device_event`, `device_class` and `address_zone` (from the customer's `internal_networks`) have generic
+rows only. Products whose wording differs get their own table at onboarding.

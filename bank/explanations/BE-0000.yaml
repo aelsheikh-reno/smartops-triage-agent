@@ -1,6 +1,7 @@
 id: BE-0000
 name: Precedent
-description: An analyst already closed an alert with the same fingerprint, with a recorded reason, recently enough that the reason still holds.
-source: [design-decisions.md §5 (Q0)]
+description: 'The same fingerprint already has a qualifying close with a recorded reason, recently enough that the reason still holds: a close that passed audit, or at least two independent analyst closes.'
+source:
+- design-decisions.md §14 (Q0)
 license: internal
-version: 1
+version: 2

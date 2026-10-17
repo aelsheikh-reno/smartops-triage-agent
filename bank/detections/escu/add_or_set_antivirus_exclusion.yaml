@@ -14,11 +14,9 @@ sigma_refs:
 - id: 17769c90-230e-488b-a463-e05c08e9d48f
   title: Powershell Defender Exclusion
   relation: equivalent
-required_alert_fields:
-- _time
-- dest
-- parent_process_guid
-- parent_process_path
+required_roles:
+- event
+- host
 - process
 - user
 intent: Detects Add-MpPreference or Set-MpPreference adding an antivirus, Controlled Folder Access or ASR exclusion from process creation logs.
@@ -30,36 +28,38 @@ explanations:
 - BE-0003
 derived_fields:
   av_exclusions:
-    from: process
+    from: role:process.command_line
     pattern: -(?:Exclusion\w+|ControlledFolderAccessAllowedApplications|AttackSurfaceReductionOnlyExclusions)\s+(\S+)
     all: true
     note: every exclusion value in the command line
 fingerprint:
-- dest
-- process
+- role:host.name
+- role:process.command_line
 fingerprint_influence:
-  dest:
+  role:host.name:
     rating: low
     reason: Host that reported the event.
-  process:
+  role:process.command_line:
     rating: high
     reason: Command line the attacker writes.
-precedent_entity: dest
-precedent_validity: 7d
+precedent_entity: role:host.name
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:dest
+    entity: role:host.name
   attacker_influence:
     rating: low
-    reason: An attacker cannot freely reproduce dest in the fingerprint.
+    reason: An attacker cannot freely reproduce the fingerprint's host.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
   guards:
   - question: Q-0045
     then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
 - step: 2
   question: Q-0001
   on_yes: close:benign_true_positive:sanctioned_deployment_tool
@@ -87,3 +87,5 @@ source:
 license: Apache-2.0
 status: draft
 version: 6
+parameters:
+  precedent_validity_hours: 72

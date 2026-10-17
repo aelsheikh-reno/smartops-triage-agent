@@ -7,9 +7,9 @@ fields:
 - reason
 collected_by: customer
 supply_effort: low
-supply_effort_reason: Static list of hosts and accounts.
+supply_effort_reason: Static list of hosts and accounts; Phase 0 requires crown jewels to be listed before triage starts, and context question C-06 reads it.
 example:
   entity: dc01.corp.local
   entity_type: host
   reason: Domain controller
-version: 2
+version: 3

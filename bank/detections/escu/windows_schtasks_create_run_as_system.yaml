@@ -14,12 +14,9 @@ sigma_refs:
 - id: 89ca78fd-b37c-4310-b3d3-81a023f83936
   title: Schtasks Creation Or Modification With SYSTEM Privileges
   relation: equivalent
-required_alert_fields:
-- _time
-- dest
-- parent_process_guid
-- parent_process_name
-- parent_process_path
+required_roles:
+- event
+- host
 - process
 - user
 intent: Detects schtasks.exe /create /ru SYSTEM from process creation logs.
@@ -29,35 +26,37 @@ explanations:
 - BE-0008
 - BE-0003
 fingerprint:
-- dest
-- parent_process_name
-- process
+- role:host.name
+- role:process.parent_name
+- role:process.command_line
 fingerprint_influence:
-  dest:
+  role:host.name:
     rating: low
     reason: Host that reported the event.
-  parent_process_name:
+  role:process.parent_name:
     rating: high
     reason: File name the attacker can choose.
-  process:
+  role:process.command_line:
     rating: high
     reason: Command line the attacker writes.
-precedent_entity: dest
-precedent_validity: 7d
+precedent_entity: role:host.name
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:dest
+    entity: role:host.name
   attacker_influence:
     rating: low
-    reason: An attacker cannot freely reproduce dest in the fingerprint.
+    reason: An attacker cannot freely reproduce the fingerprint's host.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
   guards:
   - question: Q-0045
     then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
 - step: 2
   question: Q-0001
   on_yes: close:benign_true_positive:sanctioned_deployment_tool
@@ -70,13 +69,16 @@ flow:
   on_unknown: next
 - step: 4
   question: Q-0019
+  bind:
+    entity: entity:parent_process
   on_yes: next
   on_no: flag
   on_unknown: flag
-  bind:
-    entity: process:parent_process_guid
 - step: 5
   question: Q-0015
+  rule:
+    gte:
+      param: org_prevalence_min_hosts
   on_yes: close:benign_true_positive:prevalent_in_org
   on_no: escalate
   on_unknown: flag
@@ -87,3 +89,5 @@ source:
 license: Apache-2.0
 status: draft
 version: 7
+parameters:
+  precedent_validity_hours: 72

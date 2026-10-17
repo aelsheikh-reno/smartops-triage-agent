@@ -1,0 +1,24 @@
+id: C-06
+text: Is the asset a crown jewel?
+kind: context
+capability:
+  name: asset.crown_jewel
+  inputs:
+    entity: role:host.asset_id
+    list: CF-0007
+feeds:
+- q0
+- priority
+- crown_jewel_guardrail
+attacker_influence:
+  rating: none
+  reason: The customer's crown-jewel list.
+when_not_answered: 'The asset is treated as a crown jewel for the window: no close on it.'
+source:
+- docs/intake/context-questions.md
+- docs/design-decisions.md §5
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

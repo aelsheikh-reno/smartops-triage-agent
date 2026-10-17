@@ -1,0 +1,22 @@
+id: C-01
+text: Is there an open escalation or case on the entity?
+kind: context
+capability:
+  name: case.open
+  inputs:
+    entity: alert:entity
+feeds:
+- entity_guard
+- repeat_attach
+attacker_influence:
+  rating: none
+  reason: Case records the activity cannot touch.
+when_not_answered: 'The entity cannot be ruled out: every close on it flags.'
+source:
+- docs/intake/context-questions.md
+- docs/design-decisions.md §5
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

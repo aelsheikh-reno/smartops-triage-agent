@@ -5,12 +5,13 @@ capability:
   name: change.window
   inputs:
     entities:
-    - value:dest
-    user: value:user
-    at_time: value:_time
+    - role:host.name
+    user: role:user.name
+    at_time: role:event.time
 attacker_influence:
-  rating: none
-  reason: Approved change record with named implementers; created outside the attacker's reach.
+  rating: low
+  reason: Approved change records the activity cannot touch; a yes needs an approver who is not an implementer, so a self-approved change cannot carry a close.
+  changed_in_migration: none -> low
 needs:
   context:
   - CF-0003
@@ -25,3 +26,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 5
+kind: triage

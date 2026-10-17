@@ -5,7 +5,7 @@ use_case: UC-001
 techniques:
 - T1204.002
 data_source:
-- Splunk CIM Malware data model
+- Any antivirus or EDR alert, normalized to the reporting_control and file roles (no data model required)
 sigma_logsource:
 - category: antivirus
 sigma_refs:
@@ -21,30 +21,19 @@ sigma_refs:
 - id: 238527ad-3c2c-4e4f-a1f6-92fd63adb864
   title: Antivirus - Exploitation Framework Signature
   relation: closest
-required_alert_fields:
-- dest
+required_roles:
+- host
 - user
-- signature
-- category
-- action
-- file_hash
-- file_name
-- file_path
-- _time
-derived_fields:
-  av_class:
-    from:
-    - category
-    - signature
-    join: ' '
-    note: detection class and name together, so subfamilies filed under a low-risk class are still seen
+- reporting_control
+- file
+- event
 intent: 'Generic: an antivirus or EDR product reports a malware detection on a host (normalized malware alert, any product).'
 fp_quality: generic
 notes: High-risk families escalate even when blocked. Only a block before execution can close, and only for low-risk classes; post-execution remediation, pending reboot and partial remediation flag. Test
   files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail. Approved tooling and analysis hosts match on asset ID, never hostname. A
   sample from an analysis host seen on any other host in the window escalates; an approved tool's hash seen outside its approved hosts flags. A quarantined or unreadable file with no hash cannot close as
-  approved tooling; the flow continues. The fingerprint uses the asset ID; without one it falls back to the hostname and the precedent is rated medium. Capped at Recommend for each customer whose product
-  rows in the value mapping are unverified.
+  approved tooling; the flow continues. The fingerprint uses the asset ID; without one it falls back to the hostname and the precedent is rated medium. Whether a file ran is read through the product's value
+  table (bank/recipes/value_tables/), never from a data model. Capped at Recommend for each customer whose product rows in the value mapping are unverified.
 explanations:
 - BE-0019
 - BE-0020
@@ -52,39 +41,36 @@ explanations:
 - BE-0031
 - BE-0037
 fingerprint:
-- dest_asset_id
-- signature
-- file_hash
-precedent_validity: 24h
-precedent_entity: dest_asset_id
+- role:host.asset_id
+- role:reporting_control.signature
+- role:file.sha256
+precedent_entity: role:host.asset_id
 fingerprint_influence:
-  dest_asset_id:
+  role:host.asset_id:
     rating: low
     reason: Device or agent ID assigned by the product; a host rename cannot change it.
     fallback:
-      field: dest
+      field: role:host.name
       rating: medium
       reason: Without an asset ID the hostname stands in, and a local administrator can rename a host.
-  signature:
+  role:reporting_control.signature:
     rating: low
     reason: Detection name assigned by the product.
-  file_hash:
+  role:file.sha256:
     rating: low
     reason: Hash of the file already judged; reproducing it reproduces that file.
-optional_alert_fields:
-- dest_asset_id
-precedent_entity_fallback: dest
+precedent_entity_fallback: role:host.name
 auto_requires:
 - vendor_mapping_verified
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:dest_asset_id
-    current_action: value:action
+    entity: role:host.asset_id
+    current_action: role:reporting_control.action
   attacker_influence:
     rating: low
-    reason: An attacker cannot freely reproduce the asset ID in the fingerprint.
+    reason: An attacker cannot freely reproduce the fingerprint's the asset ID.
     fallback_rating: medium
   on_yes: close:inherit:precedent_match
   on_no: next
@@ -92,8 +78,16 @@ flow:
   guards:
   - question: Q-0045
     then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
   - question: Q-0029
     then: escalate
+    rule:
+      'yes':
+      - high_risk
+      unknown:
+      - unknown
 - step: 2
   question: Q-0048
   on_yes: close:benign_true_positive:approved_security_tooling
@@ -104,22 +98,43 @@ flow:
     then: escalate
     if_entry_type:
     - analysis_host
+    rule:
+      gte:
+        param: org_prevalence_escape_min_hosts
   - question: Q-0073
     then: flag
     if_entry_type:
     - tool
+    rule:
+      gte:
+        param: org_prevalence_escape_min_hosts
 - step: 3
   question: Q-0029
+  rule:
+    'yes':
+    - high_risk
+    unknown:
+    - unknown
   on_yes: escalate
   on_no: next
   on_unknown: next
 - step: 4
   question: Q-0049
+  rule:
+    'yes':
+    - pre_execution
+    unknown:
+    - unknown
   on_yes: next
   on_no: escalate
   on_unknown: flag
 - step: 5
   question: Q-0028
+  rule:
+    'yes':
+    - low_risk
+    unknown:
+    - unknown
   on_yes: close:mitigated_true_positive:blocked_low_risk_detection
   on_no: flag
   on_unknown: flag
@@ -127,7 +142,10 @@ flow:
   - question: Q-0046
     then: flag
     bind:
-      key: value:dest
+      key: role:host.name
+    rule:
+      gte:
+        param: alert_history_min_count
   - question: Q-0030
     then: escalate
 source:
@@ -136,4 +154,4 @@ source:
   title: Antivirus or EDR malware detection
 license: internal
 status: draft
-version: 5
+version: 6

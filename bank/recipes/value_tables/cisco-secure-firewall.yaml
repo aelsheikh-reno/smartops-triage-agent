@@ -1,0 +1,63 @@
+# Vendor value table (recipe layer). Maps one product's raw alert values to the bank's alert classes
+# (bank/capabilities.yaml alert_classes). Rows are tried in order; the first match wins; no match gives the class default.
+# match: {<raw property>: <value or list>} compares case-insensitively; {pattern: <regex>} searches the class's role values joined by a space.
+# May name products: it is recipe data, not bank logic, and never enters the runtime bundle. Each row is verified or not;
+# a detection family whose classes have unverified rows for a customer's product is capped at Recommend for that customer.
+vendor: Cisco
+product: Secure Firewall (intrusion events)
+feed: Intrusion events, Classification description
+source:
+- tools/replay.py SNORT_CLASS (previous replay mapping)
+license: internal
+classes:
+  ids_class:
+    reads:
+    - Classification
+    rows:
+    - match:
+        Classification: Attempted Administrator Privilege Gain
+      value: attempted-admin
+      verified: false
+    - match:
+        Classification: Attempted User Privilege Gain
+      value: attempted-user
+      verified: false
+    - match:
+        Classification: Successful Administrator Privilege Gain
+      value: successful-admin
+      verified: false
+    - match:
+        Classification: Successful User Privilege Gain
+      value: successful-user
+      verified: false
+    - match:
+        Classification: Web Application Attack
+      value: web-application-attack
+      verified: false
+    - match:
+        Classification: A Network Trojan was Detected
+      value: trojan-activity
+      verified: false
+    - match:
+        Classification: Executable Code was Detected
+      value: shellcode-detect
+      verified: false
+    - match:
+        Classification:
+        - Potential Corporate Policy Violation
+        - Potential Corporate Privacy Violation
+      value: policy-violation
+      verified: false
+    - match:
+        Classification: Misc activity
+      value: misc-activity
+      verified: false
+    - match:
+        Classification: Attempted Information Leak
+      value: attempted-recon
+      verified: false
+    - match:
+        Classification: Detection of a Network Scan
+      value: network-scan
+      verified: false
+    default: other

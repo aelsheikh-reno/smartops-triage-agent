@@ -4,7 +4,7 @@ tests: BE-0001
 capability:
   name: identity.groups
   inputs:
-    user: value:user
+    user: role:user.name
     groups: CF-0002
 attacker_influence:
   rating: low
@@ -22,3 +22,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 3
+kind: triage

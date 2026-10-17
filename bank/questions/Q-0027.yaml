@@ -2,12 +2,10 @@ id: Q-0027
 text: Did the control that raised the alert stop the item (the file, connection, request or message) before it took effect?
 tests: BE-0019
 capability:
-  name: alert.field
+  name: alert.class
   inputs:
-    field: value:action
-    op: in
-    values:
-      param: blocked_action_values
+    class: control_action
+    of: role:reporting_control.action
 attacker_influence:
   rating: low
   reason: Set by the security control, not by the activity.
@@ -21,3 +19,4 @@ legal_review: false
 status: draft
 version: 3
 notes: For email the item is the message, stopped before delivery; whether it is out of every mailbox is checked separately. Post-execution antivirus states use Q-0049 instead.
+kind: triage

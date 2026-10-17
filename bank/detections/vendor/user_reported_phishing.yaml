@@ -9,27 +9,21 @@ data_source:
 sigma_logsource: []
 sigma_logsource_none: Sigma has no log-source category for this alert type.
 sigma_refs: []
-required_alert_fields:
-- message_id
-- user
-- src_user
-- sender_domain
-- recipient
-- subject
-- url
-- indicator_count
-- _time
 derived_fields:
-  url_domain:
-    from: url
+  message_url_domain:
+    from: role:email.url
     pattern: https?://([^/\s:]+)
     note: domain of the first URL in the message; empty when there is none
   campaign_key:
     from:
-    - sender_domain
-    - url_domain
+    - role:email.sender_domain
+    - derived:message_url_domain
     join: '|'
     note: 'secondary campaign key: sender domain plus URL domain, for alert.history'
+required_roles:
+- email
+- user
+- event
 intent: 'Generic: a user reports an email as phishing through the report button or a reporting mailbox.'
 fp_quality: generic
 notes: The message id is sender-chosen, so a precedent never closes or flags by itself. Approved senders (customer-controlled or transactional-notification domains, with an aligned DMARC pass) are checked
@@ -42,18 +36,17 @@ explanations:
 - BE-0035
 - BE-0037
 fingerprint:
-- message_id
-precedent_validity: 7d
-precedent_entity: message_id
+- role:email.message_id
+precedent_entity: role:email.message_id
 fingerprint_influence:
-  message_id:
+  role:email.message_id:
     rating: high
     reason: Set by the sending server.
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:message_id
+    entity: role:email.message_id
   attacker_influence:
     rating: high
     reason: Every fingerprint field is attacker-chosen, so a precedent only flags.
@@ -82,12 +75,19 @@ flow:
     then: flag
   - question: Q-0034
     then: escalate
+    bind:
+      entity: role:email.url
   - question: Q-0046
     then: flag
     bind:
-      key: value:campaign_key
+      key: derived:campaign_key
+    rule:
+      gte: &id001
+        param: alert_history_min_count
 - step: 4
   question: Q-0072
+  rule:
+    lte: 0
   on_yes: flag
   on_no: next
   on_unknown: next
@@ -104,7 +104,9 @@ flow:
   - question: Q-0046
     then: flag
     bind:
-      key: value:campaign_key
+      key: derived:campaign_key
+    rule:
+      gte: *id001
 source:
   repo: internal
   path: bank/use_cases.yaml#UC-014
@@ -112,3 +114,5 @@ source:
 license: internal
 status: draft
 version: 3
+parameters:
+  precedent_validity_hours: 72

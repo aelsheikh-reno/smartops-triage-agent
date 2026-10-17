@@ -5,7 +5,7 @@ capability:
   name: list.lookup
   inputs:
     list: CF-0027
-    entity: value:object_hash
+    entity: role:dlp.object_hash
 attacker_influence:
   rating: low
   reason: Content hash; sending the exact test file gains nothing.
@@ -19,3 +19,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

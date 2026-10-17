@@ -2,15 +2,9 @@ id: Q-0028
 text: Is the detection in a low-risk class (potentially unwanted software, adware, grayware), and not a test file?
 tests: BE-0020
 capability:
-  name: alert.field
+  name: alert.class
   inputs:
-    field: value:av_class
-    op: matches
-    values:
-      param: av_low_risk_pattern
-    unknown_op: matches
-    unknown_values:
-      param: av_test_file_pattern
+    class: av_risk_class
 attacker_influence:
   rating: low
   reason: Class assigned by the product; high-risk families are excluded by the earlier step.
@@ -23,3 +17,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 3
+kind: triage

@@ -4,7 +4,7 @@ tests: BE-0035
 capability:
   name: email.auth
   inputs:
-    message_id: value:message_id
+    message: role:email.message_id
 attacker_influence:
   rating: low
   reason: Authentication is checked by the receiving mail system; a compromised legitimate sender still passes.
@@ -15,3 +15,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 1
+kind: triage

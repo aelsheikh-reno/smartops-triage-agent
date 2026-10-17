@@ -1,0 +1,38 @@
+# Vendor value table (recipe layer). Maps one product's raw alert values to the bank's alert classes
+# (bank/capabilities.yaml alert_classes). Rows are tried in order; the first match wins; no match gives the class default.
+# match: {<raw property>: <value or list>} compares case-insensitively; {pattern: <regex>} searches the class's role values joined by a space.
+# May name products: it is recipe data, not bank logic, and never enters the runtime bundle. Each row is verified or not;
+# a detection family whose classes have unverified rows for a customer's product is capped at Recommend for that customer.
+vendor: Microsoft
+product: Defender Antivirus
+feed: Windows event log, events 1116 (detection) and 1117 (action taken), Action Name
+source:
+- docs/normalization.md (previous mapping, checked against the replay dataset)
+license: internal
+classes:
+  av_execution_state:
+    reads:
+    - EventID
+    - Action Name
+    rows:
+    - match:
+        EventID: '1116'
+      value: ran
+      verified: false
+      note: 'Detection only, no action yet: treated as executed, so it escalates as before.'
+    - match:
+        EventID: '1117'
+        Action Name:
+        - Quarantine
+        - Remove
+        - Clean
+      value: unknown
+      verified: false
+      note: The event does not say whether the file ran first, so these flag (seen in the replay dataset).
+    - match:
+        EventID: '1117'
+        Action Name: Block
+      value: unknown
+      verified: false
+      note: 'Changed in the bank migration: the event does not say whether the file was stopped before it ran (it was mapped to blocked before execution). Unknown until the lab test (#20); it flags.'
+    default: unknown

@@ -4,7 +4,7 @@ tests: BE-0018
 capability:
   name: file.signer
   inputs:
-    entity: process:subject_guid
+    entity: entity:subject
     trusted_list: CF-0008
 attacker_influence:
   rating: low
@@ -23,3 +23,4 @@ text_origin: original
 legal_review: false
 status: draft
 version: 3
+kind: triage

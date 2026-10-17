@@ -10,15 +10,11 @@ data_source:
 sigma_logsource: []
 sigma_logsource_none: Sigma has no log-source category for this alert type.
 sigma_refs: []
-required_alert_fields:
-- src_user
-- recipient
-- subject
-- message_id
-- url
-- file_hash
-- action
-- _time
+required_roles:
+- email
+- file
+- reporting_control
+- event
 intent: 'Generic: an email security gateway reports a malicious or suspicious message, delivered or not (normalized email alert, any product).'
 fp_quality: generic
 explanations:
@@ -26,29 +22,28 @@ explanations:
 - BE-0024
 - BE-0030
 fingerprint:
-- src_user
-- subject
-- file_hash
-precedent_validity: 24h
+- role:email.sender
+- role:email.subject
+- role:file.sha256
 notes: Every fingerprint field is sender-chosen, so a precedent never closes or flags by itself; the flow proceeds and the precedent is shown as context. A block closes only when the message is out of every
   mailbox and no reputation source marks its URL or attachment. Delivered-then-removed closes only with no recorded click or open.
-precedent_entity: recipient
+precedent_entity: role:email.recipient
 fingerprint_influence:
-  src_user:
+  role:email.sender:
     rating: high
     reason: Sender address set by the sender.
-  subject:
+  role:email.subject:
     rating: high
     reason: Written by the sender.
-  file_hash:
+  role:file.sha256:
     rating: high
     reason: Attachment chosen by the sender.
 flow:
 - step: 1
   question: Q-0000
   bind:
-    entity: value:recipient
-    current_action: value:action
+    entity: role:email.recipient
+    current_action: role:reporting_control.action
   attacker_influence:
     rating: high
     reason: Every fingerprint field is attacker-chosen, so a precedent only flags.
@@ -72,8 +67,8 @@ flow:
   on_unknown: flag
 - step: 4
   question: Q-0027
-  bind:
-    values:
+  rule:
+    'yes':
       param: email_blocked_action_values
   on_yes: close:mitigated_true_positive:blocked_by_control
   on_no: next
@@ -81,6 +76,8 @@ flow:
   guards:
   - question: Q-0034
     then: flag
+    bind:
+      entity: role:email.url
   - question: Q-0030
     then: flag
 - step: 5

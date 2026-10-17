@@ -1,0 +1,15 @@
+# Attacker's-view draft for D-0020 close step 3, yes answers Q-0006 (round 9). A draft never counts as proof; only a human marks it reviewed.
+proofs:
+- id: PR-0026
+  paths:
+  - D-0020@v9:1:Q-0000=no > 2:Q-0005=no > 3:Q-0006=yes
+  - D-0020@v9:1:Q-0000=no > 2:Q-0005=unknown > 3:Q-0006=yes
+  - D-0020@v9:1:Q-0000=unknown > 2:Q-0005=no > 3:Q-0006=yes
+  - D-0020@v9:1:Q-0000=unknown > 2:Q-0005=unknown > 3:Q-0006=yes
+  attacker_position: Admin rights on a host, using a known-benign accessor entry that matches on signer plus expected install path and is dump-capable (a vendor support or diagnostics tool), placed at its
+    expected path to dump LSASS.
+  why_unrealistic_or_guard: 'Guard on the known-benign-accessor step (round 9): Q-0011 (signed by a trusted publisher and not on the dump-capable exclusion list) answers no for the dump tool and flags.'
+  residual_risk: An attacker who injects code into, or sideloads a module into, a known-benign accessor that is not dump-capable.
+  aimed_cases:
+  - d-0020-step3-known-benign-accessor
+  status: draft

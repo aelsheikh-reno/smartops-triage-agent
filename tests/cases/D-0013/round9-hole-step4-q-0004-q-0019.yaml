@@ -1,0 +1,22 @@
+detection: D-0013
+name: 'round 9 hole: D-0013 step 4, yes Q-0004+Q-0019: an attacker who satisfies these answers no longer closes'
+reason: Before round 9 this closed as close:benign_true_positive:approved_change (D-0013@v6:1:Q-0000=no > 2:Q-0019=yes > 3:Q-0015=no > 4:Q-0004=yes). probable approved change; who-did-it is the only hard-to-fake
+  evidence besides a signer an attacker can borrow; verify the implementer and the module
+mode: recommend
+overrides:
+  Q-0019: true
+  Q-0015: 0
+  Q-0004: true
+alert:
+  host.name: ws-26
+  user.name: jdoe
+  process.name: regsvr32.exe
+  process.parent_name: cmd.exe
+  process.sha256: '3333333333333333333333333333333333333333333333333333333333333333'
+  process.command_line: regsvr32.exe /s C:\Users\Public\vendor.dll
+  module.path: C:\Users\Public\vendor.dll
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium
+expect:
+  outcome: flag
+order: 62

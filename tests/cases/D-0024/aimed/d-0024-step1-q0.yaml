@@ -1,0 +1,19 @@
+# Aimed case for PR-0033: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0024
+name: d-0024-step1-q0
+reason: driver precedent reused to load a known-vulnerable driver
+proof: PR-0033
+closures:
+- kind: manual_shadow_close
+  analyst: a1
+- kind: manual_shadow_close
+  analyst: a2
+overrides:
+  Q-0024: true
+alert:
+  host.name: ws-23
+  user.name: admin1
+  file.path: C:\Windows\Temp\drv64.sys
+  file.sha256: '0000000000000000000000000000000000000000000000000000000000000000'
+  event.time: '2026-10-17T08:00:00Z'
+  severity: high

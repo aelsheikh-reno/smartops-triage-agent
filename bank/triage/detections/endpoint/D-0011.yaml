@@ -17,6 +17,7 @@ explanations:
 - BE-0008
 - BE-0018
 - BE-0003
+q0_off_reason: 'The fingerprint is the exact registry value, so a precedent can only be reused by replacing the program it points to, which no question here sees (aimed case, round 9).'
 fingerprint:
 - role:host.name
 - role:registry.path
@@ -44,15 +45,9 @@ flow:
   attacker_influence:
     rating: low
     reason: An attacker cannot freely reproduce the fingerprint's host.
-  on_yes: close:inherit:precedent_match
+  on_yes: next
   on_no: next
   on_unknown: next
-  guards:
-  - question: Q-0045
-    then: flag
-    rule:
-      gte:
-        param: alert_history_min_count
 - step: 2
   question: Q-0013
   bind:
@@ -60,6 +55,14 @@ flow:
   on_yes: close:benign_true_positive:sanctioned_management_tool
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0018
+    when: ['no']
+    then: flag
+    rule: {gte: {param: org_prevalence_min_hosts}}
+  - question: Q-0045
+    then: flag
+    rule: {gte: {param: alert_history_min_count}}
 - step: 3
   question: Q-0019
   bind:
@@ -67,9 +70,21 @@ flow:
   on_yes: close:benign_true_positive:trusted_signed_software
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0018
+    when: ['no']
+    then: flag
+    rule: {gte: {param: org_prevalence_min_hosts}}
+  - question: Q-0045
+    then: flag
+    rule: {gte: {param: alert_history_min_count}}
 - step: 4
   question: Q-0004
   on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:approved_change
+      reason: 'probable approved change; who-did-it (the implementer on the change) is the only hard-to-fake evidence; verify the implementer'
   on_no: next
   on_unknown: next
 - step: 5
@@ -81,7 +96,7 @@ flow:
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 8
+version: 9
 notes: Command-line and registry-value baselines are attacker-chosen strings (attacker_influence high), so on their own they flag instead of closing.
 parameters:
   precedent_validity_hours: 72

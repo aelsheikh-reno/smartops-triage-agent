@@ -1,10 +1,10 @@
 id: Q-0017
-text: Is every URL host in the command line an internal or approved download domain?
+text: Is every URL host in the command line on the customer's approved download host list?
 tests: BE-0010
 attacker_influence:
   rating: low
-  reason: The attacker chooses the URL but must host content on an approved domain; keep the list to customer-controlled domains.
-notes: url_hosts is derived from the command line by the detection. No URL parsed means unknown, not yes.
+  reason: The attacker chooses the URL but must host content on a host the customer approved for downloads; the list holds only customer-controlled hosts, never any internal host or a shared hosting domain.
+notes: 'url_hosts is derived from the command line by the detection. No URL parsed means unknown, not yes. Being internal is not enough (#27): only hosts on the customer''s approved download host list answer yes. Residual risk: a compromised approved download host serves the attacker''s content and this answers yes; the aimed-case records for the download detections name this as their residual risk.'
 derived_from:
   source:
   - splunk/security_content detections/endpoint/windows_file_download_via_certutil.yml
@@ -14,7 +14,7 @@ derived_from:
 text_origin: original
 legal_review: false
 status: draft
-version: 3
+version: 4
 kind: triage
 inputs:
   entity: derived:url_hosts

@@ -17,5 +17,5 @@ alert:
 expect:
   outcome: flag
   suggests: close:inherit
-  blocked_by: unproven_path
+  blocked_by: guard
 order: 40

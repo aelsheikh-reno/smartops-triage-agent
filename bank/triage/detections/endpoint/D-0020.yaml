@@ -57,16 +57,27 @@ flow:
     rule:
       gte:
         param: alert_history_min_count
+  - question: Q-0011
+    when: ['no']
+    then: flag
 - step: 2
   question: Q-0005
   on_yes: close:false_positive:sanctioned_lsass_accessor
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0011
+    when: ['no']
+    then: flag
 - step: 3
   question: Q-0006
   on_yes: close:false_positive:known_benign_lsass_accessor
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0011
+    when: ['no']
+    then: flag
 - step: 4
   question: Q-0007
   rule:
@@ -77,11 +88,15 @@ flow:
   on_unknown: flag
 - step: 5
   question: Q-0011
-  on_yes: close:false_positive:lsass_access_baselined
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:false_positive:lsass_access_baselined
+      reason: 'probable baselined LSASS access by signed software; a sideloaded signed binary opens LSASS the same way for days; verify the binary and its loaded modules'
   on_no: flag
   on_unknown: flag
 status: draft
-version: 8
+version: 9
 parameters:
   entity_baseline_min_days: 5
 derived_from:

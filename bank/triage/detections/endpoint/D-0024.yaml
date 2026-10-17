@@ -45,9 +45,15 @@ flow:
     rule:
       gte:
         param: alert_history_min_count
+  - question: Q-0024
+    then: flag
 - step: 2
   question: Q-0025
-  on_yes: close:benign_true_positive:approved_driver_exception
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:approved_driver_exception
+      reason: 'probable excepted driver; an attacker who loads the excepted driver to use its flaw produces the same event; verify who installed it and why now'
   on_no: next
   on_unknown: next
 - step: 3
@@ -63,7 +69,7 @@ flow:
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 6
+version: 7
 notes: The source rule matches the driver catalogue on file name only. A hash miss in the driver catalogue plus a trusted signer is not enough to call it a name collision (vulnerable drivers are trusted-signed
   and the catalogue is incomplete), so that case flags.
 parameters:

@@ -1,0 +1,20 @@
+# Aimed case for PR-0034: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0027
+name: d-0027-step1-q0
+reason: denied-traffic precedent reused by a source that also got through somewhere
+proof: PR-0034
+closures:
+- kind: manual_shadow_close
+  analyst: a1
+- kind: manual_shadow_close
+  analyst: a2
+overrides:
+  Q-0042: false
+  Q-0050: false
+alert:
+  src.ip: 203.0.113.45
+  dest.ip: 10.20.1.15
+  dest.port: '445'
+  network.rule: deny-smb-inbound
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

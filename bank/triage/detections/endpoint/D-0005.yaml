@@ -56,6 +56,13 @@ flow:
     rule:
       gte:
         param: alert_history_min_count
+  - question: Q-0017
+    when: ['no']
+    then: flag
+  - question: Q-0014
+    when: ['no']
+    then: flag
+    rule: {gte: {param: entity_baseline_min_days}}
 - step: 2
   question: Q-0017
   on_yes: next
@@ -66,7 +73,11 @@ flow:
   rule:
     gte:
       param: entity_baseline_min_days
-  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:activity_baselined_on_host
+      reason: 'probable routine HTA from an approved host; swapped content on an approved host is not visible here; verify the HTA content'
   on_no: next
   on_unknown: next
 - step: 4
@@ -74,11 +85,15 @@ flow:
   rule:
     gte:
       param: org_prevalence_min_hosts
-  on_yes: close:benign_true_positive:prevalent_in_org
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:prevalent_in_org
+      reason: 'probable fleet-wide HTA from an approved host; swapped content on an approved host is not visible here; verify the HTA content'
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 6
+version: 7
 parameters:
   precedent_validity_hours: 72
 derived_from:

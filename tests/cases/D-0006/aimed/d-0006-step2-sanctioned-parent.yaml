@@ -1,0 +1,17 @@
+# Aimed case for PR-0007: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0006
+name: d-0006-step2-sanctioned-parent
+reason: sanctioned console used to push a PsExec command that runs the attacker's script on a target
+proof: PR-0007
+overrides:
+  Q-0001: true
+  Q-0014: 0
+alert:
+  host.name: ws-07
+  user.name: admin1
+  process.parent_name: cmd.exe
+  process.sha256: '7777777777777777777777777777777777777777777777777777777777777777'
+  process.name: psexec.exe
+  process.command_line: psexec.exe -accepteula \\srv-02 -s cmd /c C:\ProgramData\run.bat
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

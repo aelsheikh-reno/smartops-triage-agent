@@ -1,0 +1,35 @@
+id: CF-0033
+name: business_calendar
+description: 'The customer''s business calendar, per customer and optionally per site: working days (Sunday to Thursday or Monday to Friday), working hours per day, reduced-hours periods (for example
+  Ramadan hours) with their dates and hours, public holidays, and approved change-freeze periods. Read by calendar.business_time for C-09 (designed, not built). Every period is in the calendar''s own time zone.'
+fields:
+- site
+- time_zone
+- working_days
+- working_hours
+- reduced_hours_periods
+- public_holidays
+- change_freezes
+- owner
+match_rule: the site of the entity when the calendar lists one, else the customer's default calendar; dates and hours are compared in the calendar's time zone
+collected_by: customer
+supply_effort: medium
+supply_effort_reason: The working week and hours are static, but public holidays, reduced-hours periods and change freezes change every year and need an owner who updates them.
+example:
+  site: default
+  time_zone: Asia/Riyadh
+  working_days: [sunday, monday, tuesday, wednesday, thursday]
+  working_hours: 08:00-17:00
+  reduced_hours_periods:
+  - name: Ramadan
+    from: '2027-02-08'
+    to: '2027-03-09'
+    working_hours: 10:00-15:00
+  public_holidays:
+  - '2027-03-10'
+  change_freezes:
+  - from: '2026-12-20'
+    to: '2027-01-03'
+    reason: year-end freeze
+  owner: IT operations
+version: 1

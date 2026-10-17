@@ -13,6 +13,7 @@ unverified_seed: A yes whose evidence rests on a seed entry with verified false 
 coverage_items:
   device_control_write_events: The customer's device-control product also reports file-write events. Without them a connect event that records zero files written proves nothing.
   attachment_open_telemetry: The endpoint product on each recipient's host records which files were opened (by hash). Without it, no click or open record can show that an attachment was not opened.
+  link_click_telemetry: The mail or web platform records link clicks for every recipient of the message (rewritten-link clicks, or proxy records tied to the recipient). Without it, no click record can show that a link was not followed (#29).
 auto_eligibility: 'A detection is Auto-eligible for a customer only when every value-table row on its close paths is verified for that customer (bank/broker/customers/<c>/verifications.yaml: cited vendor doc, a Product Operator spot check of at least verification_min_spot_check_alerts real alerts, checker, date, vendor product version, expiry). A vendor product version change re-opens verification. Technique fallbacks are capped at Recommend. validate enforces this for every customer that sets a detection to Auto.'
 
 scope:   # enforced by the Tool Broker per caller (docs/design-decisions.md §4)
@@ -26,7 +27,7 @@ scope:   # enforced by the Tool Broker per caller (docs/design-decisions.md §4)
   access: read-only, except list.propose_update (a proposal) and the SIEM write-back actions on the broker's fixed allowlist
   timeout_seconds: 10
   max_calls_per_alert: 6
-  budget_counts_sources: [siem, edr_api, siem_copy, asset_inventory, identity_provider, threat_intel, itsm, vuln_scanner, email_security_api, soar]
+  budget_counts_sources: [siem, edr_api, siem_copy, asset_inventory, identity_provider, threat_intel, itsm, vuln_scanner, email_security_api, soar, privileged_access]
   budget_note: 'counts calls to outside tools only (the SIEM, EDR, identity, email, threat intel, change and ticketing, vulnerability scanner, SOAR), on the worst path through Q0, every step and the guards of the closing step. Our own stores do not count: the normalized alert (alert.class, alert.measure), the cached context and list store (list.lookup, context questions), case memory (precedent.check) and rules over cached context answers (context.rule); nor does internal hash or signer resolution. Exceeding it flags the alert. The flow limit (at most 5 steps, Q0 being step 1) is separate and unchanged.'
 source_authority:
   principle: The SIEM alert only starts triage. For each capability the Tool Broker answers from the authoritative source set at onboarding, usually the tool's own API; the SIEM is the authoritative source
@@ -47,6 +48,7 @@ source_authority:
     email_security_api: the email security product's own API
     soar: read-only SOAR actions on the broker's approved list
     derived: computed by the Triage agent from cached context answers
+    privileged_access: the customer's privileged-access tool or jump hosts (session records)
   siem_authoritative_only_for:
   - entity.alerts
   - entity.max_severity
@@ -717,7 +719,8 @@ capabilities:
   rating_floor: low
   escalate_only: false
   notes: 'Unknown when click or open records are not collected. If the message carried an attachment, unknown unless the coverage report includes attachment_open_telemetry for every recipient''s
-    host: an absence of click records is not evidence that nobody opened the file (round 6, B2). Added for the same reason as email.message_status.'
+    host: an absence of click records is not evidence that nobody opened the file (round 6, B2). If the message carried a link, unknown unless the coverage report includes link_click_telemetry for
+    every recipient: an absence of click records is not evidence that nobody followed the link (#29). Both rules apply to a message with both. Added for the same reason as email.message_status.'
   source_authority:
     authoritative: email_security_api
     fallback:
@@ -789,6 +792,55 @@ capabilities:
     authoritative: email_security_api
     fallback:
     - siem_copy
+- name: calendar.business_time
+  status: designed   # (designed, not built) the broker side of C-09; C-09 itself stays designed in bank/contract/questions.yaml until the contract PR makes it live
+  answers: C-09
+  kind: lookup
+  group: context
+  inputs:
+  - at_time
+  - entity (optional; a host or user whose site has its own calendar)
+  answer:
+    type: enum
+    values:
+    - business_hours
+    - after_hours
+    - weekend
+    - public_holiday
+    - change_freeze
+  measures: 'Where the alert time falls in the customer''s business calendar (CF-0033), in the calendar''s own time zone. Order of precedence: change_freeze (an approved freeze period covers the time), then
+    public_holiday, then weekend (a day outside the customer''s working days: Sunday to Thursday or Monday to Friday, per customer or per site), then after_hours (outside the working hours of that day,
+    including reduced hours such as Ramadan hours when a reduced-hours period covers the date), else business_hours.'
+  unknown_means: No calendar for the customer or site, or the alert time is missing. Unknown flags (context_unknown); it never escalates and never counts as business_hours.
+  rating_floor: none
+  escalate_only: false
+  notes: Read only by guards (C-09 is guard_only in the contract). A calendar answer can only raise scrutiny; business_hours is never evidence that an action is benign.
+  source_authority:
+    authoritative: context_store
+    fallback: []
+- name: privileged_session.match
+  status: designed   # (designed, not built) the broker side of #24; no flow uses it yet
+  contract_id: privileged_session_match
+  kind: lookup
+  group: triage
+  inputs:
+  - user
+  - host
+  - at_time
+  answer:
+    type: bool
+  yes_means: A session in the customer's privileged-access tool or on one of its jump hosts (CF-0034) covers at_time, was opened by the alert's user, and targets this host; the session record comes from the
+    privileged-access tool itself, not from the host.
+  no_means: No such session covers the time, user and host.
+  unknown_means: The customer has no privileged-access tool or jump hosts listed, or its session records are not available. Unknown never closes.
+  rating_floor: low
+  escalate_only: false
+  actor_identity: true   # the session names who acted: never the only hard-to-fake yes on a close path
+  notes: 'Designed for #24. It shows the action came through the sanctioned privileged path, which an attacker with the admin''s session also uses, so it is actor identity: it can support a close only next
+    to an answer that does not depend on who acted.'
+  source_authority:
+    authoritative: privileged_access
+    fallback: []
 - name: list.propose_update
   kind: write
   evidence: human_evidence

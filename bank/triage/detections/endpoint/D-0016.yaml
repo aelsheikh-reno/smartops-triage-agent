@@ -51,10 +51,14 @@ flow:
 - step: 3
   question: Q-0004
   on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:approved_change
+      reason: 'probable approved change; who-did-it (the implementer on the change) is the only hard-to-fake evidence; verify the implementer'
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 7
+version: 8
 derived_from:
   library: escu
   rule: escu:windows_event_log_cleared

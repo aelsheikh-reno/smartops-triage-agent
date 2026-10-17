@@ -1,0 +1,25 @@
+# Aimed case for PR-0015: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0011
+name: d-0011-step3-precedent-and-signed-writer
+reason: signed binary used to write a one-host Run key
+proof: PR-0015
+closures:
+- kind: manual_shadow_close
+  analyst: a1
+- kind: manual_shadow_close
+  analyst: a2
+overrides:
+  Q-0013: false
+  Q-0019: true
+  Q-0018: 0
+  Q-0045: 0
+alert:
+  host.name: ws-15
+  user.name: jdoe
+  process.name: MgmtAgent.exe
+  process.sha256: bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
+  registry.path: HKLM\SOFTWARE\Microsoft\Windows\CurrentVersion\Run
+  registry.value_name: Updater
+  registry.value_data: C:\ProgramData\Updater\updater.exe
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

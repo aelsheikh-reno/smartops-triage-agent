@@ -1,0 +1,18 @@
+id: CF-0034
+name: privileged_access_sources
+description: The customer's privileged-access tool and jump hosts whose session records show that an admin action came through the sanctioned privileged path (#24; read by privileged_session.match, designed, not built).
+fields:
+- kind
+- name
+- hosts
+- owner
+match_rule: a session record from a listed tool or jump host; the jump host is matched on its asset ID, never on its name
+collected_by: customer
+supply_effort: medium
+supply_effort_reason: The tool and jump hosts are few, but session records need an integration with the privileged-access tool.
+example:
+  kind: jump_host
+  name: admin-jump-01
+  hosts: [asset-4411]
+  owner: identity team
+version: 1

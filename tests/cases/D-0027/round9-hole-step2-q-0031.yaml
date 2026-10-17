@@ -1,0 +1,17 @@
+detection: D-0027
+name: 'round 9 hole: D-0027 step 2, yes Q-0031: an attacker who satisfies these answers no longer closes'
+reason: Before round 9 this closed as close:benign_true_positive:approved_scanner_activity (D-0027@v5:1:Q-0000=no > 2:Q-0031=yes). probable approved scan; a compromised scanner during its scan job is the
+  same traffic; verify the scan job and the targets
+mode: recommend
+overrides:
+  Q-0031: true
+alert:
+  src.ip: 203.0.113.45
+  dest.ip: 10.20.1.15
+  dest.port: '445'
+  network.rule: deny-smb-inbound
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium
+expect:
+  outcome: flag
+order: 80

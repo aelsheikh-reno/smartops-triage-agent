@@ -9,6 +9,9 @@ capability:
   params:
     min_days: 3
     lookback: 30d
+attacker_influence:
+  rating: high
+  reason: The command line is attacker-chosen; a routine command can be replayed or its script tampered with.
 source:
 - splunk/security_content detections/endpoint/suspicious_scheduled_task_from_public_directory.yml (tuning to the environment)
 license:
@@ -16,4 +19,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

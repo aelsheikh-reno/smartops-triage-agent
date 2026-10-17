@@ -8,6 +8,9 @@ capability:
     - value:dest
     user: value:user
     at_time: value:_time
+attacker_influence:
+  rating: none
+  reason: Approved change record with named implementers; created outside the attacker's reach.
 needs:
   context:
   - CF-0003
@@ -21,4 +24,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 4
+version: 5

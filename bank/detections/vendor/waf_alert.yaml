@@ -1,0 +1,149 @@
+id: vendor:waf_alert
+name: Web application firewall alert
+family: vendor
+use_case: UC-007
+techniques:
+- T1190
+data_source:
+- Splunk CIM Web data model (WAF events)
+sigma_logsource: []
+sigma_logsource_none: Sigma has no WAF category; its webserver category covers access logs, not WAF events.
+sigma_refs: []
+required_alert_fields:
+- src
+- forwarded_for
+- dest
+- app
+- url
+- http_method
+- status
+- signature
+- action
+- _time
+derived_fields:
+  client_ip:
+    from:
+    - forwarded_for
+    - src
+    first: true
+    note: 'the client address: the forwarded-for hop appended by the customer''s own edge, else src; never the edge address'
+intent: 'Generic: a web application firewall reports a rule match on a request to a protected application (normalized web alert, any product).'
+fp_quality: generic
+explanations:
+- BE-0003
+- BE-0019
+- BE-0021
+- BE-0022
+- BE-0030
+- BE-0032
+- BE-0037
+fingerprint:
+- client_ip
+- app
+- signature
+precedent_validity: 24h
+notes: 'Uses the client address, not the edge address. A block with a success status flags. Internal clients never close on a block. Five or more distinct rules from one client flag the blocked close. QA
+  and penetration-test sources close under a covering change or engagement record. The vulnerability step was dropped: generic rules have no CVE mapping, so it never closed them; an unblocked request flags.'
+precedent_entity: client_ip
+fingerprint_influence:
+  client_ip:
+    rating: medium
+    reason: From the forwarded-for header; only the hop the customer's own edge appends is trusted.
+  app:
+    rating: high
+    reason: Application chosen by the client.
+  signature:
+    rating: high
+    reason: Triggered by the request the client crafts.
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: value:client_ip
+    current_action: value:action
+  attacker_influence:
+    rating: medium
+    reason: The least attacker-chosen fingerprint field (client_ip) can still be forged; the close also needs a low-rated yes from a guard.
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+  - question: Q-0050
+    then: flag
+    bind:
+      field: value:client_ip
+  - question: Q-0047
+    then: flag
+  - question: Q-0054
+    then: flag
+  - question: Q-0027
+    when:
+    - 'no'
+    then: flag
+- step: 2
+  question: Q-0051
+  bind:
+    entity:
+    - value:signature
+    - value:client_ip
+    - value:app
+  on_yes: close:false_positive:tuned_signature
+  on_no: next
+  on_unknown: next
+  guards: []
+- step: 3
+  question: Q-0031
+  bind:
+    entity: value:client_ip
+  on_yes: close:benign_true_positive:approved_scanner_activity
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0052
+    when:
+    - 'no'
+    then: flag
+    if_entry_type:
+    - scanner
+    bind:
+      scanner: value:client_ip
+  - question: Q-0055
+    when:
+    - 'no'
+    then: flag
+    if_entry_type:
+    - tester
+    bind:
+      entities:
+      - value:client_ip
+- step: 4
+  question: Q-0055
+  bind:
+    entities:
+    - value:client_ip
+  on_yes: close:benign_true_positive:authorized_security_test
+  on_no: next
+  on_unknown: next
+- step: 5
+  question: Q-0027
+  on_yes: close:mitigated_true_positive:blocked_by_control
+  on_no: flag
+  on_unknown: flag
+  guards:
+  - question: Q-0054
+    then: flag
+  - question: Q-0050
+    then: flag
+    bind:
+      field: value:client_ip
+  - question: Q-0047
+    then: flag
+source:
+  repo: internal
+  path: bank/use_cases.yaml#UC-007
+  title: Web application firewall alert
+license: internal
+status: draft
+version: 3

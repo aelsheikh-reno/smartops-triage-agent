@@ -39,13 +39,35 @@ fingerprint:
 - user
 - process_hash
 - target_host
+fingerprint_influence:
+  dest:
+    rating: low
+    reason: Host that reported the event.
+  user:
+    rating: low
+    reason: Account recorded by the OS.
+  process_hash:
+    rating: low
+    reason: Computed by the sensor; reproducing it means running the same binary.
+  target_host:
+    rating: high
+    reason: Target named in an attacker-written command line.
+precedent_entity: dest
 precedent_validity: 72h
 flow:
 - step: 1
   question: Q-0000
+  bind:
+    entity: value:dest
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce dest, user, process_hash in the fingerprint.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
 - step: 2
   question: Q-0001
   on_yes: close:benign_true_positive:sanctioned_deployment_tool
@@ -72,4 +94,4 @@ source:
   title: Windows Service Creation on Remote Endpoint
 license: Apache-2.0
 status: draft
-version: 5
+version: 6

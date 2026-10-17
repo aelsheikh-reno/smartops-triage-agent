@@ -35,28 +35,47 @@ fingerprint:
 - dest
 - parent_process_name
 - process_hash
+fingerprint_influence:
+  dest:
+    rating: low
+    reason: Host that reported the event.
+  parent_process_name:
+    rating: high
+    reason: File name the attacker can choose.
+  process_hash:
+    rating: low
+    reason: Computed by the sensor; reproducing it means running the same binary.
+precedent_entity: dest
 precedent_validity: 7d
 flow:
 - step: 1
   question: Q-0000
+  bind:
+    entity: value:dest
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce dest, process_hash in the fingerprint.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
 - step: 2
   question: Q-0021
   on_yes: close:benign_true_positive:sanctioned_backup_tool
   on_no: next
   on_unknown: next
 - step: 3
-  question: Q-0014
-  on_yes: close:benign_true_positive:activity_baselined_on_host
-  on_no: next
-  on_unknown: next
-- step: 4
   question: Q-0002
   on_yes: next
   on_no: escalate
   on_unknown: flag
+- step: 4
+  question: Q-0014
+  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_no: next
+  on_unknown: next
 - step: 5
   question: Q-0004
   on_yes: close:benign_true_positive:approved_change
@@ -68,4 +87,4 @@ source:
   title: Creation of Shadow Copy
 license: Apache-2.0
 status: draft
-version: 5
+version: 7

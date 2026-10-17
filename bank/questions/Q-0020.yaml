@@ -6,6 +6,9 @@ capability:
   inputs:
     list: CF-0013
     entity: value:src_user
+attacker_influence:
+  rating: low
+  reason: The acting account is recorded by the directory, but a compromised provisioning account would match.
 needs:
   context:
   - CF-0013
@@ -16,4 +19,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

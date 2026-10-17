@@ -1,0 +1,23 @@
+id: Q-0055
+text: Does an approved change or test-engagement record name this source address and cover the alert time?
+tests: BE-0003
+capability:
+  name: change.window
+  inputs:
+    entities:
+    - value:src
+    at_time: value:_time
+attacker_influence:
+  rating: none
+  reason: Approved change record naming the source.
+needs:
+  context:
+  - CF-0003
+source:
+- external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+notes: Penetration-test, red-team and QA engagements must be logged as approved changes naming the tester's source addresses (onboarding checklist); otherwise alerts from approved testers flag.

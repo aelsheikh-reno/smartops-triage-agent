@@ -6,6 +6,9 @@ capability:
   inputs:
     list: CF-0011
     entity: process:parent_process_guid
+attacker_influence:
+  rating: low
+  reason: Matched on hash or OS-verified signer plus path.
 needs:
   context:
   - CF-0011
@@ -17,4 +20,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

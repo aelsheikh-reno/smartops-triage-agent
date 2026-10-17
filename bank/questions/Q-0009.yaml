@@ -8,6 +8,9 @@ capability:
     - CF-0006.expected_parents
     - CF-0001
     entity: process:parent_process_guid
+attacker_influence:
+  rating: low
+  reason: Parent identity matched on hash or OS-verified signer plus path.
 needs:
   context:
   - CF-0006
@@ -19,4 +22,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 3
+version: 4

@@ -1,0 +1,24 @@
+id: Q-0043
+text: Does an approved, unexpired removable-media exception cover this user and device class?
+tests: BE-0025
+capability:
+  name: list.lookup
+  inputs:
+    list: CF-0022
+    entity:
+    - value:user
+    - value:device_class
+    at_time: value:_time
+attacker_influence:
+  rating: none
+  reason: Approved exception record with an owner and expiry.
+needs:
+  context:
+  - CF-0022
+source:
+- bank/use_cases.yaml triage_hints
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

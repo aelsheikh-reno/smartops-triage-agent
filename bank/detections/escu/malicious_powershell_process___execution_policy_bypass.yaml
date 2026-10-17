@@ -31,24 +31,50 @@ fingerprint:
 - dest
 - parent_process_name
 - process
+fingerprint_influence:
+  dest:
+    rating: low
+    reason: Host that reported the event.
+  parent_process_name:
+    rating: high
+    reason: File name the attacker can choose.
+  process:
+    rating: high
+    reason: Command line the attacker writes.
+precedent_entity: dest
 precedent_validity: 72h
 flow:
 - step: 1
   question: Q-0000
+  bind:
+    entity: value:dest
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce dest in the fingerprint.
   on_yes: close:inherit:precedent_match
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
 - step: 2
   question: Q-0001
   on_yes: close:benign_true_positive:sanctioned_deployment_tool
   on_no: next
   on_unknown: next
 - step: 3
+  question: Q-0019
+  on_yes: next
+  on_no: flag
+  on_unknown: flag
+  bind:
+    entity: process:parent_process_guid
+- step: 4
   question: Q-0014
   on_yes: close:benign_true_positive:activity_baselined_on_host
   on_no: next
   on_unknown: next
-- step: 4
+- step: 5
   question: Q-0015
   on_yes: close:benign_true_positive:prevalent_in_org
   on_no: escalate
@@ -59,4 +85,4 @@ source:
   title: Malicious PowerShell Process - Execution Policy Bypass
 license: Apache-2.0
 status: draft
-version: 5
+version: 7

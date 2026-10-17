@@ -6,6 +6,12 @@ A fast, time-boxed first pass on an alert: is it worth investigating, and how ur
 ## 2. Method
 For each detection, list its 2–3 most common benign explanations and test only those, as yes/no questions. One holds → close as false positive or benign true positive, with a reason code. None holds → escalate. Missing answer → unknown → analyst decides.
 
+Vendor alerts (AV/EDR, IDS/IPS, WAF, email gateway, DLP, proxy, firewall, device control) add a third close: **mitigated true positive**, when the activity was malicious or unwanted but the control that raised the alert stopped it (blocked, quarantined, denied) and nothing else needs doing. Each vendor family is one generic detection (`vendor:` prefix) bound to normalized alert fields, never one per product.
+
+Mitigated true positive never applies to high-risk families: hack tools, credential dumpers, ransomware, web shells, exploit frameworks, remote access trojans and remote-admin tools, miners, proxyware and cracks. Those escalate even when blocked. Antivirus test files (EICAR and similar) flag; they never close as low risk. Only a block before execution counts: post-execution quarantine or cleaning, a pending reboot and partial remediation answer unknown and flag. Each vendor's action values map to the bank's normalized values in `docs/normalization.md`.
+
+Internal sources: for firewall, IDS and WAF alerts, a source inside the customer's internal networks (a per-customer parameter) never closes on denied, blocked or patched; it flags or escalates. Tuned-signature and approved-scanner closes still apply to internal sources. In IDS and firewall flows an approved scanner closes only while its scan job targets the alert's destination (unknown flags); in WAF flows it needs a change ticket naming the source.
+
 ## 3. Boundary
 Only entities named in the alert, only alerts that already fired, a fixed ±24h window. Pivoting to other entities or building raw-log timelines is investigation, out of scope.
 
@@ -52,7 +58,7 @@ Answer contract: `answer` (yes | no | unknown), `unknown_reason` (no_capability 
 - Reputation and anomaly capabilities are escalate_only: a hit escalates or flags and never closes; a miss is never benign evidence.
 - `change.window` answers yes only when an approved change covers the host and time and lists the alert's user (or one of their groups) as implementer; no when nothing covers it, or every covering change lists implementers without the user; unknown (no_data) when a covering change has no implementer data.
 - `vuln.not_applicable` answers unknown when the signature maps to no CVE (most generic IDS and WAF rules), so it never closes them. The replay gate counts these unknowns.
-- `alert.history` counts alerts that already fired inside the triage window and share a key (the fingerprint, or a source, destination, user or campaign key). It reads existing alerts only, never raw logs. A count at or above the per-customer threshold (default 3) turns a close into a flag: a burst is not noise.
+- `alert.history` counts alerts that already fired inside the triage window and share a key (the fingerprint, or a source, destination, user or campaign key). It reads existing alerts only, never raw logs. A count at or above the per-customer threshold (default 3; proxy 10) is used as a guard that raises the outcome, typically a close to a flag: a burst is not noise.
 
 The Tool Broker enforces scope: entities named in the alert only; fixed windows (±24h for event lookups; baselines and prevalence use their declared lookbacks and return counts, not raw events); read-only; a per-call timeout (timeout = unavailable); at most 6 calls per alert including Q0, counted on the worst single path through the flow (steps plus the guards of the closing step). Resolving a file's hash or signer inside a lookup is the broker's job and does not count against the budget.
 
@@ -60,7 +66,7 @@ Write-back goes only through `list.propose_update`. Reduce-scrutiny changes (all
 
 Vendor neutrality: the bank holds no vendor or product names. Only offline metadata (`data_source`, `sigma_logsource`, `sigma_refs`, `source`, `license`) may name them, plus seed data under `bank/seeds/`, which is loaded into the customer's context store at onboarding and never reaches the agent. Question text describes what to check about an entity, never where or with which tool. The Triage agent receives a runtime bundle (`tools/export_bundle.py`) built without the offline metadata; the validator fails if the bundle contains an offline key or a vendor name. Recipe templates (§6) may name tools; they ship separately from the runtime bundle.
 
-Vendor value mappings (`docs/normalization.md`, added with batch 1) mark each row verified or not. A detection whose family mapping has any unverified row is capped at Recommend and cannot reach Auto until every row is verified; `validate` enforces this.
+Vendor value mappings (`docs/normalization.md`) mark each row verified or not. The cap is per customer: a detection is capped at Recommend for a customer while that customer's product rows for its family are unverified, as recorded by the onboarding check "Check vendor alerts are normalized". The detection declares `auto_requires: [vendor_mapping_verified]`; `validate` requires it for any family with unverified rows.
 
 Allowlist and "known tool" lookups match on file hash, or code-signing signer plus path, never on name or path alone. Names and paths are attacker-controlled. Where the alert lacks hash or signer, fetch them from the same process's creation event by process GUID; if still unavailable, the answer is unknown.
 
@@ -106,7 +112,12 @@ The output is a data health report for the customer. It feeds the coverage repor
 - Technique-only rules are capped at Recommend mode.
 - No questions (usually a custom rule): no verdict; the agent sends a context pack, the analyst triages, the Use Case Manager drafts questions from the analyst's reasoning for human approval, and the rule starts in Shadow.
 - Flows: at most 5 steps, early exit; each step has on_yes / on_no / on_unknown → next | close:<disposition>:<reason_code> | escalate | flag.
-- Q0 precedent check first in every flow: same fingerprint (rule + entity + key attributes) closed with a recorded reason within the validity window (e.g. 24h–7d), not a crown jewel, no other alert on the entity in the window → close citing the precedent. In Shadow and Recommend the precedent is shown to the analyst instead.
+- Guards: a step may carry guards, extra checks that run when the step reaches a close or, where a guard says so, a flag outcome. Each names a question, the answers that trigger it and the result (flag or escalate); an unknown guard answer raises to at least flag. Guards only raise: a close becomes a flag or an escalation, a flag becomes an escalation, never the reverse, and no guard attaches to an escalate outcome. All applicable guards run and the strongest result wins (escalate > flag), whatever their order. A guard may apply only to some matched list entry types (for example analysis hosts versus approved tools). A guard that fires on no means a close needs a yes from it. Guards never create a close, and their calls count against the call budget on their path.
+- Attacker influence: none, low, medium (control-recorded but forgeable in transit, such as alerts forwarded over syslog), high. Every close path must rest on a yes rated none or low. A question may rate itself per source profile (direct API or forwarded); the profile is recorded per vendor family at onboarding, and a close left without a none/low yes under the customer's profile flags.
+- Q0 precedent check first in every flow: same fingerprint (rule + entity + key attributes) closed with a recorded reason within the validity window (e.g. 24h–7d), the detection's precedent entity not a crown jewel, no other alert on it in the window → close citing the precedent. In Shadow and Recommend the precedent is shown to the analyst instead.
+  - Each detection names its precedent entity and rates each fingerprint field's attacker influence. Q0's rating is the least attacker-chosen field's. If every field is attacker-chosen (sender, subject, message id), the precedent never closes or flags by itself: the flow proceeds and the match is shown as context. If the best field is medium (spoofable source addresses), the close also needs a low-rated yes from a guard, such as "every connection was denied".
+  - A precedent closed as mitigated true positive is inherited only when the current alert was also blocked.
+  - Three or more earlier alerts with the same fingerprint in the triage window turn the precedent close into a flag.
 - Two layers: public base bank plus a customer layer (runbooks, mined closures) that overrides base entries by ID. Mined closures are evidence, not truth, and go through curation.
 
 ## 10. Repeat alerts
@@ -203,7 +214,7 @@ Proposals for new questions, facts or exceptions come only from the Use Case Man
 Supporting models: the injection classifier and the reranker (§17), on the customer's premises.
 
 ## 14. Modes and guardrails
-Per detection: Shadow (verdict hidden) → Recommend (analyst accepts or overrides) → Auto (close benign, escalate suspicious). Suggested promotion threshold: ≥95% agreement over 50+ alerts. Auto mode requires process telemetry with hashes (Sysmon or EDR); customers on Security 4688 only stay in Recommend. Permanent: no auto-close on crown jewels; audit 5–10% of auto-closures; escalation is never suppressed.
+Per detection: Shadow (verdict hidden) → Recommend (analyst accepts or overrides) → Auto (close benign, escalate suspicious). Suggested promotion threshold: ≥95% agreement over 50+ alerts. Auto mode requires process telemetry with hashes (Sysmon or EDR); customers on Security 4688 only stay in Recommend. Permanent: no auto-close on crown jewels (in every mode, any close on a crown-jewel entity becomes a flag; this is how the AV review's "crown-jewel host → flag" is met for every detection); audit 5–10% of auto-closures; escalation is never suppressed.
 
 ## 15. Sources and licenses
 - splunk/security_content (ESCU), Apache-2.0: known_false_positives, ATT&CK mapping, data source

@@ -6,6 +6,9 @@ capability:
   inputs:
     user: value:user
     groups: CF-0002
+attacker_influence:
+  rating: low
+  reason: Group membership is set by directory administrators, not by the alerting activity.
 needs:
   context:
   - CF-0002
@@ -18,4 +21,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

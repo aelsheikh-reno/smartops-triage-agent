@@ -1,0 +1,27 @@
+id: CF-0023
+name: approved_security_tooling
+description: 'Security tools and analysis hosts expected to trigger antivirus: scanners and forensic tools (by hash or signer plus path, per host), and sandbox or malware-analysis hosts.'
+fields:
+- entry_type
+- sha256
+- signer
+- process_path
+- asset_ids
+- owner
+- expires
+match_rule: 'host scope matched on asset ID (the product''s device or agent ID), never hostname. tool entries: the file''s sha256, or its signer plus path when the file is still readable, and the host''s
+  asset ID in asset_ids; analysis_host entries: the host''s asset ID in asset_ids. A quarantined or unreadable file with no hash in the alert cannot be matched: unknown, and the approved-tooling close does
+  not apply.'
+collected_by: customer
+supply_effort: medium
+supply_effort_reason: Needs hashes or signer plus path, and asset IDs.
+example:
+  entry_type: analysis_host
+  asset_ids:
+  - 0f3c9a7e-5b21-4c1e-9d0a-7a1e2b3c4d5e
+  owner: Threat research
+  expires: '2027-06-30'
+version: 5
+entry_types:
+- tool
+- analysis_host

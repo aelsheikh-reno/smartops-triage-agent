@@ -1,0 +1,22 @@
+id: Q-0033
+text: Does recent vulnerability data show the target is not affected by the vulnerability this signature targets?
+tests: BE-0022
+capability:
+  name: vuln.not_applicable
+  inputs:
+    host: value:dest
+    signature: value:signature
+  params:
+    max_age:
+      param: vuln_data_max_age
+attacker_influence:
+  rating: low
+  reason: Vulnerability data is collected independently of the attack; it can be stale or miss unmanaged software.
+notes: Unknown when the signature maps to no vulnerability, or when no data newer than vuln_data_max_age exists.
+source:
+- bank/use_cases.yaml triage_hints
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

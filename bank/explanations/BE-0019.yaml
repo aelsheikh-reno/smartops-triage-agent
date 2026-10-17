@@ -1,0 +1,7 @@
+id: BE-0019
+name: Blocked by the control
+description: The security control that raised the alert blocked, quarantined, cleaned or dropped the item; nothing ran or got through.
+source:
+- bank/use_cases.yaml triage_hints
+license: internal
+version: 1

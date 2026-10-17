@@ -10,7 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bank as B  # noqa: E402
 
 REQUIRED = {
-    "question": ["id", "text", "tests", "capability", "source", "license", "text_origin", "legal_review", "status", "version"],
+    "question": ["id", "text", "tests", "capability", "attacker_influence", "source", "license", "text_origin", "legal_review", "status", "version"],
     "explanation": ["id", "name", "description", "source", "license", "version"],
     "fact": ["id", "name", "description", "fields", "collected_by", "version"],
     "rule": ["id", "name", "techniques", "data_source", "sigma_logsource", "sigma_refs", "required_alert_fields", "intent", "fp_quality", "fingerprint", "precedent_validity", "flow", "source", "license", "status", "version"],
@@ -50,6 +50,7 @@ def main():
     err = lambda where, msg: errors.append(f"{where}: {msg}")
     caps, params = b["capability_by_name"], b["parameters"]
     budget = b["capabilities"]["scope"]["max_calls_per_alert"]
+    profiles = {k for k in b["capabilities"]["source_profiles"] if k != "note"}
 
     for kind, coll in (("question", b["questions"]), ("explanation", b["explanations"]), ("fact", b["facts"])):
         for i, doc in coll.items():
@@ -57,6 +58,8 @@ def main():
                 if k not in doc:
                     err(doc["_file"], f"missing {k}")
     for fid, f in b["facts"].items():
+        if f.get("supply_effort") not in ("low", "medium", "high") or not str(f.get("supply_effort_reason", "")).strip():
+            err(f["_file"], "supply_effort must be low|medium|high, with a supply_effort_reason")
         if f.get("collected_by") == "bank_seed" and not f.get("seed_file"):
             err(f["_file"], "bank_seed fact needs a seed_file (with source and license)")
 
@@ -68,6 +71,29 @@ def main():
         if not isinstance(cap, dict) or cap.get("name") not in caps:
             err(w, f"unknown capability {cap.get('name') if isinstance(cap, dict) else cap}")
             continue
+        ai = q.get("attacker_influence") or {}
+        if ai.get("rating") not in B.RATING_ORDER or not str(ai.get("reason", "")).strip():
+            err(w, "attacker_influence needs rating none|low|medium|high and a one-line reason")
+        for prof, r in (ai.get("by_source") or {}).items():
+            if prof not in profiles or r not in B.RATING_ORDER:
+                err(w, f"attacker_influence.by_source {prof}: {r} needs a known source profile and rating")
+        if cap["name"] == "org.prevalence":
+            allp = dict(cap.get("inputs") or {}); allp.update(cap.get("params") or {})
+            if "window" in allp and ({"min_weeks", "of_weeks"} & set(allp)):
+                err(w, "org.prevalence: window cannot be combined with min_weeks/of_weeks")
+        for item in (q.get("needs") or {}).get("coverage") or []:
+            if item not in (b["capabilities"].get("coverage_items") or {}):
+                err(w, f"needs.coverage {item} is not declared in capabilities.yaml coverage_items")
+        if cap["name"] == "alert.field":
+            inp, ops = cap.get("inputs") or {}, caps["alert.field"]["ops"]
+            if "in" in inp or inp.get("op") not in ops or "values" not in inp or "field" not in inp:
+                err(w, f"alert.field needs field, op (one of {', '.join(ops)}) and values")
+            if ("unknown_op" in inp) != ("unknown_values" in inp) or inp.get("unknown_op", "in") not in ops:
+                err(w, "alert.field unknown_op and unknown_values go together")
+            for k in ("values", "unknown_values"):
+                v = inp.get(k)
+                if isinstance(v, dict) and v.get("param") not in params:
+                    err(w, f"alert.field {k}: unknown parameter {v}")
         if caps[cap["name"]].get("flow_use") == "forbidden":
             err(w, f"capability {cap['name']} cannot back a question")
         for lid in B.list_refs(q):
@@ -166,19 +192,28 @@ def main():
         for t in techs:
             if attack_ids is not None and t not in attack_ids:
                 err(w, f"technique {t} not active in ATT&CK v20.0")
-            if kind == "rule" and t not in b["techniques"]:
+            if kind == "rule" and d.get("family") != "vendor" and t not in b["techniques"]:
                 warnings.append(f"{d['id']}: no technique fallback for {t}")
         if kind == "rule":
+            vendor = d.get("family") == "vendor"
+            if d.get("fp_quality") not in ("good", "vague", "none", "generic"):
+                err(w, f"fp_quality {d.get('fp_quality')} must be good|vague|none|generic")
+            if vendor:
+                if not d["id"].startswith("vendor:"):
+                    err(w, "vendor-family detections use the vendor: id prefix")
+                if b["use_cases"] and d.get("use_case") not in {u["id"] for u in b["use_cases"]}:
+                    err(w, f"use_case {d.get('use_case')} not in the catalog")
             ls = d.get("sigma_logsource") or []
-            if not ls:
-                err(w, "sigma_logsource must list at least one {product, category|service}")
+            if not ls and not (vendor and d.get("sigma_logsource_none")):
+                err(w, "sigma_logsource must list at least one entry (vendor families may leave it empty with sigma_logsource_none)")
             for entry in ls:
                 keys = set(entry) - {"product"}
-                if "product" not in entry or len(keys) != 1 or not keys <= {"category", "service"}:
-                    err(w, f"sigma_logsource entry {entry} must be product plus one of category or service")
+                if len(keys) != 1 or not keys <= {"category", "service"}:
+                    err(w, f"sigma_logsource entry {entry} must be [product plus] one of category or service")
                 elif sigma_tax is not None:
                     kind_key = keys.pop()
-                    if entry[kind_key] not in sigma_tax.get(entry["product"], {}).get(kind_key, {}):
+                    product = entry.get("product", "empty")
+                    if entry[kind_key] not in sigma_tax.get(product, {}).get(kind_key, {}):
                         err(w, f"sigma_logsource {entry} not in Sigma taxonomy (tests/logsource.json)")
             for ref in d.get("sigma_refs") or []:
                 if ref.get("relation") not in ("equivalent", "closest"):
@@ -199,7 +234,7 @@ def main():
         for e in d.get("explanations", []):
             if e not in b["explanations"]:
                 err(w, f"unknown explanation {e}")
-        fields = set(d.get("required_alert_fields") or d.get("assumed_alert_fields") or [])
+        fields = set(d.get("required_alert_fields") or d.get("assumed_alert_fields") or []) | set(d.get("optional_alert_fields") or [])
         avail = fields | set(d.get("derived_fields") or {}) | {"fingerprint"}
         for fp in d.get("fingerprint", []):
             if fp not in avail and fp not in ("writer_hash", "driver_hash", "source_image_hash"):
@@ -207,8 +242,27 @@ def main():
         flow = d.get("flow", [])
         if not 1 <= len(flow) <= 5:
             err(w, f"flow has {len(flow)} steps (1-5 allowed)")
-        if len(flow) > budget:
-            err(w, f"flow exceeds call budget {budget}")
+        fi = d.get("fingerprint_influence") or {}
+        for fp in d.get("fingerprint", []):
+            if (fi.get(fp) or {}).get("rating") not in B.RATING_ORDER or not str((fi.get(fp) or {}).get("reason", "")).strip():
+                err(w, f"fingerprint_influence must rate {fp} (none|low|medium|high, with a reason)")
+        if d.get("precedent_entity") not in avail:
+            err(w, f"precedent_entity {d.get('precedent_entity')} must be an alert or derived field")
+        for fp, e in fi.items():
+            fb = (e or {}).get("fallback")
+            if fb and (fb.get("field") not in avail or fb.get("rating") not in B.RATING_ORDER):
+                err(w, f"fingerprint_influence {fp}: fallback needs an available field and a rating")
+        if d.get("precedent_entity_fallback") and d["precedent_entity_fallback"] not in avail:
+            err(w, f"precedent_entity_fallback {d['precedent_entity_fallback']} must be an alert or derived field")
+        for req in d.get("auto_requires") or []:
+            if req not in (b["capabilities"].get("auto_requirements") or {}):
+                err(w, f"auto_requires {req} is not declared in capabilities.yaml auto_requirements")
+        refs_ok = all(st.get("question") in b["questions"] for st in flow) and all(
+            gd.get("question") in b["questions"] for st in flow for gd in st.get("guards") or [])
+        if refs_ok:
+            calls = max((B.path_calls(b, p, o, gs) for p, o, gs in B.enumerate_paths(flow)), default=0)
+            if calls > budget:
+                err(w, f"worst path makes {calls} capability calls (steps plus guards), over the budget of {budget}")
         for n, st in enumerate(flow, 1):
             where = f"{w} step {n}"
             if st.get("step") != n:
@@ -217,8 +271,52 @@ def main():
             if not q:
                 err(where, f"unknown question {st.get('question')}")
                 continue
-            if n == 1 and (q["id"] != "Q-0000" or st["on_yes"] != "close:inherit:precedent_match"):
-                err(where, "flow must start with Q-0000 closing as precedent_match")
+            if n == 1:
+                want, got = B.q0_rating(d), (st.get("attacker_influence") or {}).get("rating")
+                if q["id"] != "Q-0000":
+                    err(where, "flow must start with Q-0000")
+                elif got != want or not str((st.get("attacker_influence") or {}).get("reason", "")).strip():
+                    err(where, f"Q0 attacker_influence is {got}; the fingerprint fields give {want} (with a reason)")
+                elif st["on_yes"] != ("next" if want == "high" else "close:inherit:precedent_match"):
+                    err(where, f"Q0 rated {want}: on_yes must be {'next' if want == 'high' else 'close:inherit:precedent_match'}")
+                fb = B.q0_fallback_rating(d)
+                if fb and fb != want and (st.get("attacker_influence") or {}).get("fallback_rating") != fb:
+                    err(where, f"Q0 needs attacker_influence.fallback_rating {fb} (fingerprint fallback)")
+                if (st.get("bind") or {}).get("entity") != f"value:{d.get('precedent_entity')}":
+                    err(where, "Q0 must bind entity to value:<precedent_entity>")
+            elif st.get("attacker_influence"):
+                err(where, "step-level attacker_influence is only for Q0")
+            kinds = {B.outcome_kind(st.get(e, "")) for e in ("on_yes", "on_no", "on_unknown")} - {"next"}
+            for gd in st.get("guards") or []:
+                gw = f"{where} guard {gd.get('question')}"
+                gq = b["questions"].get(gd.get("question"))
+                if not gq:
+                    err(gw, "unknown question")
+                    continue
+                if gd.get("then") not in ("flag", "escalate"):
+                    err(gw, "then must be flag or escalate")
+                applies = gd.get("applies_to", ["close"])
+                if not applies or set(applies) - {"close", "flag"}:
+                    err(gw, "applies_to lists close and/or flag; a guard never attaches to an escalate outcome")
+                for k in applies:
+                    if k not in kinds:
+                        err(gw, f"applies to {k}, but the step has no {k} outcome")
+                    elif B.SEVERITY.get(gd.get("then"), -1) <= B.SEVERITY[k]:
+                        err(gw, f"then {gd.get('then')} is not stronger than the {k} outcome it guards (guards only raise)")
+                if gd.get("if_entry_type"):
+                    lf = (q["capability"].get("inputs") or {}).get("list")
+                    types = set((b["facts"].get(lf) or {}).get("entry_types") or []) if isinstance(lf, str) else set()
+                    if q["capability"]["name"] != "list.lookup" or not set(gd["if_entry_type"]) <= types:
+                        err(gw, f"if_entry_type {gd['if_entry_type']} must name entry_types of the step's list ({sorted(types) or 'none'})")
+                when = gd.get("when", ["yes"])
+                if not when or set(when) - {"yes", "no"}:
+                    err(gw, "when lists yes and/or no (unknown always flags)")
+                gcap = caps.get(gq["capability"]["name"], {})
+                if gcap.get("escalate_only") and "no" in when:
+                    err(gw, f"escalate_only capability {gcap.get('name')}: a miss is never benign evidence")
+                for ref_kind, fld in B.walk_refs(B.step_inputs(gq, gd)):
+                    if fld == "subject_guid" or fld not in avail:
+                        err(gw, f"{gq['id']} input {ref_kind}:{fld} not in alert fields")
             cap = caps.get(q["capability"]["name"], {})
             for edge in ("on_yes", "on_no", "on_unknown"):
                 v = st.get(edge)
@@ -236,8 +334,8 @@ def main():
                         err(where, "unknown must never close")
                     if cap.get("escalate_only"):
                         err(where, f"escalate_only capability {cap['name']} cannot close")
-            if cap.get("escalate_only") and st["on_yes"] != "escalate":
-                err(where, f"escalate_only capability {cap['name']}: a hit must escalate")
+            if cap.get("escalate_only") and st["on_yes"] not in ("escalate", "flag"):
+                err(where, f"escalate_only capability {cap['name']}: a hit must escalate or flag")
             if n == len(flow) and "next" in (st["on_yes"], st["on_no"], st["on_unknown"]):
                 err(where, "last step cannot fall through with next")
             for ref_kind, fld in B.walk_refs(B.step_inputs(q, st)):
@@ -287,6 +385,8 @@ def main():
                 for x in block.get("shown", []):
                     if src_ids and src in src_ids and x["id"] not in src_ids[src]:
                         err(w, f"linked {x['id']} not found in cloned {src} sources")
+                    if src == "vendor" and x["id"] not in b["detections"]:
+                        err(w, f"linked {x['id']} is not a bank vendor detection")
             covered = u.get("covered_by", [])
             shown = {x["id"] for blk in u["linked"].values() for x in blk.get("shown", [])}
             for d in covered:
@@ -304,14 +404,54 @@ def main():
             fallbacks = [t for t in u.get("techniques", []) if t in b["techniques"]]
             if sorted(u.get("technique_fallbacks", [])) != sorted(fallbacks):
                 err(w, f"technique_fallbacks should be {sorted(fallbacks)}")
-            want = (("rule-level-full" if len(covered) == n_linked else "rule-level-partial") if covered
+            want = ("generic" if u.get("family") == "vendor" and covered and all(x.startswith("vendor:") for x in covered)
+                    else ("rule-level-full" if len(covered) == n_linked else "rule-level-partial") if covered
                     else "technique-only" if fallbacks else "none")
             if u.get("coverage") != want:
                 err(w, f"coverage is {u.get('coverage')}, bank says {want}")
+    # Vendor value mapping: a family with any unverified row is capped at Recommend.
+    norm = os.path.join(B.ROOT, "docs", "normalization.md")
+    unverified_families = {}
+    if os.path.exists(norm):
+        families, cols = [], None
+        with open(norm) as fh:
+            for line in fh:
+                line = line.strip()
+                if line.startswith("## "):
+                    families, cols = [], None
+                elif line.startswith("Families:"):
+                    families = re.findall(r"`([^`]+)`", line)
+                    for fam in families:
+                        if fam not in b["detections"]:
+                            err("docs/normalization.md", f"Families names unknown detection {fam}")
+                elif line.startswith("|") and families:
+                    cells = [c.strip() for c in line.strip("|").split("|")]
+                    if cols is None:
+                        cols = [c.lower() for c in cells]
+                        if "verified" not in cols:
+                            err("docs/normalization.md", f"mapping table for {families} has no Verified column")
+                    elif not set(line) <= set("|-: ") and "verified" in cols:
+                        v = cells[cols.index("verified")].lower()
+                        if v not in ("true", "false"):
+                            err("docs/normalization.md", f"row '{cells[0]} / {cells[1]}' must be verified true or false")
+                        elif v == "false":
+                            for fam in families:
+                                unverified_families.setdefault(fam, []).append(f"{cells[0]}: {cells[1]}")
+    for fam, rows in sorted(unverified_families.items()):
+        d = b["detections"].get(fam)
+        if d and "vendor_mapping_verified" not in (d.get("auto_requires") or []):
+            err(d["_file"], f"family mapping has {len(rows)} unverified rows in docs/normalization.md: declare auto_requires: [vendor_mapping_verified] "
+                            "(capped at Recommend for each customer whose product rows are unverified)")
+        elif d:
+            info.append(f"{fam}: capped at Recommend per customer until that customer's product rows ({len(rows)} unverified overall) are verified")
+    for did, d in b["detections"].items():
+        if d.get("family") == "vendor" and d.get("max_mode") == "recommend" and did not in unverified_families and not d.get("max_mode_reason"):
+            err(d["_file"], "max_mode recommend needs a max_mode_reason")
     for x in b["pilot"]["detections"]:
         if x["id"] not in b["detections"]:
             err("bank/pilot.yaml", f"{x['id']} has no detection file")
-    used_q = {st["question"] for _, d in B.flows(b) for st in d["flow"]}
+    used_q = {st["question"] for _, d in B.flows(b) for st in d["flow"]} | {
+        gd["question"] for _, d in B.flows(b) for st in d["flow"] for gd in st.get("guards") or []}
     for qid in sorted(set(b["questions"]) - used_q):
         warnings.append(f"{qid}: not used by any flow")
     used_rc = {B.OUTCOME.match(st[e]).group(3) for _, d in B.flows(b) for st in d["flow"] for e in ("on_yes", "on_no") if st[e].startswith("close")}

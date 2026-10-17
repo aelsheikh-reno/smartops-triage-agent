@@ -5,7 +5,9 @@ fields:
 - host
 - role
 collected_by: customer
+supply_effort: low
+supply_effort_reason: Static host list.
 example:
   host: jump01.corp.local
   role: Admin jump host
-version: 1
+version: 2

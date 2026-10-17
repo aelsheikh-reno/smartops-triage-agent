@@ -5,7 +5,9 @@ fields:
 - account
 - purpose
 collected_by: customer
+supply_effort: low
+supply_effort_reason: Static account list.
 example:
   account: CORP\svc-imaging
   purpose: OS imaging task sequence
-version: 1
+version: 2

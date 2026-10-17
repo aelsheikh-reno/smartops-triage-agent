@@ -11,6 +11,8 @@ fields:
 match_rule: host in hosts and at_time within start..end; yes if user is in implementers (directly or by group); no if no change covers host and time, or covering changes list implementers without the user;
   unknown (no_data) if a covering change has no implementers
 collected_by: customer
+supply_effort: high
+supply_effort_reason: Needs change records that name the hosts and the implementer; many customers have none.
 example:
   ticket_id: CHG0041123
   hosts:
@@ -21,4 +23,4 @@ example:
   start: 2026-10-16T20:00Z
   end: 2026-10-16T23:00Z
   summary: App patching
-version: 3
+version: 4

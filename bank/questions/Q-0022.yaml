@@ -7,6 +7,9 @@ capability:
     list: CF-0012
     entity: value:av_exclusions
     host: value:dest
+attacker_influence:
+  rating: low
+  reason: The exclusion value is attacker-chosen, but a match means the exclusion is already approved.
 needs:
   context:
   - CF-0012
@@ -17,4 +20,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 3
+version: 4

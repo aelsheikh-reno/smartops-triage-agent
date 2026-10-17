@@ -1,0 +1,139 @@
+id: vendor:av_detection
+name: Antivirus or EDR malware detection
+family: vendor
+use_case: UC-001
+techniques:
+- T1204.002
+data_source:
+- Splunk CIM Malware data model
+sigma_logsource:
+- category: antivirus
+sigma_refs:
+- id: fa0c05b6-8ad3-468d-8231-c1cbccb64fba
+  title: Antivirus - Hacktool Signature
+  relation: closest
+- id: 78cc2dd2-7d20-4d32-93ff-057084c38b93
+  title: Antivirus - Password Dumper Signature
+  relation: closest
+- id: 4c6ca276-d4d0-4a8c-9e4c-d69832f8671f
+  title: Antivirus - Ransomware Signature
+  relation: closest
+- id: 238527ad-3c2c-4e4f-a1f6-92fd63adb864
+  title: Antivirus - Exploitation Framework Signature
+  relation: closest
+required_alert_fields:
+- dest
+- user
+- signature
+- category
+- action
+- file_hash
+- file_name
+- file_path
+- _time
+derived_fields:
+  av_class:
+    from:
+    - category
+    - signature
+    join: ' '
+    note: detection class and name together, so subfamilies filed under a low-risk class are still seen
+intent: 'Generic: an antivirus or EDR product reports a malware detection on a host (normalized malware alert, any product).'
+fp_quality: generic
+notes: High-risk families escalate even when blocked. Only a block before execution can close, and only for low-risk classes; post-execution remediation, pending reboot and partial remediation flag. Test
+  files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail. Approved tooling and analysis hosts match on asset ID, never hostname. A
+  sample from an analysis host seen on any other host in the window escalates; an approved tool's hash seen outside its approved hosts flags. A quarantined or unreadable file with no hash cannot close as
+  approved tooling; the flow continues. The fingerprint uses the asset ID; without one it falls back to the hostname and the precedent is rated medium. Capped at Recommend for each customer whose product
+  rows in the value mapping are unverified.
+explanations:
+- BE-0019
+- BE-0020
+- BE-0030
+- BE-0031
+- BE-0037
+fingerprint:
+- dest_asset_id
+- signature
+- file_hash
+precedent_validity: 24h
+precedent_entity: dest_asset_id
+fingerprint_influence:
+  dest_asset_id:
+    rating: low
+    reason: Device or agent ID assigned by the product; a host rename cannot change it.
+    fallback:
+      field: dest
+      rating: medium
+      reason: Without an asset ID the hostname stands in, and a local administrator can rename a host.
+  signature:
+    rating: low
+    reason: Detection name assigned by the product.
+  file_hash:
+    rating: low
+    reason: Hash of the file already judged; reproducing it reproduces that file.
+optional_alert_fields:
+- dest_asset_id
+precedent_entity_fallback: dest
+auto_requires:
+- vendor_mapping_verified
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: value:dest_asset_id
+    current_action: value:action
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce the asset ID in the fingerprint.
+    fallback_rating: medium
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+  - question: Q-0029
+    then: escalate
+- step: 2
+  question: Q-0048
+  on_yes: close:benign_true_positive:approved_security_tooling
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0073
+    then: escalate
+    if_entry_type:
+    - analysis_host
+  - question: Q-0073
+    then: flag
+    if_entry_type:
+    - tool
+- step: 3
+  question: Q-0029
+  on_yes: escalate
+  on_no: next
+  on_unknown: next
+- step: 4
+  question: Q-0049
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 5
+  question: Q-0028
+  on_yes: close:mitigated_true_positive:blocked_low_risk_detection
+  on_no: flag
+  on_unknown: flag
+  guards:
+  - question: Q-0046
+    then: flag
+    bind:
+      key: value:dest
+  - question: Q-0030
+    then: escalate
+source:
+  repo: internal
+  path: bank/use_cases.yaml#UC-001
+  title: Antivirus or EDR malware detection
+license: internal
+status: draft
+version: 5

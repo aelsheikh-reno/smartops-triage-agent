@@ -1,0 +1,25 @@
+id: Q-0044
+text: Did the alert record no file written to the device?
+tests: BE-0029
+capability:
+  name: alert.field
+  inputs:
+    field: value:files_written
+    op: in
+    values:
+    - 0
+    - '0'
+attacker_influence:
+  rating: low
+  reason: Recorded by the endpoint control, not by the user.
+source:
+- bank/use_cases.yaml triage_hints
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+needs:
+  coverage:
+  - device_control_write_events
+notes: Only answers when the customer's coverage report shows write events from the same device-control product; otherwise no_capability, which flags.

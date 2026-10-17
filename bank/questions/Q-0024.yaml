@@ -7,6 +7,9 @@ capability:
     entity: file:ImagePath
     sources:
     - CF-0016
+attacker_influence:
+  rating: low
+  reason: Driver hash comes from the OS driver-load record.
 needs:
   context:
   - CF-0016
@@ -19,4 +22,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 3
+version: 4

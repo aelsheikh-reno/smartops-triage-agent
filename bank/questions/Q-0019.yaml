@@ -6,6 +6,9 @@ capability:
   inputs:
     entity: process:subject_guid
     trusted_list: CF-0008
+attacker_influence:
+  rating: low
+  reason: OS-verified code signature; LOLBins, script hosts and dump tools are excluded.
 needs:
   context:
   - CF-0008
@@ -19,4 +22,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

@@ -11,6 +11,9 @@ capability:
   params:
     min_days: 3
     lookback: 30d
+attacker_influence:
+  rating: low
+  reason: Needs the same user, host and binary identity on 3+ earlier days; only a long-standing compromise of that admin's host satisfies it.
 source:
 - elastic/detection-rules rules/windows/execution_psexec_lateral_movement_command.toml
 license:
@@ -18,4 +21,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 3
+version: 4

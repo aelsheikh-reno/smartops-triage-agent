@@ -1,6 +1,9 @@
 # Dispositions:
 #   false_positive        the rule matched, but the activity is not the behavior the rule intends to catch
 #   benign_true_positive  the intended behavior happened and is authorized or expected
+#   mitigated_true_positive  the activity was malicious or unwanted, but a control stopped it; no further action.
+#                         Never used for high-risk families (hack tools, credential dumpers, ransomware, web shells, exploit frameworks,
+#                         RATs, remote-admin tools, miners, proxyware, cracks): those escalate even when blocked.
 #   inherit               (Q0 only) take the disposition and reason of the cited precedent
 # Outcome grammar for flow steps: next | close:<disposition>:<reason_code> | escalate | flag
 #   flag = stop and hand to an analyst with no verdict (missing context on a decisive question)
@@ -63,3 +66,54 @@ reason_codes:
 - code: trusted_signed_software
   disposition: benign_true_positive
   description: Acting binary is trusted-signed and not a LOLBin, script host or dump tool.
+- code: blocked_by_control
+  disposition: mitigated_true_positive
+  description: The control that raised the alert blocked, quarantined or dropped the item.
+- code: signature_not_applicable
+  disposition: mitigated_true_positive
+  description: Recent vulnerability data shows the target is not affected by the signature's exploit.
+- code: contained_without_interaction
+  disposition: mitigated_true_positive
+  description: Reported message contained and no recipient clicked or opened it.
+- code: blocked_low_risk_category
+  disposition: mitigated_true_positive
+  description: Proxy blocked a low-risk web category.
+- code: denied_no_successful_connection
+  disposition: mitigated_true_positive
+  description: All connections from the source in the window were denied.
+- code: approved_scanner_activity
+  disposition: benign_true_positive
+  description: Source is an approved scanner or tester inside its schedule.
+- code: authorized_phishing_simulation
+  disposition: benign_true_positive
+  description: Message is part of an approved phishing simulation.
+- code: approved_business_exception
+  disposition: benign_true_positive
+  description: An approved, unexpired business exception covers it.
+- code: approved_recipient
+  disposition: benign_true_positive
+  description: Destination is an approved partner for this data class.
+- code: approved_security_tooling
+  disposition: benign_true_positive
+  description: Approved security tool or analysis host triggered the antivirus.
+- code: tuned_signature
+  disposition: false_positive
+  description: Signature accepted as noise for this source and destination.
+- code: approved_infrastructure
+  disposition: benign_true_positive
+  description: Approved infrastructure source hit a known deny rule.
+- code: known_test_data
+  disposition: false_positive
+  description: Content is a known DLP test file or template.
+- code: false_report
+  disposition: false_positive
+  description: Reported message is legitimate mail from an approved, authenticated sender.
+- code: established_uncategorized_site
+  disposition: benign_true_positive
+  description: Blocked uncategorised site the host visits routinely with a normal browser.
+- code: blocked_low_risk_detection
+  disposition: mitigated_true_positive
+  description: Blocked before execution, and the product classed it as low risk (never a high-risk family or test file).
+- code: no_data_transferred
+  disposition: benign_true_positive
+  description: Device connected; the control recorded zero files written.

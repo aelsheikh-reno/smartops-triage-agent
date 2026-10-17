@@ -6,6 +6,9 @@ capability:
   inputs:
     list: CF-0010
     entity: value:url_hosts
+attacker_influence:
+  rating: low
+  reason: The attacker chooses the URL but must host content on an approved domain; keep the list to customer-controlled domains.
 needs:
   context:
   - CF-0010
@@ -18,4 +21,4 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3

@@ -6,8 +6,10 @@ fields:
 - status
 - since
 collected_by: customer
+supply_effort: high
+supply_effort_reason: Needs a maintained asset inventory with lifecycle state.
 example:
   host: wks-0412
   status: rebuilding
   since: 2026-10-16T08:00Z
-version: 1
+version: 2

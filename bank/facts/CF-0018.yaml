@@ -1,0 +1,25 @@
+id: CF-0018
+name: approved_scanners
+description: Approved vulnerability scanners and authorised testers, with their schedule. Scanners close only while a scan job runs; testers only under a covering change or engagement record.
+fields:
+- entry_type
+- address_or_range
+- owner
+- purpose
+- schedule
+- expires
+match_rule: source address within address_or_range, and at_time inside schedule when one is given; entry_type is scanner or tester
+collected_by: customer
+supply_effort: low
+supply_effort_reason: Static scanner addresses and schedule.
+example:
+  entry_type: scanner
+  address_or_range: 10.20.30.0/28
+  owner: Vulnerability management
+  purpose: authenticated scanning
+  schedule: Sat 22:00-Sun 06:00
+  expires: '2027-06-30'
+version: 3
+entry_types:
+- scanner
+- tester

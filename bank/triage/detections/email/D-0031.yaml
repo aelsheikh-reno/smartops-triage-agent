@@ -1,0 +1,100 @@
+id: D-0031
+name: Email gateway threat alert
+family: email
+alert_type: control
+max_mode: recommend
+max_mode_reason: No true-positive replay data for email-gateway alerts (round 6, §5.2).
+auto_excluded_reason: no_tp_replay_data
+techniques:
+- T1566.001
+- T1566.002
+required_roles:
+- email
+- file
+- reporting_control
+- event
+intent: 'Generic: an email security gateway reports a malicious or suspicious message, delivered or not (normalized email alert, any product).'
+fp_quality: generic
+explanations:
+- BE-0019
+- BE-0024
+- BE-0030
+fingerprint:
+- role:email.sender
+- role:email.subject
+- role:file.sha256
+notes: Every fingerprint field is sender-chosen, so a precedent never closes or flags by itself; the flow proceeds and the precedent is shown as context. A block closes only when the message is out of every
+  mailbox and no reputation source marks its URL or attachment. Delivered-then-removed closes only with no recorded click or open.
+precedent_entity: role:email.recipient
+fingerprint_influence:
+  role:email.sender:
+    rating: high
+    reason: Sender address set by the sender.
+  role:email.subject:
+    rating: high
+    reason: Written by the sender.
+  role:file.sha256:
+    rating: high
+    reason: Attachment chosen by the sender.
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: role:email.recipient
+    current_action: role:reporting_control.action
+  attacker_influence:
+    rating: high
+    reason: Every fingerprint field is attacker-chosen, so a precedent only flags.
+  on_yes: next
+  on_no: next
+  on_unknown: next
+- step: 2
+  question: Q-0037
+  on_yes: close:benign_true_positive:authorized_phishing_simulation
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0070
+    when:
+    - 'no'
+    then: flag
+- step: 3
+  question: Q-0035
+  on_yes: next
+  on_no: flag
+  on_unknown: flag
+- step: 4
+  question: Q-0074
+  rule:
+    'yes':
+      param: email_blocked_action_values
+  on_yes: close:mitigated_true_positive:blocked_by_control
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0034
+    then: flag
+    bind:
+      entity: role:email.url
+  - question: Q-0030
+    then: flag
+- step: 5
+  question: Q-0036
+  on_yes: close:mitigated_true_positive:contained_without_interaction
+  on_no: escalate
+  on_unknown: flag
+  guards:
+  - question: Q-0076
+    then: flag
+    rule:
+      yes_unless:
+      - none
+status: draft
+version: 5
+derived_from:
+  library: bank
+  rule: vendor:email_gateway
+  title: Email gateway threat alert
+  path: bank/intake/use_cases.yaml#UC-008
+  repo: internal
+  license: internal

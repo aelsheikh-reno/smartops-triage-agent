@@ -1,0 +1,24 @@
+id: Q-0074
+text: Did the email control stop the message before it reached the recipient (blocked, rejected, or quarantined before delivery)?
+tests: BE-0019
+kind: triage
+inputs:
+  of: role:reporting_control.action
+  delivery_stage: role:email.delivery_stage
+optional_inputs:
+- delivery_stage
+attacker_influence:
+  rating: low
+  reason: Set by the security control, not by the activity.
+  by_source:
+    forwarded: medium
+notes: 'A quarantine supports a close only when it happened before the user received the message. A quarantine or purge after delivery, or with no delivery stage, answers unknown: whether the message is
+  out of every mailbox is checked separately. Split from Q-0027 so that an endpoint question can never read an email quarantine.'
+derived_from:
+  source:
+  - 'PR #23 round 5 decision (email quarantine)'
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

@@ -1,0 +1,21 @@
+id: Q-0012
+text: Has this user run the same normalized command line on any host on at least the customer's minimum number of distinct days in the lookback before the alert window?
+tests: BE-0007
+attacker_influence:
+  rating: high
+  reason: The command line is attacker-chosen; copying a routine one is enough.
+derived_from:
+  source:
+  - splunk/security_content detections/endpoint/remote_process_instantiation_via_winrm_and_powershell.yml (limited set of hosts or users)
+  license:
+  - Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+kind: triage
+inputs:
+  entity: role:user.name
+  behavior: ran the normalized command line role:process.command_line on any host
+  lookback_days:
+    param: entity_baseline_lookback_days

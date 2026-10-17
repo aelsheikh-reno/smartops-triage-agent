@@ -1,8 +1,0 @@
-id: BE-0037
-name: Isolated alert
-description: The alert is not part of a burst of alerts on the same key.
-source:
-- bank/use_cases.yaml triage_hints
-- external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
-license: internal
-version: 1

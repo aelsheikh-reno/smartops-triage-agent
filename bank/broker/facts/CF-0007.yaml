@@ -1,0 +1,15 @@
+id: CF-0007
+name: crown_jewel_assets
+description: Hosts and accounts the customer marks as most critical (domain controllers, PKI, payment systems, executives). Used by Q0 and by the runtime guardrail that blocks auto-close.
+fields:
+- entity
+- entity_type
+- reason
+collected_by: customer
+supply_effort: low
+supply_effort_reason: Static list of hosts and accounts; Phase 0 requires crown jewels to be listed before triage starts, and context question C-06 reads it.
+example:
+  entity: dc01.corp.local
+  entity_type: host
+  reason: Domain controller
+version: 3

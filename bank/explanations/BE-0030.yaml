@@ -1,7 +1,0 @@
-id: BE-0030
-name: No known-bad indicators
-description: None of the alert's files, URLs or addresses is known bad. Never benign evidence on its own; recorded so that a reputation hit escalates.
-source:
-- bank/use_cases.yaml triage_hints
-license: internal
-version: 1

@@ -1,0 +1,20 @@
+id: CF-0026
+name: approved_senders
+description: External senders whose mail users often report by mistake, limited to transactional-notification services (payroll, HR, IT notices). The customer's own domains (CF-0032) are never
+  eligible, nor are partner domains. Matched on authenticated domain. An approved sender's mailbox can be compromised, so a close on this list alone never runs in Auto (round 6, B1).
+fields:
+- sender_domain
+- sender_address
+- sender_kind
+- purpose
+- owner
+match_rule: From domain equals sender_domain (and address when given), sender_kind is transactional_notification; only counts with an aligned DMARC pass. Onboarding rejects an entry whose domain is on CF-0032 (the customer's own domains).
+collected_by: customer
+supply_effort: low
+supply_effort_reason: Short list of sender domains.
+example:
+  sender_domain: notices.example-payroll.com
+  sender_kind: transactional_notification
+  purpose: Monthly payslip notices
+  owner: HR
+version: 4

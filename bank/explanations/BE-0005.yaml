@@ -1,9 +1,0 @@
-id: BE-0005
-name: Known benign LSASS accessor
-description: A publicly documented benign binary (system utilities, code editors, virtualisation guest tools, conferencing clients, consumer anti-malware, game clients) opens LSASS from its expected install
-  path.
-source:
-- SigmaHQ/sigma rules/windows/process_access/proc_access_win_lsass_susp_access_flag.yml (filter_optional_*)
-license:
-- DRL-1.1
-version: 2

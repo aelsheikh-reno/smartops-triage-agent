@@ -1,0 +1,8 @@
+id: BE-0027
+name: Low-risk web category blocked
+description: The proxy blocked a site in a low-risk category (advertising, streaming, social).
+derived_from:
+  source:
+  - bank/intake/use_cases.yaml triage_hints
+  license: internal
+version: 1

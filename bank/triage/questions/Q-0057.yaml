@@ -1,0 +1,19 @@
+id: Q-0057
+text: Is the blocked site in a high-risk web category (malware, phishing, command and control, botnet, newly registered and similar listed categories)?
+tests: BE-0027
+attacker_influence:
+  rating: low
+  reason: Category assigned by the filtering service.
+  by_source:
+    forwarded: medium
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  of: role:web.category

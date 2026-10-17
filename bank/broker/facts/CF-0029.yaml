@@ -1,0 +1,14 @@
+id: CF-0029
+name: server_assets
+description: Hosts that are servers (not user endpoints), from the asset inventory.
+fields:
+- host
+- role
+match_rule: host listed
+collected_by: customer
+supply_effort: low
+supply_effort_reason: Server list from the asset inventory; Phase 0 requires at least 90% of alerts to resolve to an asset with a priority (C-05), so the inventory exists before triage starts.
+example:
+  host: srv-app-01
+  role: application server
+version: 3

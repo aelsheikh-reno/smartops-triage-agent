@@ -1,0 +1,606 @@
+# Vendor value table (recipe layer). Maps one product's raw alert values to the bank's alert classes
+# (bank/broker/capabilities.yaml alert_classes). Rows are tried in order; the first match wins; no match gives the class default.
+# match: {<raw property>: <value or list>} compares case-insensitively; {pattern: <regex>} searches the class's role values joined by a space.
+# source: edr_api (the product's own API: authoritative for endpoint.run_status), siem_copy (the product's alert as copied into the SIEM: a fallback), or alert (values read from the normalized alert itself).
+# Each row has an id and a kind: ambiguous (the value does not say what happened: always unknown, in every mode) or
+# unverified (meaning from vendor docs, not confirmed at this customer: may support a close in Shadow and Recommend, marked
+# 'unverified mapping: <table>/<row>', never in Auto). Verified is per customer, recorded in bank/broker/customers/<c>/verifications.yaml.
+vendor: any
+product: any
+source: alert
+scope: generic
+feed: 'Vendor-neutral rows: normalized names and bank-authored patterns that apply to any product. Product tables take precedence; onboarding confirms each product''s wording.'
+references:
+- bank parameters before the migration (av_*_pattern, usb_*_event_values, browser_user_agent_pattern, web_success_status_pattern)
+- bank/intake/use_cases.yaml triage_hints
+license: internal
+classes:
+  av_risk_class:
+    reads:
+    - reporting_control.category
+    - reporting_control.signature
+    rows:
+    - id: av_risk_class.pattern_high_risk
+      match:
+        pattern: hacktool|hack tool|password ?dump|credential|mimikatz|ransom|web ?shell|exploit|remote ?access|\brat\b|backdoor|remoteadmin|remote ?admin|miner|coin ?min|proxy|crack|keygen
+      value: high_risk
+      kind: unverified
+      note: High-risk families escalate even when blocked. Matched on class and name together.
+    - id: av_risk_class.pattern_other
+      match:
+        pattern: eicar|test[ _-]?file|testfile
+      value: other
+      kind: unverified
+      note: 'Test files never close as low risk: attackers drop them to provoke antivirus actions.'
+    - id: av_risk_class.pattern_low_risk
+      match:
+        pattern: \b(pua|potentially unwanted|adware|grayware|greyware)\b
+      value: low_risk
+      kind: unverified
+    default: other
+  control_action:
+    reads:
+    - reporting_control.action_raw
+    rows:
+    - id: control_action.blocked
+      match:
+        value:
+        - blocked
+        - block
+      value: blocked
+      kind: unverified
+    - id: control_action.dropped
+      match:
+        value:
+        - dropped
+        - drop
+      value: dropped
+      kind: unverified
+    - id: control_action.denied
+      match:
+        value:
+        - denied
+        - deny
+      value: denied
+      kind: unverified
+    - id: control_action.rejected
+      match:
+        value:
+        - rejected
+        - reject
+      value: rejected
+      kind: unverified
+    - id: control_action.prevented
+      match:
+        value:
+        - prevented
+      value: prevented
+      kind: unverified
+    - id: control_action.reset
+      match:
+        value:
+        - reset
+        - block with reset
+      value: reset
+      kind: unverified
+    - id: control_action.deleted
+      match:
+        value:
+        - deleted
+        - delete
+      value: deleted
+      kind: unverified
+    - id: control_action.quarantined_pre_delivery
+      match:
+        value:
+        - quarantined
+        - quarantine
+        email.delivery_stage: pre_delivery
+      value: quarantined
+      kind: unverified
+      questions: [Q-0074]
+      note: 'An email quarantine before the user received the message: it may support a close. Limited to the email question; an endpoint or DLP question never reads it.'
+    - id: control_action.quarantined_post_delivery
+      match:
+        value:
+        - quarantined
+        - quarantine
+        - purged
+        - purge
+        - removed after delivery
+        email.delivery_stage: post_delivery
+      value: unknown
+      kind: ambiguous
+      questions: [Q-0074]
+      note: 'A quarantine or purge of a message already delivered: the user may have opened it, so it does not say the threat was stopped. Ambiguous: unknown in every mode.'
+    - id: control_action.quarantined_stage_unknown
+      match:
+        value:
+        - quarantined
+        - quarantine
+        - purged
+        - purge
+      value: unknown
+      kind: ambiguous
+      questions: [Q-0074]
+      note: 'A quarantine with no delivery stage does not say whether the user received the item first. Ambiguous: unknown in every mode.'
+    # DLP has its own stage (round 6): whether the data had left before the control acted, separate from the email delivery stage.
+    - id: control_action.dlp_quarantined_before_egress
+      match:
+        value:
+        - quarantined
+        - quarantine
+        dlp.egress_stage: before_egress
+      value: quarantined
+      kind: unverified
+      questions: [Q-0062]
+      note: 'A DLP quarantine before the data left. Still a pending action for Q-0062 (a release would undo it), so it answers unknown there through dlp_pending_values; limited to the DLP question.'
+    - id: control_action.dlp_quarantined_after_egress
+      match:
+        value:
+        - quarantined
+        - quarantine
+        - removed
+        dlp.egress_stage: after_egress
+      value: unknown
+      kind: ambiguous
+      questions: [Q-0062]
+      note: 'A DLP quarantine or removal after the data already left: it does not say the data was stopped. Ambiguous: unknown in every mode.'
+    - id: control_action.dlp_quarantined_stage_unknown
+      match:
+        value:
+        - quarantined
+        - quarantine
+        - removed
+      value: unknown
+      kind: ambiguous
+      questions: [Q-0062]
+      note: 'A DLP quarantine with no egress stage does not say whether the data left first. Ambiguous: unknown in every mode.'
+    - id: control_action.held
+      match:
+        value:
+        - held
+        - hold
+      value: held
+      kind: unverified
+    - id: control_action.pending
+      match:
+        value:
+        - pending
+      value: pending
+      kind: unverified
+    - id: control_action.pending_release
+      match:
+        value:
+        - pending release
+      value: pending release
+      kind: unverified
+    - id: control_action.encrypted_pending
+      match:
+        value:
+        - encrypted pending
+      value: encrypted pending
+      kind: unverified
+    - id: control_action.justification_pending
+      match:
+        value:
+        - justification pending
+      value: justification pending
+      kind: unverified
+    - id: control_action.allowed
+      match:
+        value:
+        - allowed
+        - allow
+        - permitted
+        - pass
+      value: allowed
+      kind: unverified
+    - id: control_action.delivered
+      match:
+        value:
+        - delivered
+      value: delivered
+      kind: unverified
+    - id: control_action.detected
+      match:
+        value:
+        - detected
+        - alert only
+      value: detected
+      kind: unverified
+    - id: control_action.alerted
+      match:
+        value:
+        - alerted
+      value: alerted
+      kind: unverified
+    default: other
+  web_category:
+    reads:
+    - web.category
+    rows:
+    - id: web_category.advertising
+      match:
+        value: advertising
+      value: advertising
+      kind: unverified
+    - id: web_category.web_ads
+      match:
+        value: web ads
+      value: web ads
+      kind: unverified
+    - id: web_category.streaming_media
+      match:
+        value: streaming media
+      value: streaming media
+      kind: unverified
+    - id: web_category.social_networking
+      match:
+        value: social networking
+      value: social networking
+      kind: unverified
+    - id: web_category.games
+      match:
+        value: games
+      value: games
+      kind: unverified
+    - id: web_category.shopping
+      match:
+        value: shopping
+      value: shopping
+      kind: unverified
+    - id: web_category.entertainment
+      match:
+        value: entertainment
+      value: entertainment
+      kind: unverified
+    - id: web_category.sports
+      match:
+        value: sports
+      value: sports
+      kind: unverified
+    - id: web_category.travel
+      match:
+        value: travel
+      value: travel
+      kind: unverified
+    - id: web_category.news_and_media
+      match:
+        value: news and media
+      value: news and media
+      kind: unverified
+    - id: web_category.malware
+      match:
+        value: malware
+      value: malware
+      kind: unverified
+    - id: web_category.malicious
+      match:
+        value: malicious
+      value: malicious
+      kind: unverified
+    - id: web_category.phishing
+      match:
+        value: phishing
+      value: phishing
+      kind: unverified
+    - id: web_category.command_and_control
+      match:
+        value: command and control
+      value: command and control
+      kind: unverified
+    - id: web_category.botnet
+      match:
+        value: botnet
+      value: botnet
+      kind: unverified
+    - id: web_category.spyware
+      match:
+        value: spyware
+      value: spyware
+      kind: unverified
+    - id: web_category.cryptomining
+      match:
+        value: cryptomining
+      value: cryptomining
+      kind: unverified
+    - id: web_category.newly_registered
+      match:
+        value: newly registered
+      value: newly registered
+      kind: unverified
+    - id: web_category.newly_observed
+      match:
+        value: newly observed
+      value: newly observed
+      kind: unverified
+    - id: web_category.parked
+      match:
+        value: parked
+      value: parked
+      kind: unverified
+    - id: web_category.dynamic_dns
+      match:
+        value: dynamic dns
+      value: dynamic dns
+      kind: unverified
+    - id: web_category.proxy_avoidance
+      match:
+        value: proxy avoidance
+      value: proxy avoidance
+      kind: unverified
+    - id: web_category.uncategorized
+      match:
+        value: uncategorized
+      value: uncategorized
+      kind: unverified
+    - id: web_category.unknown
+      match:
+        value: unknown
+      value: unknown
+      kind: unverified
+    - id: web_category.unrated
+      match:
+        value: unrated
+      value: unrated
+      kind: unverified
+    - id: web_category.not_rated
+      match:
+        value: not rated
+      value: not rated
+      kind: unverified
+    default: other
+    default_note: Identity rows only; onboarding adds each product's category names.
+  ids_class:
+    reads:
+    - reporting_control.category
+    rows:
+    - id: ids_class.attempted_admin
+      match:
+        value: attempted-admin
+      value: attempted-admin
+      kind: unverified
+    - id: ids_class.attempted_user
+      match:
+        value: attempted-user
+      value: attempted-user
+      kind: unverified
+    - id: ids_class.successful_admin
+      match:
+        value: successful-admin
+      value: successful-admin
+      kind: unverified
+    - id: ids_class.successful_user
+      match:
+        value: successful-user
+      value: successful-user
+      kind: unverified
+    - id: ids_class.web_application_attack
+      match:
+        value: web-application-attack
+      value: web-application-attack
+      kind: unverified
+    - id: ids_class.shellcode_detect
+      match:
+        value: shellcode-detect
+      value: shellcode-detect
+      kind: unverified
+    - id: ids_class.trojan_activity
+      match:
+        value: trojan-activity
+      value: trojan-activity
+      kind: unverified
+    - id: ids_class.exploit_kit
+      match:
+        value: exploit-kit
+      value: exploit-kit
+      kind: unverified
+    - id: ids_class.command_and_control
+      match:
+        value: command-and-control
+      value: command-and-control
+      kind: unverified
+    - id: ids_class.attempted_dos
+      match:
+        value: attempted-dos
+      value: attempted-dos
+      kind: unverified
+    - id: ids_class.successful_dos
+      match:
+        value: successful-dos
+      value: successful-dos
+      kind: unverified
+    - id: ids_class.attempted_recon
+      match:
+        value: attempted-recon
+      value: attempted-recon
+      kind: unverified
+    - id: ids_class.successful_recon_limited
+      match:
+        value: successful-recon-limited
+      value: successful-recon-limited
+      kind: unverified
+    - id: ids_class.successful_recon_largescale
+      match:
+        value: successful-recon-largescale
+      value: successful-recon-largescale
+      kind: unverified
+    - id: ids_class.network_scan
+      match:
+        value: network-scan
+      value: network-scan
+      kind: unverified
+    - id: ids_class.policy_violation
+      match:
+        value: policy-violation
+      value: policy-violation
+      kind: unverified
+    - id: ids_class.misc_activity
+      match:
+        value: misc-activity
+      value: misc-activity
+      kind: unverified
+    - id: ids_class.misc_attack
+      match:
+        value: misc-attack
+      value: misc-attack
+      kind: unverified
+    - id: ids_class.bad_unknown
+      match:
+        value: bad-unknown
+      value: bad-unknown
+      kind: unverified
+    - id: ids_class.malware_cnc
+      match:
+        value: malware-cnc
+      value: malware-cnc
+      kind: unverified
+    - id: ids_class.exploit
+      match:
+        value: exploit
+      value: exploit
+      kind: unverified
+    default: other
+  http_status_class:
+    reads:
+    - web.status
+    rows:
+    - id: http_status_class.pattern_success
+      match:
+        pattern: ^2\d\d$
+      value: success
+      kind: standards_defined
+      standard: RFC 9110 section 15 (HTTP status codes)
+      note: HTTP status classes (RFC 9110).
+    - id: http_status_class.pattern_redirect
+      match:
+        pattern: ^3\d\d$
+      value: redirect
+      kind: standards_defined
+      standard: RFC 9110 section 15 (HTTP status codes)
+    - id: http_status_class.pattern_client_error
+      match:
+        pattern: ^4\d\d$
+      value: client_error
+      kind: standards_defined
+      standard: RFC 9110 section 15 (HTTP status codes)
+    - id: http_status_class.pattern_server_error
+      match:
+        pattern: ^5\d\d$
+      value: server_error
+      kind: standards_defined
+      standard: RFC 9110 section 15 (HTTP status codes)
+    default: other
+  user_agent_class:
+    reads:
+    - web.user_agent
+    rows:
+    - id: user_agent_class.pattern_browser
+      match:
+        pattern: ^Mozilla/5\.0 \(.+\) .*(Chrome|Firefox|Safari|Edg)/\d+
+      value: browser
+      kind: unverified
+      note: Mainstream browser user agents; anything else (scripts, tools, empty) is other and flags.
+    default: other
+  severity:
+    reads:
+    - reporting_control.severity
+    rows:
+    - id: severity.informational
+      match:
+        value:
+        - informational
+        - info
+      value: informational
+      kind: unverified
+    - id: severity.low
+      match:
+        value: low
+      value: low
+      kind: unverified
+    - id: severity.medium
+      match:
+        value:
+        - medium
+        - moderate
+      value: medium
+      kind: unverified
+    - id: severity.high
+      match:
+        value: high
+      value: high
+      kind: unverified
+    - id: severity.critical
+      match:
+        value: critical
+      value: critical
+      kind: unverified
+    default: other
+  device_event:
+    reads:
+    - device.event_type
+    rows:
+    - id: device_event.connect
+      match:
+        value:
+        - connect
+        - connected
+        - insert
+        - inserted
+        - mount
+        - mounted
+        - plugged
+      value: connect
+      kind: unverified
+    - id: device_event.write
+      match:
+        value:
+        - write
+        - file write
+        - copy
+        - file copied
+      value: write
+      kind: unverified
+    default: other
+  device_type:
+    reads:
+    - device.class
+    rows:
+    - id: device_type.hid
+      match:
+        value:
+        - hid
+        - human interface device
+      value: hid
+      kind: unverified
+    - id: device_type.keyboard
+      match:
+        value: keyboard
+      value: keyboard
+      kind: unverified
+    - id: device_type.mouse
+      match:
+        value: mouse
+      value: mouse
+      kind: unverified
+    - id: device_type.composite
+      match:
+        value: composite
+      value: composite
+      kind: unverified
+    - id: device_type.network_adapter
+      match:
+        value: network adapter
+      value: network adapter
+      kind: unverified
+    - id: device_type.storage
+      match:
+        value:
+        - storage
+        - mass storage
+        - removable storage
+        - usb storage
+      value: storage
+      kind: unverified
+    default: other

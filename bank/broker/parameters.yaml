@@ -1,0 +1,20 @@
+# Broker-side settings, bounded like the Triage agent's parameters (same schema). The Triage agent never reads them.
+parameters:
+  verification_min_spot_check_alerts:
+    default: 20
+    bounds:
+      min: 20
+      max: 1000
+    reduces_scrutiny_when: lower
+    description: Real alerts at this customer on which the Product Operator spot-checked a value-table row before that row counts as verified for the customer (with a cited vendor doc, checker, date, product version and expiry).
+    unit: alerts
+  edr_alert_match_window_minutes:
+    default: 10
+    bounds:
+      min: 1
+      max: 60
+    reduces_scrutiny_when: higher
+    description: 'When the normalized alert carries no vendor alert ID, the Tool Broker matches the endpoint product''s alert by device, file hash and this window ending at the alert time (endpoint.run_status;
+      look-back only). A wider window risks matching another alert. No match, or more than one, answers unknown. Broker-side since round 6 (§5.4): it says how the broker finds the record, not what the
+      Triage agent accepts.'
+    unit: minutes

@@ -1,0 +1,94 @@
+id: D-0017
+name: Windows File Download Via CertUtil
+family: endpoint
+alert_type: analytic
+techniques:
+- T1105
+required_roles:
+- event
+- host
+- process
+- user
+intent: Detects certutil.exe downloading a file (-urlcache/-verifyctl -f or -URL) from process creation logs.
+fp_quality: none
+explanations:
+- BE-0002
+- BE-0010
+- BE-0007
+- BE-0003
+derived_fields:
+  url_host:
+    from: role:process.command_line
+    pattern: https?://([^/\s:\"']+)
+    note: first URL host in the command line
+  url_hosts:
+    from: role:process.command_line
+    pattern: https?://([^/\s:\"')]+)
+    all: true
+    note: every URL host in the command line
+fingerprint:
+- role:host.name
+- role:process.parent_name
+- derived:url_host
+fingerprint_influence:
+  role:host.name:
+    rating: low
+    reason: Host that reported the event.
+  role:process.parent_name:
+    rating: high
+    reason: File name the attacker can choose.
+  derived:url_host:
+    rating: high
+    reason: Host in an attacker-written command line.
+precedent_entity: role:host.name
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: role:host.name
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce the fingerprint's host.
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
+- step: 2
+  question: Q-0001
+  on_yes: close:benign_true_positive:sanctioned_deployment_tool
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0017
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 4
+  question: Q-0014
+  rule:
+    gte:
+      param: entity_baseline_min_days
+  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_no: next
+  on_unknown: next
+- step: 5
+  question: Q-0004
+  on_yes: close:benign_true_positive:approved_change
+  on_no: escalate
+  on_unknown: flag
+status: draft
+version: 6
+parameters:
+  precedent_validity_hours: 72
+derived_from:
+  library: escu
+  rule: escu:windows_file_download_via_certutil
+  title: Windows File Download Via CertUtil
+  path: detections/endpoint/windows_file_download_via_certutil.yml
+  repo: splunk/security_content
+  license: Apache-2.0

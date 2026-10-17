@@ -1,0 +1,9 @@
+id: BE-0009
+name: RDP expected on host
+description: The host's role requires RDP (terminal server, jump host, admin server), so enabling RDP restores the intended state.
+derived_from:
+  source:
+  - splunk/security_content detections/endpoint/windows_remote_services_rdp_enable.yml (known_false_positives)
+  license:
+  - Apache-2.0
+version: 1

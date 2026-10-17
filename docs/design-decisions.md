@@ -1,5 +1,7 @@
 # SmartOps Triage Agent: Design Decisions
 
+**Version 1 scope.** Version 1 builds and tests one SIEM adapter: Splunk ES. All lab tests and the first pilots run on Splunk. The design stays vendor-agnostic: nothing outside the Splunk adapter and Splunk recipes may depend on Splunk.
+
 Build status: built today are the question bank (`bank/`) and its offline gates and tools (`tools/`: validate, attacker-influence check, replay, review packet, SQL loader, runtime-bundle export). The intake, context-question, broker-question, onboarding and pilot documents (`docs/intake/`, `docs/broker-questions.md`, `docs/reuse-map.md`, `docs/assumptions.md`, `docs/pilot-terms.md`) describe designed, not built, components. Everything marked "(designed, not built)" is design only: agreed direction, not running software, and open to change when it is built and measured.
 
 ## 1. What triage is
@@ -8,7 +10,7 @@ A fast, time-boxed first pass on an alert: is it worth investigating, and how ur
 ## 2. Method
 For each detection, list its 2–3 most common benign explanations and test only those, as yes/no questions. One holds → close as false positive or benign true positive, with a reason code. None holds → escalate. Missing answer → unknown → analyst decides.
 
-Vendor alerts (AV/EDR, IDS/IPS, WAF, email gateway, DLP, proxy, firewall, device control) add a third close: **mitigated true positive**, when the activity was malicious or unwanted but the control that raised the alert stopped it (blocked, quarantined, denied) and nothing else needs doing. Each vendor family is one generic detection (`vendor:` prefix) bound to normalized alert fields, never one per product.
+Vendor alerts (AV/EDR, IDS/IPS, WAF, email gateway, DLP, proxy, firewall, device control) add a third close: **mitigated true positive**, when the activity was malicious or unwanted but the control that raised the alert stopped it (blocked, quarantined, denied) and nothing else needs doing. Each control-alert family is one generic detection (a D-ID in its family, mapped from any product's alerts through `product_alert:` entries in the rule map) bound to normalized alert fields, never one per product.
 
 Mitigated true positive never applies to high-risk families: hack tools, credential dumpers, ransomware, web shells, exploit frameworks, remote access trojans and remote-admin tools, miners, proxyware and cracks. Those escalate even when blocked. Antivirus test files (EICAR and similar) flag; they never close as low risk. Only a block before execution counts: post-execution quarantine or cleaning, a pending reboot and partial remediation answer unknown and flag. Each vendor's action values map to the bank's normalized values in `docs/normalization.md`.
 
@@ -21,7 +23,7 @@ Only entities named in the alert, only alerts that already fired, and the triage
 Flow: SIEM alert → normalizer (one inbound adapter per SIEM) → normalized alert → Triage agent, which asks the context questions (§5) and then its flow's triage questions through the Tool Broker. Write-back of status, comment, priority and ticket to the SIEM goes through the broker too (§20).
 
 ### One way in, one way out
-- **In: the normalizer only.** It receives the alerts that start triage and nothing else. It never queries a tool. Alerts arrive by the SIEM's push mechanism (for example a Splunk ES alert action or webhook, a Sentinel automation rule, an Elastic connector). Open question: a SIEM that can only be polled needs its poll defined as a fixed, alert-only subscription, and whether that counts as the normalizer or as a broker read is not settled.
+- **In: the normalizer only.** It receives the alerts that start triage and nothing else. It never queries a tool. Alerts arrive by the SIEM's push mechanism (for example a Splunk ES alert action or webhook, a Sentinel automation rule, an Elastic connector), or by polling: the normalizer may poll the SIEM's alert queue with one fixed, read-only "new alerts since cursor" query per SIEM. That poll is the only query the normalizer ever runs. It never runs entity-specific or investigation queries; those are broker reads.
 - **Out: the Tool Broker only.** Every read from any tool (SIEM, EDR, identity, email, threat intel, SOAR, asset and identity lookups) goes through the broker, for every agent: the Triage agent, the Detection Engineer, the Use Case Manager, the Falsifier, and the local models. No model calls a tool directly. The domain specialists are part of the broker, not callers of it.
 - **Write-back through the broker.** Writing status, comment, priority and ticket to the SIEM alert are the broker's only write actions to a SIEM, on a fixed allowlist. What was the "outbound adapter" is the broker's write recipe per SIEM. Context-store proposals keep going through `list.propose_update` (§9).
 - **Scope profiles.** The broker knows how far each caller may look:
@@ -31,7 +33,7 @@ Flow: SIEM alert → normalizer (one inbound adapter per SIEM) → normalized al
 
   A call outside the caller's profile is refused and logged. Use Case Manager reads (fact metadata, list usage, closure history) run under their own read-only profile (§27).
 
-SIEMs in scope: Splunk ES first. Then Microsoft Sentinel, Elastic Security, IBM QRadar, FortiSIEM and CrowdStrike Falcon Next-Gen SIEM. Nothing in the triage layer or the shared bank may assume one SIEM, its query language or its field names. Everything SIEM-specific lives in the inbound adapter and in the broker's per-customer recipes (§10), including its write recipes.
+SIEM adapters: Splunk ES in version 1 (see Version 1 scope above). Later: Microsoft Sentinel, Elastic Security, IBM QRadar, FortiSIEM and CrowdStrike Falcon Next-Gen SIEM. Nothing in the triage layer or the shared bank may assume one SIEM, its query language or its field names. Everything SIEM-specific lives in the inbound adapter and in the broker's per-customer recipes (§10), including its write recipes.
 
 ### Normalized alert v1
 The normalizer turns each SIEM's alert into one shape, `normalized_alert` v1, specified field by field in `docs/intake/normalized-alert-v1.md`. It starts from smartops-soc-app's `context_service/templates/normalized_seed.py` (branch `feature/normalized-seed-template`, commit `062d456`) and keeps all of its sections. Added for triage:
@@ -42,21 +44,23 @@ The normalizer turns each SIEM's alert into one shape, `normalized_alert` v1, sp
 - a typed entity list, using the entity types of smartops-soc-app's `engine/contracts/schemas/task-input.v1.schema.json` (main, commit `a2d0eb0`). An unknown type is rejected, never mapped to the nearest known one.
 - `first_seen`, `last_seen`, `count` (dedup at intake)
 - `reporting_control`: vendor and product, action, signature, category, for vendor alerts
+- `alert:severity`: the alert's severity on the one normalized scale (`bank/contract/severity.yaml`: informational, low, medium, high, critical), mapped from each SIEM's own severity in `bank/intake/severity-map.yaml` (Splunk ES first). An unmapped value flags with reason `severity_unmapped`; the normalizer never guesses a level. C-02, C-03, Q0, the entity guard, the routine rule and priority compare only normalized severities (round 6, §3).
 
 ### Lessons carried over from smartops-soc-app
 Each is cited by file on smartops-soc-app `main` at commit `a2d0eb0`, with the commit that introduced it.
-- **Event time comes from the event, never the alert's creation time.** A Splunk notable's `_time` is when the correlation search ran, often minutes to an hour after the activity. The event time is ESCU's `firstTime`, which carries no offset and takes `_time`'s offset. `engine/src/smartops/context.py`, `notable_event_time()` (introduced in `786a32f`; the bug and the 9-minute gap on run `072fd610` are in `docs/analyst-bug-report.md` C6 and `docs/smartops-issues-report.md` P1). Each adapter names its own event-time field; the normalizer never falls back to the alert's creation time silently: it records which field it used.
+- **Event time comes from the event, never the alert's creation time.** A SIEM alert's creation time can trail the activity: in the version 1 SIEM, a Splunk ES notable's `_time` is when the correlation search ran, often minutes to an hour after the activity. The event time is ESCU's `firstTime`, which carries no offset and takes `_time`'s offset. `engine/src/smartops/context.py`, `notable_event_time()` (introduced in `786a32f`; the bug and the 9-minute gap on run `072fd610` are in `docs/analyst-bug-report.md` C6 and `docs/smartops-issues-report.md` P1). Each adapter names its own event-time field; the normalizer never falls back to the alert's creation time silently: it records which field it used.
 - **Dedup at intake.** ESCU rules run every 5 minutes over a 60-minute span with no throttle, so each event was raised about 12 times. `engine/src/smartops/context.py`, `notables_spl()` (`dedup search_name dest firstTime`, introduced in `ebc8e66`). The normalizer folds repeats on (rule ID, primary entity, event time) into one alert with `first_seen`, `last_seen` and `count`.
 - **Escape attacker-controlled values before they enter any query.** `engine/src/smartops/context.py`, `_spl_escape()` (introduced in `330d1bc`). Recipes go further: runtime values are bound as parameters, never concatenated (§10). Every adapter escapes in its own query language.
 
 ### Entity missing
-If the normalizer cannot fill an entity the detection needs (its `required_alert_fields`, or the precedent entity), the alert flags with reason `entity_missing` and the normalizer opens a fix ticket for the rule's owner (the rule's entity mapping or field extraction is broken). It never guesses an entity, and it never runs the flow on a partial alert. Data readiness (§11) measures how often this happens per rule.
+If the normalizer cannot fill an entity the detection needs (its `required_roles`, or the precedent entity), the alert flags with reason `entity_missing` and the normalizer opens a fix ticket for the rule's owner (the rule's entity mapping or field extraction is broken). It never guesses an entity, and it never runs the flow on a partial alert. Data readiness (§11) measures how often this happens per rule.
 
 ### Matching an alert to the bank
-Matching uses the exact rule ID, never the rule name.
-- Splunk ESCU, Microsoft Sentinel and Elastic rules match by ID, because their public libraries are bank sources (§26).
-- QRadar, FortiSIEM and custom rules have no public library in the bank. They go through the Detection Engineer (§17), which maps each to a known detection, a technique fallback or none, once per rule.
-- Vendor alerts (`vendor:` families, §2) bind to the normalized `reporting_control` fields, so they work on every SIEM.
+Matching uses the exact rule ID, never the rule name. Detections have neutral IDs (D-0001…), grouped by family (endpoint, identity, endpoint malware, network, email, data protection), not by source library. One matching table, `bank/intake/rule-map.yaml`, maps every source rule ID to a D-ID; several source IDs may map to one D-ID. Only the normalizer and the Detection Engineer read it; the Triage agent never does.
+- Rules from public libraries (Splunk ESCU, Microsoft Sentinel, Elastic, Sigma) match by ID, because those libraries are bank sources (§26).
+- QRadar, FortiSIEM and custom rules have no public library in the bank. They go through the Detection Engineer (§17), which maps each to a known detection, a technique fallback or none, once per rule, and records the mapping in the rule map.
+- Product alerts (AV/EDR, IDS, firewall, WAF, proxy, email, DLP, device control) map through `product_alert:` entries to the control-alert families (§2), which bind to the normalized `reporting_control` fields, so they work on every SIEM.
+- Where a detection came from is kept on it as `derived_from` metadata, for our own reference only: the one place a triage file may name a library or vendor.
 
 ## 5. Context questions (designed, not built)
 There is no separate context service. Context is a small fixed set of broker questions, the context questions, that the Triage agent asks once per entity per grouping window, at the "Group by entity" step (§6). The broker batches them and caches the answers per entity (§21), so every alert on the entity reads the same answers. They never hand the Triage agent a free-form bundle. Specified in `docs/intake/context-questions.md`; the rules every broker question follows are in `docs/broker-questions.md`.
@@ -68,12 +72,15 @@ Starting set:
 | C-01 | Open escalation or case on the entity | yes/no |
 | C-02 | Alerts on the entity in the window | count, and count of distinct detections |
 | C-03 | Highest severity of any other alert on the entity in the last 24h (the Triage agent compares it with this alert's: "higher severity") | value from a fixed list |
-| C-04 | Audited or independent analyst closes of this fingerprint | count |
+| C-04 | Audited closes, and independent human closes (manual closes in Shadow and analyst overrides, by distinct analysts), of this fingerprint: human evidence only (`bank/contract/evidence.yaml`) | count |
 | C-05 | Asset priority | critical, high, medium or low |
 | C-06 | Crown-jewel asset | yes/no |
 | C-07 | Privileged user | yes/no |
+| C-08 | Asset class | server, workstation, network, other or unknown |
 
 They feed the entity guard (§6), Q0 (§14) and priority (§20). They never close an alert on their own: they can only raise scrutiny or set priority.
+
+**Missing context never closes and never escalates.** If a context question (C-01…C-08) is unknown or its source is unavailable, the alert cannot close on anything that depends on it, and the outcome is a flag with reason `context_unknown`, naming the C-ID. Missing context never escalates by itself, and no unknown answer is replaced by a worst-case value. Per question: C-01 or C-02 unknown, every close on the entity flags; C-03 or C-04 unknown, Q0 cannot close and the flow continues; C-05 unknown, priority stays at the SIEM's own urgency and any close that depends on asset priority flags; C-06 unknown, every close flags (Q0 and the crown-jewel rule depend on it) and Q-0067 flags; C-07 unknown, priority is not raised; C-08 unknown, Q-0067 flags and the entity guard uses the global defaults. A known server or crown jewel still follows the flow (Q-0067 escalates). `validate` rejects a worst-case default and any path where an unknown context answer leads to escalate.
 
 Every answer carries a status and provenance (`docs/broker-questions.md`). A source that is down gives `source_unavailable`, never "no hit": an empty answer from an unavailable source is not evidence. For the entity guard, an unavailable C-01 or C-02 means the entity cannot be ruled out, so closes on it flag.
 
@@ -89,20 +96,21 @@ The unit of decision stays the alert: each alert runs its own yes/no flow and ge
 - The context questions (§5) are asked once per entity and their answers, like all measurements, are shared through the broker's cache (§21).
 - Precedent, burst and repeat logic key on the entity.
 
-Entity guard: it runs once per entity per window, before Q0.
-- If the entity has an open escalation, or at least N alerts (parameter, default 3) from at least 2 different detections in the window, every close on that entity becomes a flag, and the entity is marked "hot" for the window.
+Entity guard: it runs once per entity per window, before Q0, and again on a fresh C-02 immediately before any close on the entity is written.
+- If the entity has an open escalation, or at least N alerts (parameter, default 3) from at least 2 different detections in the window, or at least 2 distinct non-routine detections of medium normalized severity or above in the 24h look-back (`entity_day_min_detections`, `entity_day_counted_severities`, bounded; #18), every close on that entity becomes a flag, and the entity is marked "hot".
+- A new alert on the entity invalidates the cached C-02 for the window. When the entity turns hot, the closes already written on it inside the window (for the 24h rule, the look-back) are reopened as flags with reason `entity_hot` (round 6, S1, S2). The replay gate checks both on alert sequences: 3 alerts from 2 detections within 4 minutes all flag; PsExec and LSASS access on one host, both medium, 15 minutes apart, both flag.
 - It is raise-only: it can turn closes into flags, never the reverse. Each alert's flow still runs, so its answers and evidence reach the analyst.
 - A hot entity raises the alert's priority (§20).
-- It reads only broker answers: C-01 (open escalation) and C-02 (alerts and distinct detections in the window).
+- It reads only broker answers: C-01 (open escalation), C-02 (alerts and distinct detections in the window) and C-08 (asset class, which picks N and the window).
 
 Noisy entities (designed, not built):
 - A pair (entity, detection) may be marked routine. A routine alert does not count toward N.
-- Routine is a reduce-scrutiny change. The Use Case Manager proposes it from at least 4 weeks of consistent, audited benign closes; it goes through an approval packet (§7), and a human approves it with an owner and an expiry.
+- Routine is a reduce-scrutiny change. The Use Case Manager proposes it from at least 4 weeks of consistent benign closes that are human evidence (`bank/contract/evidence.yaml`, `bank/triage/proposals.yaml`); it goes through an approval packet (§7), and a human approves it with an owner and an expiry.
 - Always counted, never routine:
-  - alerts of high or critical severity
+  - alerts of high or critical normalized severity
   - any detection not on that entity's routine list
   - any alert on an entity with an open escalation
-- N and the window may be set per entity class (for example domain controllers, build servers, user workstations), as parameters with bounds (§13).
+- N, the detection count and the window are set per entity class from C-08 (server, workstation, network, other), as parameters with bounds and direction tags (`by_entity_class` in `bank/triage/parameters.yaml`; §13). Global default: N = 3 from 2 detections in 10 minutes, the same for every class until #18 measures otherwise. An unknown asset class uses the global defaults; it never picks the strictest class.
 - Metric: the share of entities hot per day (§24). Issue #18 measures it on replayed bursts before the defaults are fixed.
 
 Risk-based alerting (for example Splunk ES risk notables) is entity-level by nature, but its flows are deferred: most customers don't use it (`docs/assumptions.md`). Batch 2 is authentication and identity detections only.
@@ -160,27 +168,35 @@ Every question is answerable by one lookup against:
 - Context store: assets, identities, allowlists, VPN ranges, sanctioned tools, change windows with their implementers (customer-provided or mined from the SIEM)
 - Baseline engine: "is this normal for this entity?" yes/no, from the customer's logs
 - Case memory: precedents (past closures with reasons)
-- Alert field: values in the normalized alert itself (§4)
+- The normalized alert itself (§4), as a broker source (`alert.class`, `alert.measure`)
 
 ### Capabilities and the Tool Broker (designed, not built)
-The Triage agent never knows which tools a customer has. Each question declares exactly one capability (`bank/capabilities.yaml`, e.g. `list.lookup`, `entity.baseline`, `org.prevalence`, `change.window`, `file.signer`, `file.reputation`). The bank holds no tool names or SPL.
+The Triage agent never knows which tools a customer has. The bank is split in three parts, plus intake:
+- `bank/contract/`: the interface both sides share. Every question's ID and answer type (yes/no, count, number, value from a fixed list, time), the status values, the trust values and the message envelope (below). Nothing else.
+- `bank/triage/`: what the Triage agent uses. Detections and their flows, questions (text, role inputs, ratings), context questions, parameters, guards, modes, reason codes.
+- `bank/broker/`: what the Tool Broker uses. Capabilities and their implementations (`question_map.yaml`: which capability answers each question, and the broker-only inputs such as the context list it reads), sources and source authority, translations and their kinds, per-customer verifications, scope profiles, context lists and seeds, fallback rules.
+- `bank/intake/`: what the normalizer and the Detection Engineer use. The rule map, the use-case catalog and the pilot list.
+
+triage/ reads contract/ only, never broker/; broker/ implements contract/. `validate` enforces it with the triage-neutrality gate: no file in triage/ or contract/ may name a vendor, product or rule library, refer to the broker's internals (translations, rows, sources, recipes, context-list IDs) or hold a field name or query-language token; `derived_from` metadata is the only exception. Each question has exactly one capability on the broker side (`bank/broker/capabilities.yaml`, e.g. `list.lookup`, `entity.baseline`, `org.prevalence`, `change.window`, `file.signer`, `file.reputation`). The bank holds no tool names, no query language and no SIEM product terms.
 
 Flow of one question:
-1. The Triage agent sends the question to the Tool Broker: capability plus inputs, with the windows and lookbacks taken from the parameter table (§13).
-2. The Tool Broker routes it to the domain specialist that owns the capability for this customer. Any of the customer's tools may be disconnected.
+1. The Triage agent sends the question to the Tool Broker: its question ID plus role inputs, with the windows and lookbacks taken from the parameter table (§13), in the message envelope below.
+2. The Tool Broker maps the question to its capability and routes it to the domain specialist that owns the capability for this customer. Any of the customer's tools may be disconnected.
 3. The specialist runs the customer's frozen recipe for that capability (§10).
 4. It returns a measurement (a count, a match, a value) with evidence.
 5. The Triage agent applies the threshold from the parameter table and gets yes, no or unknown.
 
 Principle: the broker measures, the Triage agent judges. No threshold lives in a recipe. `docs/capability-spec.md` lists, for each capability, the measurement it returns and the Triage-side rule that turns it into an answer.
 
-`alert.field` reads a normalized field of the alert itself (for example the control's action). The Triage agent answers it locally, not through the Tool Broker, and it does not count against the call budget.
+The normalized alert is a broker source (`source: alert`, no tool call). Questions about the alert itself (`alert.class`, which returns a value from a fixed list through a translation, and `alert.measure`, which returns a number) are answered by the Tool Broker through a recipe and return a typed answer like any other question. The Triage agent never sees field names. They do not count against the call budget, since no tool is called.
 
 A SIEM's own MCP server (for example Splunk's), where present, is used to execute searches and list metadata. Its query generation is never trusted directly: any query it suggests is a draft that must pass the recipe tests (§10) before it is used.
 
-Answer contract: `answer` (yes | no | unknown), `unknown_reason` (no_capability | unavailable | no_data), `evidence`, `source_tool`, `observed_at`. The Tool Broker returns the measurement, evidence, source tool and time; the Triage agent sets the answer.
+Answer contract (`bank/contract/answer.yaml`): every broker answer returns the answer in contract terms (bool, count, number, a value from a fixed list, or a time), a `status` (answered | unknown | source_unavailable | sources_disagree) and a `trust` (checked | not_checked), plus opaque provenance the Triage agent logs and never interprets.
+- The broker decides trust. checked: answered from the source set at onboarding through a translation verified for this customer, or standards-defined, or with no translation at all. not_checked: anything else (an unverified translation, a fallback source, a model-proposed translation). An ambiguous translation answers status unknown.
+- **The Auto rule, in triage terms:** a not_checked answer may support a close in Shadow and Recommend, and the explanation marks it ("not_checked: <question>"); it never supports a close in Auto, where the close becomes a flag. In Auto the outcome is also never weaker than the same flow with every not_checked answer read as unknown: the Triage agent takes the stricter of the two (round 6, §5.1; `tools/equivalence.py` found 94 paths in 23 flows where the trust rule alone flagged and the unknown reading could escalate, mostly a not_checked baseline yes that stops a flow before its change-record step). The Triage agent never sees translations, rows, vendors or translation kinds. Each flow step on a non-bool question carries a rule (for example `gte: alert_history_min_count`, or the enum values that mean yes); the Triage agent applies it and gets yes, no or unknown. Status unknown is no_data; source_unavailable and sources_disagree never close.
 - no_data: follow the step's `on_unknown`.
-- unavailable (tool down, timeout): never closes; the alert is flagged and the detection runs in Recommend until the capability is healthy again.
+- unavailable (tool down, a missed deadline, or a deferred request past its maximum wait): `source_unavailable`, which never supports a close; the alert is flagged and the detection runs in Recommend until the capability is healthy again. It is never cached.
 - no_capability: resolved per customer at onboarding. The question is disabled, its step follows `on_unknown` without a call, and it is listed in the coverage report.
 - A yes that rests on seed data with `verified: false` taints the rest of the flow: that step and any later close reached through it become a flag until onboarding verifies the entry. The same holds for a value translation not yet approved (§10).
 - Reputation and anomaly capabilities are escalate_only: a hit escalates or flags and never closes; a miss is never benign evidence.
@@ -190,11 +206,42 @@ Answer contract: `answer` (yes | no | unknown), `unknown_reason` (no_capability 
 
 Every question asked of the broker follows `docs/broker-questions.md`: a bank ID (C-xx or Q-xxxx), one entity, fingerprint or alert inside the caller's scope profile, one typed answer with a status and provenance, no threshold, read-only, a frozen recipe per source, and raw evidence kept as a link.
 
-Under the `triage` profile the Tool Broker enforces: entities named in the alert only; fixed windows (the 24h look-back triage window for event lookups; baselines and prevalence use their declared lookbacks and return counts, not raw events); read-only; a per-call timeout (timeout = unavailable); at most 6 calls per alert including Q0, counted on the worst single path through the flow (steps plus the guards of the closing step). Resolving a file's hash or signer inside a lookup is the broker's job and does not count against the budget.
+Under the `triage` profile the Tool Broker enforces: entities named in the alert only; fixed windows (the 24h look-back triage window for event lookups; baselines and prevalence use their declared lookbacks and return counts, not raw events); read-only; a per-call timeout (timeout = unavailable); at most 6 calls per alert, counted on the worst single path through the flow (Q0, the steps and the guards of the closing step).
+- **The call budget counts calls to outside tools only:** the SIEM, the EDR, identity, email, threat intel, change and ticketing, the vulnerability scanner and SOAR (`scope.budget_counts_sources` in `bank/broker/capabilities.yaml`).
+- Lookups in our own cached context and list store do not count (`list.lookup`, the context questions), and neither do the normalized alert (`alert.class`, `alert.measure`), case memory (`precedent.check`), rules over cached context answers (`context.rule`), or resolving a file's hash or signer inside a lookup.
+- The flow limit is unchanged and still enforced by `validate`: at most 5 steps per flow in total, with Q0 counting as step 1.
+
+### Parallel runs and asynchronous answers (designed, not built)
+Many alerts are triaged in parallel and the broker answers asynchronously, so every message is tied to a unique run. The schema is `bank/contract/envelope.yaml`; `validate` checks that it requires these fields and runs the worked messages in `bank/contract/envelope_examples.yaml` through the acceptance rules.
+
+IDs:
+- `alert_id`: the SIEM plus the source alert ID. The same alert arriving twice is deduplicated, not triaged twice.
+- `run_id`: unique per triage run of one alert (UUID). A re-triage gets a new run_id linked to the same alert_id.
+- `entity_window_id`: one per entity grouping window (§6). The context questions for that window carry it.
+- `request_id`: unique per question sent: run_id (or entity_window_id) + step + question ID + attempt. The attempt grows only when the Triage agent deliberately asks again (a new request, for example after source_unavailable); a transport retry reuses the request_id unchanged.
+- `measurement_id`: one per broker measurement. A cached answer reused by several runs keeps its measurement_id, and each answer records which measurement it came from.
+
+Message envelope:
+- Every broker request carries request_id, run_id or entity_window_id, question ID, scope profile and deadline.
+- Every answer echoes request_id and run_id (or entity_window_id), plus measurement_id, answer, status, trust and provenance.
+
+Rules:
+- The Triage agent accepts an answer only if it matches a pending request_id for that run. Mismatches are rejected and logged.
+- Each question has a deadline (`question_timeout_seconds`, a bounded parameter; a longer deadline reduces scrutiny). No answer by the deadline gives `source_unavailable`, which never supports a close: the alert flags (round 6, B4).
+- Overload or rate limiting: the broker's router returns `defer` (reason overload or rate_limited) instead of an answer. The request waits, served in priority order when capacity returns, and is never answered unknown. The wait is bounded by `defer_max_wait_seconds` from the first defer (a second defer never extends it); past it the status is `source_unavailable`.
+- A late answer is logged and discarded, never applied.
+- A transport retry reuses the request_id. The broker returns the same completed measurement (answered, unknown or sources_disagree) for a repeated request_id and never measures twice. `source_unavailable` is never cached, so a retry after it measures again under a new measurement_id. The attempt number grows only when the Triage agent deliberately asks the question again.
+- `validate` runs the worked sequences (deadline missed, deferred and answered, deferred past the maximum) and retries (cached measurement, re-measure after source_unavailable, a cached source_unavailable rejected) in `bank/contract/envelope_examples.yaml`.
+- The decision log (§22) is keyed by run_id and lists every request_id and measurement_id. The SIEM write-back (§20) carries run_id.
+- Context answers are shared through entity_window_id. Each run records which context measurements it used.
 
 ### Sources (designed, not built)
 - Any capability may be answered from the SIEM, from the EDR's or another tool's API directly, or through a SOAR action.
+- **Translations and trust (broker side).** Each translation row (`bank/broker/translations/`) has a kind: ambiguous (the value does not say what happened: status unknown in every mode), unverified (from vendor docs: not_checked until verified for the customer), proposed (model-proposed in build mode: not_checked; it must be checked and frozen before it is relied on), or standards-defined (for example HTTP status codes, citing RFC 9110: checked once in the shared broker layer, with no per-customer spot check; which field the product logs stays a recipe known-answer test). A row verified for the customer answers checked. A fallback-source answer is always not_checked, unless its row is ambiguous (then unknown). Verification is per customer (`bank/broker/customers/<c>/verifications.yaml`): a cited vendor doc, a Product Operator spot check of at least 20 real alerts (`verification_min_spot_check_alerts`, bounded), checker, date, product version and expiry; a product version change re-opens it. Details: `docs/broker-questions.md`.
+- **Email quarantine.** An email or DLP "quarantined" supports a close only when it happened before the user received the item (`email.delivery_stage: pre_delivery`). After delivery (for example a purge of a delivered message), or with no delivery stage, it is ambiguous. The translation is limited to the email and DLP questions (Q-0074, Q-0062); an endpoint question can never use it, and `validate` enforces that.
+- **Source authority.** The SIEM alert only starts triage. For each capability the broker answers from the authoritative source set at onboarding, usually the tool's own API. The SIEM is authoritative only for alert history and log searches (`alert.history`, `entity.baseline`, `org.prevalence`, `traffic.denied_only` and the other event-search capabilities; `source_authority` in `bank/broker/capabilities.yaml`). A fallback source is used only when the authoritative one is unavailable or not granted, and its unverified answers can only raise scrutiny. `validate` rejects a capability whose authoritative source is the SIEM outside that list.
 - Each capability has one authoritative source per customer, set at onboarding, and a fallback order. If two sources disagree, the answer is unknown and the alert flags; disagreement is never resolved by picking one.
+- Endpoint run status (Q-0049, `endpoint.run_status`): the authoritative source is the endpoint product's API (for Defender, the alert evidence in its security API). The broker finds the product's alert by the vendor alert ID the normalizer filled (`reporting_control.vendor_alert_id`); if that is missing, by device (`reporting_control.endpoint_device`), file hash and a bounded window ending at the alert time (`edr_alert_match_window_minutes`, a broker parameter since round 6). No match, or several, answers unknown. Inside the vendor's alert the broker reads the evidence item for the alerted file, picked by SHA-256, never the first item; for Defender, `detectionStatus` comes from the file, process and registry evidence subtypes and `remediationStatus` from the base evidence type (round 6, S7; known-answer tests in the translation, run by `validate`; #20). The run-status translation belongs to the API recipe. The SIEM's copy of the product's alert (for Defender, event log 1116/1117) is a fallback only, used when the API is unavailable or not granted; its answers are always not_checked: "ran" escalates; pre_execution may support a close in Shadow or Recommend (marked) but never in Auto; event 1117 "Block" and a quarantine alone are ambiguous and answer unknown in every mode. The same holds for CrowdStrike and every other endpoint product: the vendor API is authoritative, the SIEM copy is a fallback, and the rows are unverified until the lab tests (#20 for Defender, #9 for CrowdStrike).
 - SOAR is read-only. The broker may call only actions on an approved read-only list (lookups, enrichments); any other action is refused and logged. Containment and enforcement actions are never called by the broker.
 - Tool API limits are respected: per-entity caching (the measurement cache, §21), batching, and a concurrency cap per source (parameter).
 - Recipes and their known-answer tests exist per source (§10). Attacker-influence ratings are per source profile and still apply (§14): the same capability may rate lower from a direct API than from a forwarded copy in the SIEM.
@@ -202,9 +249,11 @@ Under the `triage` profile the Tool Broker enforces: entities named in the alert
 
 Context-store write-back goes only through `list.propose_update`. Reduce-scrutiny changes (allowlist additions) need human approval with an owner and an expiry. Increase-scrutiny changes (watchlists, removing an allowlist entry) may be automatic; removing an allowlist entry must notify the fact's owner. Enforcement blocks need approval.
 
-Vendor neutrality: the bank holds no vendor or product names. Only offline metadata (`data_source`, `sigma_logsource`, `sigma_refs`, `source`, `license`) may name them, plus seed data under `bank/seeds/`, which is loaded into the customer's context store at onboarding and never reaches the agent. Question text describes what to check about an entity, never where or with which tool. The Triage agent receives a runtime bundle (`tools/export_bundle.py`) built without the offline metadata; the validator fails if the bundle contains an offline key or a vendor name. Recipe templates (§10) may name tools; they ship separately from the runtime bundle.
+Vendor-specific content (query languages, SIEM product terms, CIM, ECS and vendor field names, vendor API calls) lives only in adapter folders, broker recipes and translations. Core, triage logic, questions, flows, capabilities and parameters never contain it. `validate` enforces this twice: the vendor-leak gate scans questions, context questions, detections' flows and required roles, capabilities, parameters and context rules for query-language tokens, SIEM product terms and schema field names; the triage-neutrality gate scans every file in `bank/triage/` and `bank/contract/` (comments included) for vendor, product and rule-library names, references to the broker's internals, field names and query-language tokens, with `derived_from` as the only exception. Both allow vendor content in broker translations, adapters and intake (the rule map, the use-case catalog).
 
-Vendor value mappings (`docs/normalization.md`) mark each row verified or not. The cap is per customer: a detection is capped at Recommend for a customer while that customer's product rows for its family are unverified, as recorded by the onboarding check "Check vendor alerts are normalized". The detection declares `auto_requires: [vendor_mapping_verified]`; `validate` requires it for any family with unverified rows.
+Vendor neutrality: the bank holds no vendor or product names. Only offline metadata (`data_source`, `sigma_logsource`, `sigma_refs`, `source`, `license`) may name them, plus seed data under `bank/broker/seeds/`, which is loaded into the customer's context store at onboarding and never reaches the agent. Question text describes what to check about an entity, never where or with which tool. The Triage agent receives a triage bundle (contract/ and triage/ only) and the Tool Broker a broker bundle (contract/ plus broker/ without translations or seeds), both from `tools/export_bundle.py` and both built without the offline metadata; the validator fails if a bundle contains an offline key or a vendor name, or if the triage bundle carries anything the broker implements. Recipe templates and translations (§10) may name tools; they ship separately with the broker's recipes.
+
+Translations (`docs/normalization.md`) give each row a kind; verified is per customer. A detection is Auto-eligible for a customer only when every translation row its close paths rest on is verified for that customer (or standards-defined), as recorded by the onboarding check "Check vendor alerts are normalized" in the customer layer; `validate` enforces it for every customer that sets a detection to Auto (`bank/triage/customers/<c>/modes.yaml`). Fallback-source translations do not count against Auto eligibility: their answers are always not_checked at runtime, so in Auto they flag rather than close and can never be what an Auto close rests on; counting them would make every detection with a fallback permanently ineligible without making any close safer.
 
 Allowlist and "known tool" lookups match on file hash, or code-signing signer plus path, never on name or path alone. Names and paths are attacker-controlled. Where the alert lacks hash or signer, fetch them from the same process's creation event by process GUID; if still unavailable, the answer is unknown.
 
@@ -215,7 +264,7 @@ Template: the generic way to measure a capability on a type of tool. Templates s
 - Event searches are Sigma rules, compiled by pySigma to the SIEM's query language (SPL, KQL, ES|QL or EQL, AQL, and so on) with a per-customer pipeline (index or table, source type, field names). Backend maturity varies by SIEM; which backends are solid is an open assumption (`docs/assumptions.md`). A SIEM without a solid backend gets hand-written, tested templates.
 - Lookups and API calls (lists, threat intel, change records, alert history) are small typed templates with the same lifecycle.
 
-Customer recipe: the template bound to one customer. It holds the pipeline, the compiled query (a frozen copy), the value table, known-answer tests, status and version. Recipes are stored in the customer's database on premises and looked up by exact key (capability + customer + tool). There is no vector store at runtime; vector search may help a specialist find the closest template while building.
+Customer recipe: the template bound to one customer. It holds the pipeline, the compiled query (a frozen copy), the translations, known-answer tests, status and version. Recipes are stored in the customer's database on premises and looked up by exact key (capability + customer + tool). There is no vector store at runtime; vector search may help a specialist find the closest template while building.
 
 Lifecycle:
 1. Build mode (agentic). At onboarding the specialist binds the template, compiles it and runs known-answer tests. A known value must return the expected result, and the data source must show recent events, so an empty result is never mistaken for "no". Status: shadow.
@@ -225,13 +274,13 @@ Lifecycle:
 5. Live fallback. With no recipe, or a broken one, the specialist may answer agentically, but that answer can only raise scrutiny (flag or escalate). It never supports a close.
 6. Runtime values (hash, host, user) are inserted escaped, as parameters, never concatenated into query text.
 
-Value tables: a small local model translates raw vendor values (for example an antivirus action string) into a fixed short list. The first time a value appears, the translation is saved to the customer's value table and goes to the Use Case Manager for approval. A close path that depends on an unapproved translation becomes a flag, mirroring the unverified-seed rule. Approved translations are plain lookups, with no model involved.
+Translations: the broker may use a model to propose a translation of a raw vendor value (for example an antivirus action string) into the fixed short list only in build mode. A proposal (`kind: proposed`) must be checked and frozen before use; at runtime an unchecked proposal answers not_checked, and a model never translates live. Checking a proposal goes to the Use Case Manager for approval; a checked proposal becomes an unverified row until the customer verifies it.
 
 ## 11. Phase 0: foundation readiness (designed, not built)
 A hard gate before triage starts, and before Shadow in onboarding. Triage on a broken foundation produces confident wrong answers, so the foundation is checked first. The checks are run by the SIEM specialist inside the Tool Broker, read-only, under the `detection_engineering` scope profile (rule-wide and historical, §4).
 
 Per SIEM:
-- Splunk: CIM compliance per rule; CIM data models enabled and accelerated, with acceleration completeness; Enterprise Security asset and identity lookups populated
+- Splunk (version 1): CIM compliance per rule; CIM data models enabled and accelerated, with acceleration completeness; Enterprise Security asset and identity lookups populated
 - Microsoft Sentinel: entity mappings on the analytics rules; asset watchlists
 - Elastic: ECS compliance; asset data
 - QRadar: the asset database; the network hierarchy
@@ -242,7 +291,7 @@ Common to every SIEM:
 - search or query concurrency headroom (feeds the throughput limits, §21)
 - EDR agent coverage across hosts
 - entity resolution quality: the share of alerts mapped to an asset ID and to an identity (§6)
-- which EDR feed exists: the alert API, or event logs in the SIEM
+- read-only API access to each EDR granted (yes/no), with the API's rate limits. Without it, the detections that need endpoint answers (for example the AV/EDR family's run status) are capped at Recommend: the SIEM copy is a fallback that can only raise
 - field coverage per capability (for example, the share of process events that carry a hash), ingestion delay and time sync
 - whether risk-based alerting is in use
 - asset-ID availability in AV and EDR alerts (without it, AV precedents rate medium)
@@ -265,8 +314,8 @@ At onboarding, from the customer's 6–12 months of alert history, compute per r
 Addressable volume = the sum, over covered rules, of volume share × ceiling. It is an upper bound: it assumes past benign dispositions were right. The report lists, per rule, the share of blank or unclear dispositions, and the Shadow close rate on live alerts confirms the number before it is used in any sales claim. It is the only number used in sales claims. It also orders the customer's onboarding and decides what to build next. The value metrics are analyst hours saved and entities to review per day, not the auto-close percentage alone.
 
 ## 13. Thresholds and parameters (designed, not built)
-- Thresholds live on the Triage agent side, in parameters. Precedence: customer + detection > customer default > detection default > global default (`bank/parameters.yaml`).
-- Every parameter has a minimum and a maximum in the bank, and validation rejects values outside them.
+- Thresholds live on the Triage agent side, in parameters. Precedence: customer + detection > customer default > detection default > global default (`bank/triage/parameters.yaml`).
+- Every parameter has a default, bounds and the direction that reduces scrutiny in `bank/triage/parameters.yaml`; validation rejects values outside the bounds, and any customer override in the reduce-scrutiny direction without approver, owner and expiry. Detections set detection-level defaults under `parameters:` (for example `precedent_validity_hours`).
 - A change that adds scrutiny may apply directly. A change that removes scrutiny needs human approval, with an owner and an expiry.
 - Time windows and lookbacks travel with the request to the Tool Broker, but their values come from the same parameter table.
 - Measurements are stored. In Shadow, the Use Case Manager replays stored measurements against candidate thresholds and proposes changes with that evidence.
@@ -274,16 +323,18 @@ Addressable volume = the sum, over covered rules, of volume share × ceiling. It
 - No model-generated confidence scores. "High confidence" means every answer on the close path came from a frozen recipe with a low attacker-influence rating.
 
 ## 14. Bank structure
-- Two levels: rule-level flows per known detection (ESCU, Sigma, Elastic; Sentinel from batch 2) and technique-level fallback flows per ATT&CK technique.
-- Field names: a detection's `required_alert_fields` must name normalized alert fields (§4, `docs/intake/normalized-alert-v1.md`), never one SIEM's names. Today's bank uses Splunk CIM names (`dest`, `process`, `parent_process_guid`); the mapping in `docs/intake/normalized-alert-v1.md` is the bridge until the next bank PR renames them (designed, not built).
-- Technique-only rules are capped at Recommend mode.
+- Layout: `bank/contract/` (question IDs, answer types, status, trust, envelope), `bank/triage/` (detections by family, questions, context questions, parameters, semantics, reason codes, customer modes), `bank/broker/` (capabilities, question map, translations, verifications, context lists, seeds, broker parameters), `bank/intake/` (rule map, use cases, pilot). See §9.
+- Two levels: detection flows with neutral IDs (D-0001…) grouped by family (endpoint, identity, endpoint_malware, network, email, data_protection), each mapped from its source rules (ESCU, Sigma, Elastic; Sentinel from batch 2; product alerts) in `bank/intake/rule-map.yaml`, and technique-level fallback flows per ATT&CK technique (family technique_fallback). The gates' batches are these families.
+- Field names: a detection declares `required_roles`, the canonical roles of the normalized alert it needs (§4, `docs/intake/normalized-alert-v1.md`), never a SIEM's field names. Questions refer to roles (`role:host.asset_id`, `role:process.command_line`), never to fields; `validate` rejects CIM, ECS, Sysmon and vendor field names in detections and questions. Vendor value patterns and lists (antivirus classes, action values) live in the broker's per-vendor translations under `bank/broker/translations/`, each row with a kind; the Triage agent sees only the answer and its trust.
+- Technique-only rules and technique fallbacks are capped at Recommend mode: they have no true-positive replay data. `validate` enforces the cap, in the bank and in every customer's modes.
+- Auto exclusions (`bank/triage/auto_exclusions.yaml`, round 6, S5, S8, §5.2). A detection or one close step can be kept out of Auto with a code; the Auto-eligible count excludes it, and in Shadow and Recommend the close stands, marked. Detection level (`max_mode: recommend` + `auto_excluded_reason`): `destructive_or_anti_forensic` (D-0001 antivirus exclusion, D-0004 shadow-copy deletion, D-0016 event-log clearing; every detection on T1490, T1685 or T1685.005, enforced by `validate`; D-0016 also has Q0 off) and `no_tp_replay_data` (every family without true-positive replay data: email D-0031, D-0032; data_protection D-0033 to D-0035; network D-0029, D-0030; every technique fallback). The replay gate fails a detection it cannot replay unless it carries `no_tp_replay_data`, and a family run on zero events passes only when every detection in it is so capped. Step level: `attacker_reachable_sender` (D-0032 step 3, the approved-sender close) and `lateral_movement_change` (none left: S6 turned those closes into flags).
 - No questions (usually a custom rule): no verdict; the agent sends a context pack, the analyst triages, the Use Case Manager drafts questions from the analyst's reasoning for human approval, and the rule starts in Shadow.
-- Flows: at most 5 steps, early exit; each step has on_yes / on_no / on_unknown → next | close:<disposition>:<reason_code> | escalate | flag.
+- Flows: at most 5 steps per flow in total, Q0 counting as step 1; early exit; each step has on_yes / on_no / on_unknown → next | close:<disposition>:<reason_code> | escalate | flag.
 - Guards: a step may carry guards, extra checks that run when the step reaches a close or, where a guard says so, a flag outcome. Each names a question, the answers that trigger it and the result (flag or escalate); an unknown guard answer raises to at least flag. Guards only raise: a close becomes a flag or an escalation, a flag becomes an escalation, never the reverse, and no guard attaches to an escalate outcome. All applicable guards run and the strongest result wins (escalate > flag), whatever their order. A guard may apply only to some matched list entry types (for example analysis hosts versus approved tools). A guard that fires on no means a close needs a yes from it. Guards never create a close, and their calls count against the call budget on their path.
 - Attacker influence: none, low, medium (control-recorded but forgeable in transit, such as alerts forwarded over syslog), high. Every close path must rest on a yes rated none or low. A question may rate itself per source profile (direct API or forwarded); the profile is recorded per vendor family at onboarding, and a close left without a none/low yes under the customer's profile flags.
-  - Rating rules (designed, not built; the bank change comes next): a question cannot be rated lower than its capability's rating in `docs/capability-spec.md` without a written reason, which is flagged for review. Baselines default to high. `change.window` is low, and only for approved changes whose approver is not the implementer. Identity group membership is never the only low-rated answer on a close path.
-- Q0 precedent check first in every flow: same fingerprint (rule + entity + key attributes) closed with a recorded reason within the validity window (e.g. 24h–7d), the detection's precedent entity not a crown jewel, no other alert on it in the window → close citing the precedent. In Shadow and Recommend the precedent is shown to the analyst instead.
-  - Changes (designed, not built; the bank change comes next): inherit only closes that passed audit, or at least 2 independent analyst closes of the same fingerprint; "no other alert on it in the window" becomes "no alert of higher severity on the entity in the window" (the entity guard, §6, now covers alerts from other detections); validity defaults to 24h with a maximum of 72h (parameter bounds).
+  - Rating rules (enforced by `validate` and the close-path gate): a question cannot be rated lower than its capability's rating in `docs/capability-spec.md` (`rating_floor` in `bank/broker/capabilities.yaml`) without a written reason (`below_floor_reason`). Baselines default to high. `change.window` is low, and only for approved changes whose approver is not the implementer. An answer about who performed the action (`actor_identity`: group membership, an actor account on a list, a change implementer) is never the only hard-to-fake yes on a close path (round 6, S6); `validate` requires the tag on every list or change question about an actor or implementer, and the close-path gate enforces it.
+- Q0 precedent check first in every flow, answered from the context questions (`bank/triage/context_rules.yaml`): the fingerprint (rule + entity + key attributes) has a close that passed audit, or (in Shadow and Recommend only) at least 2 independent human closes (C-04), inside the validity window (default 24h, maximum 72h, a bounded parameter); only human evidence counts (below); no other alert on the entity has a higher normalized severity than this one (C-03); at most one distinct detection fired on the entity in the grouping window (C-02, round 6, S2); the precedent entity is not a crown jewel (C-06) → close citing the precedent. In Shadow and Recommend the precedent is shown to the analyst instead. In Auto a precedent needs at least one audited close.
+- **Human evidence** (`bank/contract/evidence.yaml`, round 6, B3): a manual close in Shadow, an analyst override, or an audited close. An accepted recommendation, an Auto close and a precedent match never count. Every count of closes uses this one definition, and declares it: C-04 and Q0, case memory, routine-pair proposals, list-entry proposals, closure mining and threshold proposals (`bank/triage/proposals.yaml`); `validate` rejects any count that does not. The replay gate checks that two accepted recommendations make no precedent.
   - Each detection names its precedent entity and rates each fingerprint field's attacker influence. Q0's rating is the least attacker-chosen field's. If every field is attacker-chosen (sender, subject, message id), the precedent never closes or flags by itself: the flow proceeds and the match is shown as context. If the best field is medium (spoofable source addresses), the close also needs a low-rated yes from a guard, such as "every connection was denied".
   - A precedent closed as mitigated true positive is inherited only when the current alert was also blocked.
   - Three or more earlier alerts with the same fingerprint in the triage window turn the precedent close into a flag.
@@ -295,7 +346,7 @@ An alert matching an open case's fingerprint is attached to it without new triag
 ## 16. Storage
 - Question bank: YAML in git, loaded into SQL tables. Exact, repeatable, auditable, reviewed through PRs.
 - Custom-rule matching: pgvector in the same Postgres, offline only.
-- Customer recipes, value tables, stored measurements and decision logs: the customer's database on premises, keyed exactly (capability + customer + tool) (designed, not built).
+- Customer recipes, translations, stored measurements and decision logs: the customer's database on premises, keyed exactly (capability + customer + tool) (designed, not built).
 - Investigation (later phase): graph database. The YAML already has typed nodes, typed edges and stable IDs, so it loads into a graph DB unchanged.
 - Runtime is a loop: load the detection's steps, answer each with one measurement and its threshold, follow yes/no/unknown, stop at the first close or escalate.
 
@@ -372,7 +423,7 @@ Roles:
    - Build mode (per customer, at onboarding and in Shadow): the largest local model the hardware fits binds templates, compiles and tests recipes.
    - Run mode (per question): no model. A frozen recipe runs.
    - Live fallback (no recipe or a broken one): a local model answers agentically; the answer is raise-only.
-   - Value translation (first sighting of a raw vendor value): a small local model; the translation waits for Use Case Manager approval.
+   - Value translation (first sighting of a raw vendor value): a small local model may propose one, in build mode only; it is checked and frozen before use, and at runtime an unchecked proposal answers not_checked. A model never translates live.
 6. Investigation (later phase).
 
 Audit sampling, for the 5–10% audit of automatic closes (§19):
@@ -445,7 +496,7 @@ Response: the affected detections drop to Recommend (or to Shadow), and a daily 
 - approval queue age
 
 ## 25. HA, DR and backup (gap)
-Case memory, recipes, value tables, parameters and decision logs need backup and restore. High availability and disaster recovery are not designed yet; this is a known gap.
+Case memory, recipes, translations, parameters and decision logs need backup and restore. High availability and disaster recovery are not designed yet; this is a known gap.
 
 ## 26. Sources and licenses
 - splunk/security_content (ESCU), Apache-2.0: known_false_positives, ATT&CK mapping, data source
@@ -476,13 +527,13 @@ Duties:
 Guardrails:
 - It proposes, and never decides, anything that reduces scrutiny: an allowlist entry, an exception, a trusted entity, or a question that adds a close path. Each needs human approval, an owner and an expiry, with a full audit trail.
 - It may apply increase-scrutiny changes on its own (a watchlist entry, removing an expired entry), and must notify the fact's owner.
-- Anti-poisoning: a reduce-scrutiny proposal needs evidence from at least 3 analyst closures, by at least 2 different analysts, on at least 3 distinct days (per-customer parameters). The triage agent's own automatic closures never count as evidence, so the two agents cannot reinforce each other. A proposal driven by alerts from a single source, or by a burst inside one window, is rejected.
+- Anti-poisoning: a reduce-scrutiny proposal needs evidence from at least 3 closures that are human evidence (`bank/contract/evidence.yaml`: manual closes in Shadow, analyst overrides, audited closes), by at least 2 different analysts, on at least 3 distinct days (bounded parameters `proposal_min_human_closes`, `proposal_min_analysts`, `proposal_min_days`; `bank/triage/proposals.yaml`). The triage agent's own closes, and analysts' accepted recommendations, never count as evidence, so the two agents cannot reinforce each other. A proposal driven by alerts from a single source, or by a burst inside one window, is rejected.
 - It reads only through the Tool Broker, under its own read-only scope profile (§4), and writes only through the broker's `list.propose_update` and fact-update capabilities. It never touches customer tools directly.
 - It runs on the same deployment as the triage agent, on the customer's premises.
 
 Metrics: proposals made, accepted and rejected; unconfirmed rule mappings (§17); stale facts; average fact age; unused entries removed; time from a recurring pattern to an approved fact; runbook drift (should be zero).
 
-Capabilities it needs (specification only; to be added to `bank/capabilities.yaml` in a Use Case Manager group with `flow_use: forbidden`, so no triage flow can call them):
+Capabilities it needs (specification only; to be added to `bank/broker/capabilities.yaml` in a Use Case Manager group with `flow_use: forbidden`, so no triage flow can call them):
 - `fact.metadata`: a fact's owner, expiry and last use.
 - `list.usage`: hit counts and last hit per list entry.
 - `identity.status`: whether an owner's account is active.

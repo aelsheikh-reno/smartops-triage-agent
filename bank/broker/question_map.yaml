@@ -1,0 +1,387 @@
+# Broker side of each question: which capability implements it, the broker-only inputs (the context list it reads,
+# the translation class) and what it needs (context lists, coverage reports). The Triage agent never reads this file.
+questions:
+  Q-0000:
+    capability: precedent.check
+    needs:
+      context:
+      - CF-0007
+  Q-0001:
+    capability: list.lookup
+    inputs:
+      list: CF-0001
+    needs:
+      context:
+      - CF-0001
+  Q-0002:
+    capability: identity.groups
+    needs:
+      context:
+      - CF-0002
+    inputs:
+      groups: CF-0002
+  Q-0003:
+    capability: entity.baseline
+  Q-0004:
+    capability: change.window
+    needs:
+      context:
+      - CF-0003
+  Q-0005:
+    capability: list.lookup
+    inputs:
+      list: CF-0004
+    needs:
+      context:
+      - CF-0004
+  Q-0006:
+    capability: list.lookup
+    inputs:
+      list: CF-0005
+    needs:
+      context:
+      - CF-0005
+  Q-0007:
+    capability: entity.baseline
+  Q-0008:
+    capability: list.lookup
+    inputs:
+      list: CF-0006
+    needs:
+      context:
+      - CF-0006
+  Q-0009:
+    capability: list.lookup
+    inputs:
+      list:
+      - CF-0006.expected_parents
+      - CF-0001
+    needs:
+      context:
+      - CF-0006
+      - CF-0001
+  Q-0010:
+    capability: entity.baseline
+  Q-0011:
+    capability: file.signer
+    needs:
+      context:
+      - CF-0008
+    inputs:
+      trusted_list: CF-0008
+  Q-0012:
+    capability: entity.baseline
+  Q-0013:
+    capability: list.lookup
+    inputs:
+      list: CF-0001
+    needs:
+      context:
+      - CF-0001
+  Q-0014:
+    capability: entity.baseline
+  Q-0015:
+    capability: org.prevalence
+  Q-0016:
+    capability: list.lookup
+    inputs:
+      list: CF-0009
+    needs:
+      context:
+      - CF-0009
+  Q-0017:
+    capability: list.lookup
+    inputs:
+      list: CF-0010
+    needs:
+      context:
+      - CF-0010
+  Q-0018:
+    capability: org.prevalence
+  Q-0019:
+    capability: file.signer
+    needs:
+      context:
+      - CF-0008
+    inputs:
+      trusted_list: CF-0008
+  Q-0020:
+    capability: list.lookup
+    inputs:
+      list: CF-0013
+    needs:
+      context:
+      - CF-0013
+  Q-0021:
+    capability: list.lookup
+    inputs:
+      list: CF-0011
+    needs:
+      context:
+      - CF-0011
+  Q-0022:
+    capability: list.lookup
+    inputs:
+      list: CF-0012
+    needs:
+      context:
+      - CF-0012
+  Q-0023:
+    capability: list.lookup
+    inputs:
+      list: CF-0015
+    needs:
+      context:
+      - CF-0015
+  Q-0024:
+    capability: file.reputation
+    needs:
+      context:
+      - CF-0016
+    inputs:
+      sources:
+      - CF-0016
+  Q-0025:
+    capability: list.lookup
+    inputs:
+      list: CF-0017
+    needs:
+      context:
+      - CF-0017
+  Q-0026:
+    capability: list.lookup
+    inputs:
+      list: CF-0014
+    needs:
+      context:
+      - CF-0014
+  Q-0027:
+    capability: alert.class
+    inputs:
+      class: control_action
+  Q-0028:
+    capability: alert.class
+    inputs:
+      class: av_risk_class
+  Q-0029:
+    capability: alert.class
+    inputs:
+      class: av_risk_class
+  Q-0030:
+    capability: file.reputation
+  Q-0031:
+    capability: list.lookup
+    inputs:
+      list: CF-0018
+    needs:
+      context:
+      - CF-0018
+  Q-0032:
+    capability: ip.reputation
+  Q-0033:
+    capability: vuln.not_applicable
+  Q-0034:
+    capability: url.reputation
+  Q-0035:
+    capability: email.message_status
+  Q-0036:
+    capability: email.no_interaction
+  Q-0037:
+    capability: list.lookup
+    inputs:
+      list: CF-0019
+    needs:
+      context:
+      - CF-0019
+  Q-0038:
+    capability: list.lookup
+    inputs:
+      list: CF-0020
+    needs:
+      context:
+      - CF-0020
+  Q-0039:
+    capability: list.lookup
+    inputs:
+      list:
+      - CF-0028
+      - CF-0021
+    needs:
+      context:
+      - CF-0028
+      - CF-0021
+  Q-0041:
+    capability: alert.class
+    inputs:
+      class: web_category
+  Q-0042:
+    capability: traffic.denied_only
+  Q-0043:
+    capability: list.lookup
+    inputs:
+      list: CF-0022
+    needs:
+      context:
+      - CF-0022
+  Q-0044:
+    capability: alert.measure
+    needs:
+      coverage:
+      - device_control_write_events
+  Q-0045:
+    capability: alert.history
+  Q-0046:
+    capability: alert.history
+  Q-0047:
+    capability: alert.history
+  Q-0048:
+    capability: list.lookup
+    inputs:
+      list: CF-0023
+    needs:
+      context:
+      - CF-0023
+  Q-0049:
+    capability: endpoint.run_status
+    inputs:
+      match_window_minutes:
+        param: edr_alert_match_window_minutes   # broker parameter (bank/broker/parameters.yaml)
+  Q-0050:
+    capability: list.lookup
+    inputs:
+      list: CF-0031
+    needs:
+      context:
+      - CF-0031
+  Q-0051:
+    capability: list.lookup
+    inputs:
+      list: CF-0024
+    needs:
+      context:
+      - CF-0024
+  Q-0052:
+    capability: scan.job_active
+  Q-0053:
+    capability: alert.class
+    inputs:
+      class: ids_class
+  Q-0054:
+    capability: alert.class
+    inputs:
+      class: http_status_class
+  Q-0055:
+    capability: change.window
+    needs:
+      context:
+      - CF-0003
+  Q-0056:
+    capability: list.lookup
+    inputs:
+      list: CF-0025
+    needs:
+      context:
+      - CF-0025
+  Q-0057:
+    capability: alert.class
+    inputs:
+      class: web_category
+  Q-0058:
+    capability: alert.class
+    inputs:
+      class: user_agent_class
+  Q-0059:
+    capability: alert.class
+    inputs:
+      class: web_category
+  Q-0060:
+    capability: entity.baseline
+  Q-0061:
+    capability: list.lookup
+    inputs:
+      list: CF-0027
+    needs:
+      context:
+      - CF-0027
+  Q-0062:
+    capability: alert.class
+    inputs:
+      class: control_action
+  Q-0063:
+    capability: alert.class
+    inputs:
+      class: severity
+  Q-0064:
+    capability: alert.measure
+  Q-0065:
+    capability: alert.class
+    inputs:
+      class: device_event
+  Q-0066:
+    capability: alert.class
+    inputs:
+      class: device_type
+  Q-0067:
+    capability: context.rule
+    needs:
+      context:
+      - CF-0007
+  Q-0068:
+    capability: alert.measure
+  Q-0069:
+    capability: alert.class
+    inputs:
+      class: device_event
+  Q-0070:
+    capability: email.auth
+  Q-0071:
+    capability: list.lookup
+    inputs:
+      list: CF-0026
+    needs:
+      context:
+      - CF-0026
+  Q-0075:
+    capability: list.lookup
+    inputs:
+      list: CF-0032
+    needs:
+      context:
+      - CF-0032
+  Q-0076:
+    capability: alert.recipient_hosts_severity
+  Q-0072:
+    capability: alert.measure
+  Q-0074:
+    capability: alert.class
+    inputs:
+      class: control_action
+  Q-0073:
+    capability: org.prevalence
+    needs:
+      context:
+      - CF-0023
+    inputs:
+      exclude_list: CF-0023
+  C-01:
+    capability: case.open
+  C-02:
+    capability: entity.alerts
+    inputs:
+      routine_list: CF-0030
+  C-03:
+    capability: entity.max_severity
+  C-04:
+    capability: case.precedent
+  C-05:
+    capability: asset.priority
+  C-06:
+    capability: asset.crown_jewel
+    inputs:
+      list: CF-0007
+  C-07:
+    capability: identity.privileged
+    inputs:
+      list: CF-0002
+  C-08:
+    capability: asset.class

@@ -1,0 +1,20 @@
+id: Q-0076
+text: What is the highest severity of any other alert on a host of any recipient of the message in the last 24 hours?
+tests: BE-0024
+attacker_influence:
+  rating: none
+  reason: Severity of alerts already raised. Used only as a guard that flags; it never supports a close.
+notes: 'Guard on the no-interaction close (round 6, B2): missing click records are not evidence, so the close also needs no other alert on any recipient''s host (none). Any other alert, or an unknown answer, flags.'
+derived_from:
+  source:
+  - external review of PR 23 (round 6, B2)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  entity: entity:recipient_hosts
+  lookback_hours:
+    param: triage_lookback_hours

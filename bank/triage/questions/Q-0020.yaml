@@ -1,0 +1,19 @@
+id: Q-0020
+text: Was the account created or added to local Administrators by a provisioning service account?
+tests: BE-0017
+attacker_influence:
+  rating: low
+  reason: The acting account is recorded by the directory, but a compromised provisioning account would match.
+derived_from:
+  source:
+  - splunk/security_content detections/endpoint/detect_new_local_admin_account.yml
+  license:
+  - Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 4
+kind: triage
+actor_identity: true
+inputs:
+  entity: role:actor.name

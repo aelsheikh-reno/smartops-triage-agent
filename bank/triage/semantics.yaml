@@ -1,0 +1,20 @@
+# How the Triage agent reads a flow: step rules, guards, attacker-influence ratings and the alert's source profile.
+step_rules: 'A step (or guard) on a question whose answer is not bool carries a rule, applied by the Triage agent: gte / lte compare a count or number with a parameter (or 0); yes lists the enum values
+  (or a list parameter) that mean yes, yes_unless the values that mean no, unknown the values that mean unknown; any other enum value means no. Thresholds live only here, as parameters with bounds (bank/triage/parameters.yaml),
+  never in a question or in the broker.'
+guard_semantics: 'A step may carry guards: extra checks that run only when the step reaches a close or flag outcome. Each guard names a question, the answers that trigger it (when, default [yes]), the result
+  (then: flag or escalate), the outcomes it attaches to (applies_to: close and/or flag, default [close]; never escalate) and, for list.lookup steps, optionally the matched entry types it applies to (if_entry_type).
+  Guards only raise: close becomes flag or escalate, flag becomes escalate, never the reverse. All applicable guards run and the strongest result wins (escalate > flag), whatever their order. An unknown
+  guard answer raises to at least flag. A guard that triggers on no means a close needs a yes from it. Guard calls count against the call budget on the path they belong to.
+
+  '
+attacker_influence_scale: 'none: records the attacker cannot touch (approved change tickets, exception records). low: OS-verified or control-recorded facts. medium: control-recorded facts that can be forged
+  in transit or by a local administrator; cannot carry a close on its own. high: attacker-chosen values (process names, command lines, sender addresses, URLs). Every path to a close must rest on at least
+  one yes rated none or low.
+
+  '
+source_profiles:
+  direct: alert retrieved from the product's own API or cloud console
+  forwarded: alert forwarded over syslog or a relay; fields can be forged in transit
+  note: Each control-alert family's profile is recorded at onboarding. A question may rate its influence per profile (by_source); a close that lacks a none/low yes under the customer's profile becomes a flag at
+    runtime.

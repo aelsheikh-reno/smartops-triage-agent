@@ -1,0 +1,21 @@
+id: Q-0051
+text: Is this signature or rule on the customer's tuned list for this source and destination (or application)?
+tests: BE-0032
+attacker_influence:
+  rating: none
+  reason: Approved tuning record with reason and expiry; never matched on signature alone.
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  entity:
+  - role:reporting_control.signature
+  - role:src.ip
+  - role:dest.ip
+  at_time: role:event.time

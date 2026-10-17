@@ -1,0 +1,21 @@
+id: Q-0038
+text: Does an approved, unexpired DLP exception cover this user, policy and destination?
+tests: BE-0025
+attacker_influence:
+  rating: none
+  reason: Approved exception record with an owner and expiry.
+derived_from:
+  source:
+  - bank/intake/use_cases.yaml triage_hints
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  entity:
+  - role:user.name
+  - role:reporting_control.signature
+  - derived:destination_domain
+  at_time: role:event.time

@@ -1,0 +1,164 @@
+id: D-0030
+name: Web application firewall alert
+family: network
+alert_type: control
+max_mode: recommend
+max_mode_reason: "No true-positive replay data: no WAF dataset ships with any test (round 6, §5.2)."
+auto_excluded_reason: no_tp_replay_data
+techniques:
+- T1190
+derived_fields:
+  client_ip:
+    from:
+    - role:web.forwarded_for
+    - role:src.ip
+    first: true
+    note: 'the client address: the forwarded-for hop appended by the customer''s own edge, else the source address; never the edge address'
+required_roles:
+- src
+- web
+- dest
+- reporting_control
+- event
+intent: 'Generic: a web application firewall reports a rule match on a request to a protected application (normalized web alert, any product).'
+fp_quality: generic
+explanations:
+- BE-0003
+- BE-0019
+- BE-0021
+- BE-0022
+- BE-0030
+- BE-0032
+- BE-0037
+fingerprint:
+- derived:client_ip
+- role:web.app
+- role:reporting_control.signature
+notes: 'Uses the client address, not the edge address. A block with a success status flags. Internal clients never close on a block. Five or more distinct rules from one client flag the blocked close. QA
+  and penetration-test sources close under a covering change or engagement record. The vulnerability step was dropped: generic rules have no CVE mapping, so it never closed them; an unblocked request flags.'
+precedent_entity: derived:client_ip
+fingerprint_influence:
+  derived:client_ip:
+    rating: medium
+    reason: From the forwarded-for header; only the hop the customer's own edge appends is trusted.
+  role:web.app:
+    rating: high
+    reason: Application chosen by the client.
+  role:reporting_control.signature:
+    rating: high
+    reason: Triggered by the request the client crafts.
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: derived:client_ip
+    current_action: role:reporting_control.action
+  attacker_influence:
+    rating: medium
+    reason: The least attacker-chosen fingerprint field (client_ip) can still be forged; the close also needs a low-rated yes from a guard.
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
+  - question: Q-0050
+    then: flag
+    bind:
+      entity: derived:client_ip
+  - question: Q-0047
+    then: flag
+    rule:
+      gte:
+        param: waf_distinct_signatures_min
+  - question: Q-0054
+    then: flag
+    rule:
+      'yes':
+      - success
+  - question: Q-0027
+    when:
+    - 'no'
+    then: flag
+    rule:
+      'yes':
+        param: blocked_action_values
+- step: 2
+  question: Q-0051
+  bind:
+    entity:
+    - role:reporting_control.signature
+    - derived:client_ip
+    - role:web.app
+  on_yes: close:false_positive:tuned_signature
+  on_no: next
+  on_unknown: next
+  guards: []
+- step: 3
+  question: Q-0031
+  bind:
+    entity: derived:client_ip
+  on_yes: close:benign_true_positive:approved_scanner_activity
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0052
+    when:
+    - 'no'
+    then: flag
+    if_entry_type:
+    - scanner
+    bind:
+      scanner: derived:client_ip
+  - question: Q-0055
+    when:
+    - 'no'
+    then: flag
+    if_entry_type:
+    - tester
+    bind:
+      entities:
+      - derived:client_ip
+- step: 4
+  question: Q-0055
+  bind:
+    entities:
+    - derived:client_ip
+  on_yes: close:benign_true_positive:authorized_security_test
+  on_no: next
+  on_unknown: next
+- step: 5
+  question: Q-0027
+  rule:
+    'yes':
+      param: blocked_action_values
+  on_yes: close:mitigated_true_positive:blocked_by_control
+  on_no: flag
+  on_unknown: flag
+  guards:
+  - question: Q-0054
+    then: flag
+    rule:
+      'yes':
+      - success
+  - question: Q-0050
+    then: flag
+    bind:
+      entity: derived:client_ip
+  - question: Q-0047
+    then: flag
+    rule:
+      gte:
+        param: waf_distinct_signatures_min
+status: draft
+version: 5
+derived_from:
+  library: bank
+  rule: vendor:waf_alert
+  title: Web application firewall alert
+  path: bank/intake/use_cases.yaml#UC-007
+  repo: internal
+  license: internal

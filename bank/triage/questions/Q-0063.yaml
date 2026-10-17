@@ -1,0 +1,18 @@
+id: Q-0063
+text: Is the DLP severity high or critical?
+tests: BE-0025
+attacker_influence:
+  rating: low
+  reason: Set by the DLP policy.
+notes: 'Guard: flags even to approved destinations.'
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  of: role:reporting_control.severity

@@ -1,0 +1,24 @@
+# What every broker answer is, as both sides see it. (designed, not built: the runtime that sends these does not exist yet.)
+answer_types:
+  bool: true or false; the step answers yes or no directly
+  count: a non-negative integer (or one per component); the step's rule compares it with a Triage-side parameter
+  number: a number; the step's rule compares it with a Triage-side parameter
+  enum: one value from the question's fixed list (contract/questions.yaml); the step's rule says which values mean yes and which unknown
+  time: an RFC3339 time
+status:
+  answered: the step's rule turns the value into yes or no (or unknown for enum values the rule lists as unknown)
+  unknown: 'the source answered but holds no data, no single match, or an ambiguous translation: follow the step''s on_unknown'
+  source_unavailable: 'the source is down, the answer missed its deadline, or a deferred request waited past its maximum (contract/envelope.yaml). Never closes and never supports a close: stop and flag; the detection runs in Recommend until the capability is healthy. Never read as no hit, never cached.'
+  sources_disagree: 'two sources gave different answers: never closes; the alert flags'
+trust:
+  checked: answered from the source set at onboarding, with any translation checked for this customer (or standards-defined)
+  not_checked: anything else; the Tool Broker decides trust (docs/broker-questions.md lists what counts)
+rule: A not_checked answer may support a close in Shadow and Recommend, and the explanation marks it; it never supports a close in Auto.
+no_capability: 'resolved per customer at onboarding: the question is disabled, its step follows on_unknown without a call, and it appears in the coverage report. A question whose coverage need is missing
+  from the customer''s coverage report is no_capability too.'
+answer_fields:
+  answer: one value of the question's answer type; for count answers with components, one count per component
+  status: one of the status values
+  trust: one of the trust values
+  provenance: an opaque record from the Tool Broker (its source, observed_at, time-to-live, version, evidence link). The Triage agent logs it in the decision log and never interprets it; raw evidence stays
+    behind the evidence link and never reaches the Triage agent or a model

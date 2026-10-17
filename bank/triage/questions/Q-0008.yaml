@@ -1,0 +1,20 @@
+id: Q-0008
+text: Is the remote access tool on the customer's sanctioned list, matched on hash or on signer plus install path?
+tests: BE-0006
+attacker_influence:
+  rating: low
+  reason: Matched on hash or OS-verified signer plus path.
+derived_from:
+  source:
+  - splunk/security_content detections/endpoint/detect_remote_access_software_usage_process.yml
+  - elastic/detection-rules rules/windows/command_and_control_new_terms_rmm_signer.toml
+  license:
+  - Apache-2.0
+  - Elastic-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 4
+kind: triage
+inputs:
+  entity: entity:process

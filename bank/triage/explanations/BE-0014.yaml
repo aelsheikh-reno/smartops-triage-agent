@@ -1,0 +1,10 @@
+id: BE-0014
+name: Driver name collision
+description: The source rule matches the driver catalogue on file name only; a different, non-vulnerable driver with the same name from a trusted vendor triggers it.
+derived_from:
+  source:
+  - 'splunk/security_content detections/endpoint/windows_vulnerable_driver_installed.yml (known_false_positives: drill down by version and signer)'
+  - magicsword-io/LOLDrivers yaml (KnownVulnerableSamples hashes)
+  license:
+  - Apache-2.0
+version: 2

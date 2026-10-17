@@ -1,0 +1,136 @@
+# Dispositions:
+#   false_positive        the rule matched, but the activity is not the behavior the rule intends to catch
+#   benign_true_positive  the intended behavior happened and is authorized or expected
+#   mitigated_true_positive  the activity was malicious or unwanted, but a control stopped it; no further action.
+#                         Never used for high-risk families (hack tools, credential dumpers, ransomware, web shells, exploit frameworks,
+#                         RATs, remote-admin tools, miners, proxyware, cracks): those escalate even when blocked.
+#   inherit               (Q0 only) take the disposition and reason of the cited precedent
+#   flag                  (runtime only) a reason an alert flags before or outside its flow; never a close
+# Outcome grammar for flow steps: next | close:<disposition>:<reason_code> | escalate | flag
+#   flag = stop and hand to an analyst with no verdict (missing context on a decisive question)
+#   An unknown answer never closes an alert.
+reason_codes:
+- code: precedent_match
+  disposition: inherit
+  description: Same fingerprint closed with a recorded reason inside the validity window.
+- code: sanctioned_deployment_tool
+  disposition: benign_true_positive
+  description: Launched by a customer-sanctioned software deployment or management tool.
+- code: admin_activity_baselined
+  disposition: benign_true_positive
+  description: IT admin account doing activity it routinely does on this host.
+  retired: Not used since the bank migration; group membership was its only low-rated yes, which can no longer carry a close.
+- code: approved_change
+  disposition: benign_true_positive
+  description: Covered by an approved change ticket or maintenance window for this host or user.
+- code: sanctioned_lsass_accessor
+  disposition: false_positive
+  description: LSASS opened by a customer-sanctioned security, backup or monitoring tool.
+- code: known_benign_lsass_accessor
+  disposition: false_positive
+  description: LSASS opened by a publicly documented benign tool from its expected install path.
+- code: lsass_access_baselined
+  disposition: false_positive
+  description: The same binary opens LSASS on this host routinely.
+- code: sanctioned_rmm_baselined
+  disposition: benign_true_positive
+  description: Sanctioned remote access tool, launched normally, established on this host.
+- code: sanctioned_management_tool
+  disposition: benign_true_positive
+  description: Acting process is a customer-sanctioned deployment or management tool.
+- code: activity_baselined_on_host
+  disposition: benign_true_positive
+  description: The same command, from the same parent binary, runs routinely on this host.
+- code: prevalent_in_org
+  disposition: benign_true_positive
+  description: The same command or change was common across the fleet before the alert window.
+- code: rdp_expected_on_host
+  disposition: benign_true_positive
+  description: RDP is required by the host's role.
+- code: sanctioned_backup_tool
+  disposition: benign_true_positive
+  description: Sanctioned backup software managing shadow copies.
+- code: approved_av_exclusion
+  disposition: benign_true_positive
+  description: Exclusion is on the approved list for this host.
+- code: host_rebuild
+  disposition: benign_true_positive
+  description: Host is being rebuilt or decommissioned.
+- code: approved_driver_exception
+  disposition: benign_true_positive
+  description: Vulnerable driver covered by an unexpired risk acceptance.
+- code: authorized_security_test
+  disposition: benign_true_positive
+  description: Covered by an authorized security test engagement.
+- code: provisioning_service_account
+  disposition: benign_true_positive
+  description: Account change made by a provisioning service account.
+  retired: Not used since round 6 (S6); the actor account on a list was its only hard-to-fake yes, which can no longer carry a close.
+- code: trusted_signed_software
+  disposition: benign_true_positive
+  description: Acting binary is trusted-signed and not a LOLBin, script host or dump tool.
+- code: blocked_by_control
+  disposition: mitigated_true_positive
+  description: The control that raised the alert blocked, quarantined or dropped the item.
+- code: signature_not_applicable
+  disposition: mitigated_true_positive
+  description: Recent vulnerability data shows the target is not affected by the signature's exploit.
+  retired: Not used since round 6 (S4); the close needs the attempt blocked, and the step that asks is reached only when the control did not block it.
+- code: contained_without_interaction
+  disposition: mitigated_true_positive
+  description: Reported message contained and no recipient clicked or opened it.
+- code: blocked_low_risk_category
+  disposition: mitigated_true_positive
+  description: Proxy blocked a low-risk web category.
+- code: denied_no_successful_connection
+  disposition: mitigated_true_positive
+  description: All connections from the source in the window were denied.
+- code: approved_scanner_activity
+  disposition: benign_true_positive
+  description: Source is an approved scanner or tester inside its schedule.
+- code: authorized_phishing_simulation
+  disposition: benign_true_positive
+  description: Message is part of an approved phishing simulation.
+- code: approved_business_exception
+  disposition: benign_true_positive
+  description: An approved, unexpired business exception covers it.
+- code: approved_recipient
+  disposition: benign_true_positive
+  description: Destination is an approved partner for this data class.
+- code: approved_security_tooling
+  disposition: benign_true_positive
+  description: Approved security tool or analysis host triggered the antivirus.
+- code: tuned_signature
+  disposition: false_positive
+  description: Signature accepted as noise for this source and destination.
+- code: approved_infrastructure
+  disposition: benign_true_positive
+  description: Approved infrastructure source hit a known deny rule.
+- code: known_test_data
+  disposition: false_positive
+  description: Content is a known DLP test file or template.
+- code: false_report
+  disposition: false_positive
+  description: Reported message is legitimate mail from an approved, authenticated sender.
+- code: established_uncategorized_site
+  disposition: benign_true_positive
+  description: Blocked uncategorised site the host visits routinely with a normal browser.
+- code: blocked_low_risk_detection
+  disposition: mitigated_true_positive
+  description: Blocked before execution, and the product classed it as low risk (never a high-risk family or test file).
+- code: no_data_transferred
+  disposition: benign_true_positive
+  description: Device connected; the control recorded zero files written.
+- code: context_unknown
+  disposition: flag
+  description: A context question (C-01…C-08) the outcome depends on is unknown or its source is unavailable. The alert cannot close on anything that depends on it and flags; the flag names the C-ID. Missing context never escalates by itself.
+- code: severity_unmapped
+  disposition: flag
+  description: The SIEM's severity for the alert has no entry in the normalized severity map, so no severity comparison (C-02, C-03, Q0, the entity guard) can run. The alert flags; the normalizer never guesses a level (round 6, §3).
+- code: entity_hot
+  disposition: flag
+  description: The entity turned hot (entity guard) after a close on it was written inside the window; the close is reopened as a flag (round 6, S1). Raise-only.
+- code: entity_missing
+  disposition: flag
+  description: A role the detection requires (required_roles, or the precedent entity) could not be filled by the normalizer. The alert flags, and the normalizer opens a fix ticket for the rule's entity mapping or field extraction. It never guesses an entity.
+  fix_ticket: true

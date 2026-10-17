@@ -1,0 +1,9 @@
+id: BE-0032
+name: Tuned signature
+description: The customer has accepted this signature as noise for this source and destination.
+derived_from:
+  source:
+  - bank/intake/use_cases.yaml triage_hints
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+version: 1

@@ -1,8 +1,0 @@
-id: BE-0033
-name: Approved infrastructure source
-description: A monitoring, backup, replication or health-check source hit a deny rule it is known to hit.
-source:
-- bank/use_cases.yaml triage_hints
-- external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
-license: internal
-version: 1

@@ -1,7 +1,0 @@
-id: BE-0024
-name: Message contained
-description: The message is out of every mailbox and no recipient clicked or opened anything in it.
-source:
-- bank/use_cases.yaml triage_hints
-license: internal
-version: 1

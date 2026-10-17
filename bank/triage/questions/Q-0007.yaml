@@ -1,0 +1,23 @@
+id: Q-0007
+text: Has this same binary (path and hash) opened LSASS on this host on at least the customer's minimum number of distinct days in the lookback before the alert window?
+tests: BE-0007
+attacker_influence:
+  rating: high
+  reason: An attacker with a foothold can open LSASS with the same binary on several days to build history; baselines default to high (capability-spec).
+  changed_in_migration: low -> high
+notes: The ±24h alert window is excluded so an intruder's repeated access during the incident cannot baseline itself.
+derived_from:
+  source:
+  - elastic/detection-rules rules/windows/credential_access_lsass_openprocess_api.toml (first time seen, prior behavior)
+  license:
+  - Elastic-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 4
+kind: triage
+inputs:
+  entity: role:host.name
+  behavior: the binary of entity:process opened LSASS
+  lookback_days:
+    param: entity_baseline_lookback_days

@@ -1,7 +1,0 @@
-id: BE-0023
-name: Authorised phishing simulation
-description: The message belongs to an approved phishing-simulation campaign.
-source:
-- bank/use_cases.yaml triage_hints
-license: internal
-version: 1

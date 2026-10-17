@@ -1,0 +1,8 @@
+id: BE-0026
+name: Approved recipient
+description: The destination is an approved partner domain for this data class.
+derived_from:
+  source:
+  - bank/intake/use_cases.yaml triage_hints
+  license: internal
+version: 1

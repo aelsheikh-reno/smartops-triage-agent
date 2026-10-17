@@ -1,0 +1,20 @@
+id: Q-0056
+text: Is the source an approved infrastructure source (monitoring, backup, replication, health check) for this destination and port?
+tests: BE-0033
+attacker_influence:
+  rating: medium
+  reason: 'The source address of a deny alert can be spoofed, and an attacker who holds an approved infrastructure host probes from a listed source (round 6, S3). It cannot carry a close on its own: the close also needs every connection from the source denied (Q-0042), with no burst (Q-0046).'
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 2
+kind: triage
+inputs:
+  entity:
+  - role:src.ip
+  - role:dest.ip
+  - role:dest.port

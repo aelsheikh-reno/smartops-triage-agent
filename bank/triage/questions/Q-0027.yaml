@@ -1,0 +1,20 @@
+id: Q-0027
+text: Did the control that raised the alert stop the item (the file, connection, request or message) before it took effect?
+tests: BE-0019
+attacker_influence:
+  rating: low
+  reason: Set by the security control, not by the activity.
+  by_source:
+    forwarded: medium
+derived_from:
+  source:
+  - bank/intake/use_cases.yaml triage_hints
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+notes: For email the item is the message, stopped before delivery; whether it is out of every mailbox is checked separately. Post-execution antivirus states use Q-0049 instead.
+kind: triage
+inputs:
+  of: role:reporting_control.action

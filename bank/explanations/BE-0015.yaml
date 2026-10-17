@@ -1,8 +1,0 @@
-id: BE-0015
-name: Approved driver exception
-description: A known vulnerable driver is installed with documented risk acceptance (vendor hardware utility, no patched version).
-source:
-- splunk/security_content detections/endpoint/windows_vulnerable_driver_installed.yml (known_false_positives)
-license:
-- Apache-2.0
-version: 1

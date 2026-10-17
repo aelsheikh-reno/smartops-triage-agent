@@ -1,0 +1,30 @@
+id: Q-0067
+text: Is the host a server or a crown-jewel asset?
+tests: BE-0025
+attacker_influence:
+  rating: low
+  reason: Crown-jewel list and asset class from the customer's asset data; an unanswered asset class counts as a server, so a gap raises, never lowers.
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 2
+kind: triage
+inputs:
+  reads:
+  - C-06
+  - C-08
+context_rule:
+  any:
+  - C-06: true
+  - C-08:
+      in:
+      - server
+notes: 'Not a broker call of its own: the Triage agent applies the rule to the cached context answers C-06 and C-08. If C-08 is not answered, the entity is treated as a server (yes).'
+needs:
+  context_questions:
+  - C-06
+  - C-08

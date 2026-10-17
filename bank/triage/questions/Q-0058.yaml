@@ -1,0 +1,18 @@
+id: Q-0058
+text: Is the user agent a mainstream browser?
+tests: BE-0027
+attacker_influence:
+  rating: high
+  reason: The user agent is set by the client; malware copies browser strings.
+notes: A no (scripts, tools) or unknown (empty) flags.
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  of: role:web.user_agent

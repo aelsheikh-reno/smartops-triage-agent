@@ -3,8 +3,8 @@
 question texts, capability and attacker influence, guards, plus the gate results. If
 review/changes/<batch-name>.md exists, it is included as "Changes since review".
 
-Usage: tools/review_packet.py <batch-name> <id-prefix> [<id-prefix> ...]
-   e.g. tools/review_packet.py batch-1-vendor-alerts vendor:
+Usage: tools/review_packet.py <packet-name> [family ...]   families: endpoint, identity, endpoint_malware, network, email, data_protection, technique_fallback; none means all
+   e.g. tools/review_packet.py batch-1-vendor-alerts endpoint_malware network email data_protection
 """
 import os
 import subprocess
@@ -29,6 +29,14 @@ def influence(b, item):
     return ai["rating"] + extra
 
 
+def rule_text(item):
+    r = item.get("rule")
+    if not r:
+        return ""
+    fmt = lambda v: f"{v['param']}" if isinstance(v, dict) else "/".join(map(str, v)) if isinstance(v, list) else str(v)
+    return " [" + "; ".join(f"{k} {fmt(v)}" for k, v in r.items()) + "]"
+
+
 def guard_text(b, st):
     out = []
     for g in st.get("guards") or []:
@@ -37,7 +45,7 @@ def guard_text(b, st):
             extra.append("on " + "/".join(g["applies_to"]))
         if g.get("if_entry_type"):
             extra.append("if " + "/".join(g["if_entry_type"]))
-        out.append(f"{g['question']} {'/'.join(g.get('when', ['yes']))} → {g['then']}" + (f" ({', '.join(extra)})" if extra else ""))
+        out.append(f"{g['question']}{rule_text(g)} {'/'.join(g.get('when', ['yes']))} → {g['then']}" + (f" ({', '.join(extra)})" if extra else ""))
     return "; ".join(out) or "–"
 
 
@@ -48,9 +56,10 @@ def gate(cmd):
 
 
 def main():
-    name, prefixes = sys.argv[1], sys.argv[2:]
+    name, batches = sys.argv[1], B.select_batches(sys.argv[2:])
     b = B.load()
-    dets = [d for did, d in sorted(b["detections"].items()) if any(did.startswith(p) for p in prefixes)]
+    dets = [d for did, d in sorted(b["detections"].items()) if B.batch_of("rule", d) in batches]
+    B.require_loaded(f"review packet ({', '.join(sorted(batches))})", detections=len(dets))
     used = []
     for d in dets:
         for st in d["flow"]:
@@ -64,6 +73,8 @@ def main():
          "an escalation, or a flag to an analyst with no verdict. An unknown answer never closes. Q-0000 (precedent) runs first everywhere.", "",
          "Guards run when a step reaches a close (or, where marked, a flag): each names a question and the answers that raise the outcome; guards only raise, and the strongest result wins "
          "(an unknown guard answer always flags, so the table lists only the triggering answers). A guard that fires on no means the close needs a yes from it.", "",
+         "Each question asks the Tool Broker for a typed answer (bool, count, number, enum); where it is not bool, the step's rule [in brackets] turns it "
+         "into yes or no on the Triage side, against a parameter with bounds. Questions refer to roles of the normalized alert, never to fields.", "",
          "Attacker influence rates how easily the activity under triage could produce a yes: **none** (records the attacker cannot touch, such as change tickets), "
          "**low** (OS-verified or control-recorded facts), **medium** (control-recorded facts that can be forged in transit, such as alerts forwarded over syslog), "
          "**high** (attacker-chosen strings such as process names, sender addresses or command lines). "
@@ -73,7 +84,7 @@ def main():
         with open(changes) as fh:
             L += ["## Changes since review", "", fh.read().strip(), ""]
     L += ["## Gate results", ""]
-    for label, cmd in (("validate", ["tools/validate.py"]), ("attacker influence", ["tools/redteam_paths.py"]), ("replay", ["tools/replay.py"] + prefixes)):
+    for label, cmd in (("validate", ["tools/validate.py"]), ("attacker influence", ["tools/redteam_paths.py"]), ("replay", ["tools/replay.py"] + [x for x in sorted(batches) if x != "technique"] if batches != set(B.BATCHES) else ["tools/replay.py"])):
         status, line = gate(cmd)
         L.append(f"- {label}: {status} ({line})")
     L += ["", "## Detections", ""]
@@ -83,12 +94,14 @@ def main():
             L += [f"Note: {d['notes']}", ""]
         fi = d.get("fingerprint_influence") or {}
         fps = ", ".join(f"{f} ({fi[f]['rating']})" if f in fi else f for f in d["fingerprint"])
-        L += [f"Alert fields: {', '.join(d.get('required_alert_fields', []))}. Fingerprint: {fps}. Precedent entity: {d.get('precedent_entity')}. "
-              f"Precedent valid for {d['precedent_validity']}.", "",
+        validity = (d.get("parameters") or {}).get("precedent_validity_hours", b["parameters"]["precedent_validity_hours"]["default"])
+        extra = ", ".join(f"{k} {v}" for k, v in (d.get("parameters") or {}).items() if k != "precedent_validity_hours")
+        L += [f"Required roles: {', '.join(d.get('required_roles', []))}. Fingerprint: {fps}. Precedent entity: {d.get('precedent_entity')}. "
+              f"Precedent valid for {validity}h." + (f" Detection parameters: {extra}." if extra else ""), "",
               "| Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |", "|---|---|---|---|---|---|---|---|"]
         for st in d["flow"]:
             q = b["questions"][st["question"]]
-            L.append(f"| {st['step']} | {q['id']}: {q['text']} | `{q['capability']['name']}` | {influence(b, st)} | "
+            L.append(f"| {st['step']} | {q['id']}: {q['text']}{rule_text(st)} | `{q['capability']['name']}` | {influence(b, st)} | "
                      f"{outcome(st['on_yes'])} | {outcome(st['on_no'])} | {outcome(st['on_unknown'])} | {guard_text(b, st)} |")
         L.append("")
     L += ["## Questions used", "", "| Question | Text | Capability | Influence | Why |", "|---|---|---|---|---|"]
@@ -103,10 +116,10 @@ def main():
     for fid in facts_used:
         f = b["facts"][fid]
         L.append(f"| {fid} | {f['name']} | {f.get('supply_effort', '?')} | {f.get('supply_effort_reason', '')} |")
-    L += ["", "## Capabilities used", "", "| Capability | Yes means | Escalate only |", "|---|---|---|"]
+    L += ["", "## Capabilities used", "", "| Capability | Answer | Meaning | Escalate only |", "|---|---|---|---|"]
     for c in caps_used:
         cap = b["capability_by_name"][c]
-        L.append(f"| `{c}` | {cap['yes_means']} | {'yes' if cap['escalate_only'] else 'no'} |")
+        L.append(f"| `{c}` | {cap['answer']['type']} | {cap.get('yes_means') or cap.get('measures')} | {'yes' if cap['escalate_only'] else 'no'} |")
     os.makedirs(os.path.join(B.ROOT, "review"), exist_ok=True)
     path = os.path.join(B.ROOT, "review", f"{name}.md")
     with open(path, "w") as fh:

@@ -1,7 +1,0 @@
-id: BE-0029
-name: Nothing transferred
-description: The device was connected but no file was written to it.
-source:
-- bank/use_cases.yaml triage_hints
-license: internal
-version: 1

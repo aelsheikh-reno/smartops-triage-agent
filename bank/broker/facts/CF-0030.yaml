@@ -1,0 +1,30 @@
+id: CF-0030
+name: routine_entity_detections
+description: '(Entity, detection) pairs marked routine: their alerts do not count toward the entity guard''s alert threshold (C-02). Alerts of high or critical severity always count, and nothing is routine
+  on an entity with an open escalation. Reduce-scrutiny: proposed by the Use Case Manager from at least 4 weeks of consistent benign closes that are human evidence (bank/contract/evidence.yaml: manual closes in Shadow, analyst overrides, audited closes; never accepted recommendations or Auto closes), approved by a human.'
+fields:
+- entity
+- entity_type
+- detection
+- owner
+- approved_by
+- expiry
+- reason
+- evidence
+collected_by: use_case_manager_proposal
+supply_effort: low
+supply_effort_reason: Built from the customer's own human-evidence closes; the customer only approves each pair.
+required_on_entry:
+- owner
+- approved_by
+- expiry
+example:
+  entity: asset-00412
+  entity_type: host
+  detection: escu:windows_service_creation_on_remote_endpoint
+  owner: it-ops lead
+  approved_by: soc lead
+  expiry: '2027-01-31'
+  reason: Patch orchestration server creates remote services nightly
+  evidence: 6 weeks of benign closes counted as human evidence
+version: 2

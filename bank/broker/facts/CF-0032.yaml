@@ -1,0 +1,14 @@
+id: CF-0032
+name: own_email_domains
+description: The customer's own email domains (accepted domains of its mail platform, and subdomains). Used to refuse a close on a user report of mail from the customer's own domain (round 6, B1); an internal sender reported as phishing flags.
+fields:
+- domain
+- owner
+match_rule: From domain equals domain or is a subdomain of it
+collected_by: customer
+supply_effort: low
+supply_effort_reason: The mail platform's accepted-domain list, read at onboarding.
+example:
+  domain: corp.example
+  owner: IT messaging
+version: 1

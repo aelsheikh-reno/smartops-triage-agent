@@ -1,0 +1,20 @@
+id: Q-0025
+text: Is there an unexpired approved exception for this driver's SHA256 on this host?
+tests: BE-0015
+attacker_influence:
+  rating: low
+  reason: Exception keyed on driver hash and host.
+derived_from:
+  source:
+  - splunk/security_content detections/endpoint/windows_vulnerable_driver_installed.yml
+  license:
+  - Apache-2.0
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+kind: triage
+inputs:
+  entity: entity:file
+  host: role:host.name
+  at_time: role:event.time

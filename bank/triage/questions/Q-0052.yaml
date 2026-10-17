@@ -1,0 +1,19 @@
+id: Q-0052
+text: Was an approved scan job from this scanner targeting this address running at the alert time?
+tests: BE-0021
+attacker_influence:
+  rating: none
+  reason: Scan job records come from the scanner platform, not from the traffic.
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  scanner: role:src.ip
+  target: role:dest.ip
+  at_time: role:event.time

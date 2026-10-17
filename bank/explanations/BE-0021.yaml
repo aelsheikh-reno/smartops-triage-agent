@@ -1,7 +1,0 @@
-id: BE-0021
-name: Approved scanner or tester
-description: The source is an approved vulnerability scanner or authorised tester working inside its schedule.
-source:
-- bank/use_cases.yaml triage_hints
-license: internal
-version: 1

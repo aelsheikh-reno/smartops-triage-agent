@@ -1,0 +1,17 @@
+id: Q-0071
+text: Is the From domain on the customer's approved-sender list (external transactional-notification senders only; the customer's own domains never count)?
+tests: BE-0035
+attacker_influence:
+  rating: high
+  reason: The From domain is chosen by the sender; only the authentication guard makes it trustworthy, and an approved sender's compromised mailbox still passes it (kept high, stricter than the medium the round 6 review asked for).
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+kind: triage
+inputs:
+  entity: role:email.sender_domain

@@ -1,8 +1,0 @@
-id: BE-0013
-name: Host rebuild
-description: Logs are cleared as part of reimaging, rebuild or decommissioning.
-source:
-- splunk/security_content detections/endpoint/windows_event_log_cleared.yml (known_false_positives)
-license:
-- Apache-2.0
-version: 1

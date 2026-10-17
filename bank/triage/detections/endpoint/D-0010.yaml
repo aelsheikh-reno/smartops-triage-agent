@@ -1,0 +1,88 @@
+id: D-0010
+name: Process Execution via WMI
+family: endpoint
+alert_type: analytic
+techniques:
+- T1047
+required_roles:
+- event
+- host
+- process
+- user
+intent: Detects a process spawned by WmiPrvSE.exe (local or remote WMI execution) from process creation logs.
+fp_quality: vague
+explanations:
+- BE-0002
+- BE-0007
+- BE-0001
+- BE-0003
+fingerprint:
+- role:host.name
+- role:process.sha256
+- role:process.command_line
+fingerprint_influence:
+  role:host.name:
+    rating: low
+    reason: Host that reported the event.
+  role:process.sha256:
+    rating: low
+    reason: Computed by the sensor; reproducing it means running the same binary.
+  role:process.command_line:
+    rating: high
+    reason: Command line the attacker writes.
+precedent_entity: role:host.name
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: role:host.name
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce the fingerprint's host, process hash.
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
+- step: 2
+  question: Q-0013
+  bind:
+    entity: entity:process
+  on_yes: close:benign_true_positive:sanctioned_management_tool
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0002
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 4
+  question: Q-0014
+  rule:
+    gte:
+      param: entity_baseline_min_days
+  on_yes: flag
+  on_no: next
+  on_unknown: next
+  note: 'Was close:benign_true_positive:activity_baselined_on_host. Its only none/low yes was identity group membership (Q-0002) plus a baseline rated high, so it flags: group membership is never the only
+    low-rated answer on a close path.'
+- step: 5
+  question: Q-0004
+  on_yes: flag
+  on_no: escalate
+  on_unknown: flag
+status: draft
+version: 9
+parameters:
+  precedent_validity_hours: 72
+derived_from:
+  library: escu
+  rule: escu:process_execution_via_wmi
+  title: Process Execution via WMI
+  path: detections/endpoint/process_execution_via_wmi.yml
+  repo: splunk/security_content
+  license: Apache-2.0

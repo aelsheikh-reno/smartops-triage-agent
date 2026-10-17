@@ -1,8 +1,0 @@
-id: BE-0036
-name: Established uncategorised site
-description: The host has visited this uncategorised site on several earlier days with a normal browser.
-source:
-- bank/use_cases.yaml triage_hints
-- external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
-license: internal
-version: 1

@@ -1,8 +1,8 @@
 # Capability specification
 
-Status: (designed, not built). The capabilities, measurements and Triage-side rules below are the design for the Tool Broker and recipes; none runs yet. Parameter bounds and rating changes marked as such are proposals for the next bank change.
+Status: (designed, not built) for the Tool Broker and recipes; none runs yet. The answer types, rating floors, parameters with bounds and step rules are in the bank (`bank/broker/capabilities.yaml`, `bank/triage/parameters.yaml`) and enforced by `validate`.
 
-One entry per capability in `bank/capabilities.yaml`. The list is the batch-1 set (PR #6), which adds `alert.field`, `url.reputation`, `vuln.not_applicable`, `email.*`, `traffic.denied_only`, `alert.history` and `scan.job_active` to the pilot set.
+One entry per capability in `bank/broker/capabilities.yaml` (the bank migration split `alert.field` into `alert.class` and `alert.measure` and added the context capabilities `case.open`, `entity.alerts`, `entity.max_severity`, `asset.priority`, `asset.crown_jewel`, `identity.privileged` and `precedent.check`). The list below is the batch-1 set (PR #6), which adds `alert.field`, `url.reputation`, `vuln.not_applicable`, `email.*`, `traffic.denied_only`, `alert.history` and `scan.job_active` to the pilot set.
 
 What may be asked of the broker at all (bank IDs, answer types, status and provenance, no thresholds, scope profiles), and which capabilities are context or triage questions: `docs/broker-questions.md`.
 
@@ -14,23 +14,26 @@ No threshold lives in a recipe.
 
 Source rows: each entry's source lines name Splunk (the first SIEM in scope). Sentinel, Elastic, QRadar, FortiSIEM and CrowdStrike Next-Gen SIEM rows are added when each SIEM's adapter is built (designed, not built). A capability may also be answered directly from a tool's API or a read-only SOAR action; each customer has one authoritative source per capability and a fallback order (design-decisions §9).
 
-Parameter bounds are proposals. The bank does not carry minimums and maximums yet; the bank migration issue adds them to `bank/parameters.yaml`, and validation will reject values outside them. Lowering scrutiny (a lower count, a longer validity, a wider list) needs human approval with an owner and an expiry. Parameters marked *proposed* do not exist in the bank yet.
+Parameter defaults, bounds and scrutiny directions are in `bank/triage/parameters.yaml`; validation rejects values outside them. Lowering scrutiny (a lower count, a longer validity, a wider list) needs human approval with an owner and an expiry. Where a number below differs from the bank, the bank wins.
 
 Template kinds (§10):
 - **Sigma**: an event search compiled to SPL by pySigma with the customer's pipeline.
 - **lookup**: a typed template against a list, lookup table or index.
 - **API**: a typed template against a tool's API.
-- **alert field**: read from the alert itself; no broker call.
+- **alert source**: the normalized alert itself, through a translation (`bank/broker/translations/`); no tool call and outside the call budget.
+
+Call budget (design-decisions §9, `scope` in `bank/broker/capabilities.yaml`): at most 6 calls per alert on the worst path (Q0, the steps and the guards of the closing step). It counts calls to outside tools only: the SIEM, the EDR, identity, email, threat intel, change and ticketing, the vulnerability scanner and SOAR (`budget_counts_sources`). Lookups in our own cached context and list store do not count (`list.lookup`, context questions), nor do the alert source, case memory (`precedent.check`) and `context.rule`. The flow limit is separate and unchanged: at most 5 steps per flow in total, Q0 counting as step 1, enforced by `validate`.
+
+Trust: every answer carries `trust` (checked | not_checked; `bank/contract/answer.yaml`). The broker sets it: checked for a translation verified for the customer or standards-defined (for example HTTP status codes, RFC 9110), or no translation at all; not_checked for an unverified or model-proposed translation and for any fallback-source answer. An ambiguous translation answers status unknown. A not_checked answer may support a close in Shadow and Recommend (marked), never in Auto. Details: `docs/broker-questions.md`.
 
 Every event-search recipe also runs a data-recency test: the data source must show events within the expected ingestion delay, so an empty result is never read as "no".
 
 ---
 
-## case.precedent
-- **Measures:** closed cases with the same fingerprint inside the validity window. For each case: ID, disposition, reason, who closed it (analyst or a non-precedent flow step), when, and whether it was a mitigated close. Also returns whether the precedent entity is a crown jewel, and the number of other alerts on that entity in the window.
-- **Triage rule:** yes if at least one original-decision closure lies within `precedent_validity`, the entity is not a crown jewel, there are no other alerts on the entity, and (for a mitigated precedent) the current alert's action is blocked.
-  - `precedent_validity` is per detection: default 24h, min 1h, max 72h (designed, not built; the bank still allows up to 7d).
-  - Designed, not built: only closes that passed audit, or at least 2 independent analyst closes of the same fingerprint, may be inherited; and the entity must have no alert of higher severity in the window (instead of no other alert).
+## case.precedent (context question C-04) and precedent.check (Q0)
+- **Measures:** closes of the fingerprint inside the validity window by an original decision with a recorded reason: how many passed audit, and how many independent analyst closes there were (a count per component). A mitigated close counts only when the current alert was also stopped.
+- **Triage rule (Q0, `bank/triage/context_rules.yaml`):** yes if at least one close passed audit or at least `q0_min_independent_closes` (default 2, min 2, max 5) independent analyst closes exist (C-04), no other alert on the entity has a higher severity than this one (C-03), and the precedent entity is not a crown jewel (C-06).
+  - `precedent_validity_hours`: default 24, min 1, max 72; detections set their own value up to the maximum (the 7-day detections were capped at 72h).
   - Closures with reason `precedent_match` are never returned, so precedents never chain.
 - **Template kind:** lookup (case memory, Reno's database on premises).
 - **Splunk:** none.
@@ -110,7 +113,7 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Splunk:** the Enterprise Security identity lookup (`identity`, `category`).
 - **Known-answer tests:** a known test account is reported in its known group, and is not reported in a group it was never in.
 - **Unknown when:** the account is not found in the directory.
-- **Attacker influence:** low. Changing group membership needs directory rights, which an attacker with those rights already has. Designed, not built: group membership is never the only low-rated answer on a close path.
+- **Attacker influence:** low. Changing group membership needs directory rights, which an attacker with those rights already has. Group membership is never the only low-rated answer on a close path (enforced by the close-path gate).
 - **Owner:** identity specialist.
 
 ## identity.risk
@@ -127,56 +130,72 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Measures:** the number of distinct days in the lookback, which ends before the alert window, on which the entity showed the behavior.
   - Binaries are compared by hash, or signer plus path.
   - Command lines are normalized first.
-- **Triage rule:** yes if the day count is at least `baseline_min_days`, counted over `baseline_lookback`.
-  - `baseline_min_days` (*proposed*; today `min_days` in the question): default 3, min 2, max 30.
-  - `baseline_lookback`: default 30d, min 14d, max 90d.
+- **Triage rule:** yes if the day count is at least `entity_baseline_min_days`, counted over `entity_baseline_lookback_days`.
+  - `entity_baseline_min_days`: default 3, min 3, max 30 (the LSASS detection sets 5).
+  - `entity_baseline_lookback_days`: default 30, min 14, max 90.
 - **Template kind:** Sigma, with an aggregation (distinct days). Lookback and window are passed in from parameters.
 - **Splunk (CIM):** depends on the behavior. Endpoint.Processes, Network_Traffic, Web or Email; accelerated, with a summary range covering the lookback.
 - **Known-answer tests:** a scheduled task known to run daily on a reference host returns about the lookback in days. The data source shows events within the ingestion delay.
 - **Unknown when:**
   - the data model is not accelerated, or retention does not cover the lookback
   - the entity or behavior field is empty
-- **Attacker influence:** defaults to high, because an attacker can build history (designed, not built: a lower rating needs a written reason and is flagged for review). The validator requires a low-rated yes elsewhere on every close path.
+- **Attacker influence:** defaults to high, because an attacker can build history (a lower rating needs a written `below_floor_reason`). The close-path gate requires a low-rated yes elsewhere on every close path.
 - **Owner:** endpoint, network or email specialist, by behavior.
 
 ## org.prevalence
-- **Measures:** the distinct hosts with the pattern, and the number of weeks it occurred in.
-  - With `window: alert_window`, it counts hosts inside the alert window instead.
+- **Measures:** the k-th lowest weekly count of distinct hosts with the pattern over the last `of_weeks` weeks, with k = of_weeks − min_weeks + 1 (default 4 and 3, so the 2nd lowest). This is a statistic, not a threshold: "k-th lowest ≥ N" is exactly "at least min_weeks of the of_weeks weeks have ≥ N hosts", proved over every case in `tools/test_prevalence.py`.
+  - With `lookback_hours` (the 24h triage look-back), it counts hosts over the look-back ending at the alert time instead.
   - Hosts in `exclude_list`, matched by asset ID, are not counted.
-- **Triage rule:** yes if hosts ≥ `org_prevalence_min_hosts` and weeks ≥ `org_prevalence_min_weeks` of `org_prevalence_of_weeks`. With the alert window, yes if hosts ≥ the question's `min_hosts`.
-  - `org_prevalence_min_hosts`: default 5, min 3, max 50.
-  - `org_prevalence_min_weeks`: default 3, min 2, max = of_weeks.
-  - `org_prevalence_of_weeks`: default 4, min 4, max 12.
+- **Triage rule:** yes if the statistic ≥ `org_prevalence_min_hosts`. With the look-back, yes if hosts ≥ `org_prevalence_escape_min_hosts` (fixed at 1).
+  - `org_prevalence_min_hosts`: default 5, min 3, max 50. Triage-side threshold.
+  - `org_prevalence_of_weeks`: default 4, min 3, max 12. Statistic setting (`category: statistic_setting`).
+  - `org_prevalence_min_weeks`: default 3, min 2, max 12, never above `of_weeks`. Statistic setting; lowering it reduces scrutiny.
+  - This restores the pre-migration rule (3 of 4 weeks). The first migration commit (`4686ea4`) used the minimum over every week, which was stricter.
 - **Template kind:** Sigma, with an aggregation (distinct hosts, distinct weeks).
 - **Splunk (CIM):** Endpoint.Processes (`process`, `process_hash`, `dest`), accelerated.
 - **Known-answer tests:** a common OS process returns roughly the fleet's host count. A unique test command run on one reference host returns 1.
-- **Unknown when:** the data model is not accelerated, the pattern cannot be normalized, or the exclude list is not provided. Setting `window` together with `min_weeks`/`of_weeks` is rejected by validate.
+- **Unknown when:** the data model is not accelerated, the pattern cannot be normalized, or the exclude list is not provided. Setting `window` together with `of_weeks`/`min_weeks` is rejected by validate.
 - **Attacker influence:** rated per question. It is high for command lines; as a guard that escalates, low.
 - **Owner:** endpoint specialist.
 
 ## change.window
 - **Measures:** the approved changes covering the entities at `at_time`, each with its implementers (users or groups) and whether it names the entity as a source or target.
 - **Triage rule:** answers are:
-  - yes if a covering change lists the user (or one of their groups) as implementer. For alerts with no user, the change must name the entity explicitly.
+  - yes if a covering change lists the user (or one of their groups) as implementer, and its approver is not one of its implementers. For alerts with no user, the change must name the entity explicitly.
   - no if nothing covers it, or every covering change lists other implementers.
-  - unknown if a covering change has no implementer data.
+  - unknown if a covering change has no implementer data, or was approved by one of its own implementers.
   - No threshold parameter.
 - **Template kind:** API (ITSM) or lookup (change records indexed in Splunk).
 - **Splunk:** change records, if indexed. These are not the CIM Change data model, which records change events, not tickets.
 - **Known-answer tests:** a known past test change returns covered at its time, with its implementer, and not covered an hour after it ends.
 - **Unknown when:** the covering change has no implementer data, or the ITSM is unreachable.
-- **Attacker influence:** low, and only for approved changes whose approver is not the implementer (designed, not built; the bank rates it none today). A change the implementer approved themselves gives no benign evidence.
+- **Attacker influence:** low, and only for approved changes whose approver is not the implementer (`requires_independent_approver` in the bank). A change the implementer approved themselves gives no benign evidence: it answers unknown.
 - **Owner:** Splunk specialist, when change records are in Splunk. Otherwise ITSM access is an open question, since none of the six specialists covers it.
 
-## alert.field
-- **Measures:** the alert's normalized field value. Raw vendor values go through the customer's value table (§10).
-- **Triage rule:** `op` (in, not_in, gte, cidr, matches) against `values`, which comes from a parameter. It answers unknown on `unknown_op` against `unknown_values`, or when the field is empty. Each parameter's bounds are listed with it, for example `dlp_record_count_flag` (default 1000, min 1, max 100000) and `usb_files_written_flag` (default 50, min 1, max 10000).
-- **Template kind:** alert field (local to the Triage agent; no broker call, outside the call budget).
+## alert.class and alert.measure (were alert.field)
+- **Measures:** `alert.class` returns one value of a fixed class (`alert_classes` in `bank/broker/capabilities.yaml`, e.g. `av_execution_state`: pre_execution, ran, unknown). The product's raw value goes through its translation (`bank/broker/translations/`, one per vendor and product, each row with a kind; a generic one holds vendor-neutral rows); the answer carries a trust. `alert.measure` returns a number the control recorded.
+- **Triage rule:** the step's rule: enum values (or a list parameter) that mean yes, and those that mean unknown; or `gte`/`lte` a parameter for numbers, for example `dlp_record_count_flag` (default 1000, min 10, max 100000) and `usb_files_written_flag` (default 50, min 1, max 10000).
+- **Template kind:** alert source (the broker answers from the normalized alert; no tool call, outside the call budget). The Triage agent never sees a field name or raw value.
 - **Splunk:** Enterprise Security notable fields after CIM normalization.
 - **Known-answer tests:** a replayed sample alert per vendor family returns the expected normalized values. An unapproved raw value is reported as pending translation.
 - **Unknown when:** the field is missing or empty, its value is in `unknown_values`, or the value's translation is not yet approved (which taints the close).
 - **Attacker influence:** rated per question and per source profile (direct API vs forwarded syslog).
-- **Owner:** Triage agent (local). The value tables are approved by the Use Case Manager.
+- **Owner:** Tool Broker (alert source). New translation rows are proposed (by a person, or by a model in build mode only) and approved by a human before they are frozen; a detection is Auto-eligible for a customer only when every row on its close paths is verified for that customer (customer layer).
+
+## endpoint.run_status
+- **Measures:** whether the detected file was stopped before it ran: pre_execution, ran or unknown, from the endpoint product's own record of the alert.
+- **Source authority:** the endpoint product's API (for Defender, the alert evidence in its security API). The broker finds the product's alert by `reporting_control.vendor_alert_id`; if that is missing, by `reporting_control.endpoint_device`, file hash and `edr_alert_match_window_minutes` (default 10, min 1, max 60). No match or several matches answer unknown. Fallback, only when the API is unavailable or not granted: the SIEM's copy of the product's alert, through its `siem_copy` translation; its answers follow the unverified rule (Shadow and Recommend only, marked; never Auto), and its ambiguous rows (1117 Block, quarantine) answer unknown in every mode. Rows of the API table are unverified until the customer verifies them.
+- **Triage rule:** the step's enum rule (Q-0049: pre_execution means yes, unknown means unknown).
+- **Template kind:** API lookup, with the run-status translation in the API recipe.
+- **Known-answer tests:** known prevented, blocked, quarantined and detected alerts return pre_execution, ran, unknown and ran (#20 for Defender, #9 for CrowdStrike).
+- **Unknown when:** no match or several matches, mixed evidence, a quarantine or cleaning after execution, pending reboot, partial remediation, an ambiguous row (in every mode), or in Auto an unverified row or a fallback answer.
+- **Attacker influence:** low from the API; medium when forwarded.
+- **Owner:** endpoint specialist.
+
+## context.rule
+- **Measures:** nothing new. The Triage agent applies a fixed rule (`context_rule` on the question) to cached context answers. Q-0067 reads C-06 (crown jewel) and C-08 (asset class): yes when C-06 is yes or C-08 is server. An unknown context answer never takes a worst-case value.
+- **Template kind:** none; no tool call, so it does not count against the call budget (the budget counts outside tools only). Three-valued: if the result depends on an unknown context answer, it answers unknown and flags (`context_unknown`).
+- **Owner:** Triage agent.
 
 ## vuln.not_applicable
 - **Measures:** the CVEs the signature maps to, the host's affected status for each, and the age of the scan data.
@@ -205,13 +224,13 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Template kind:** API (mail security click and open logs).
 - **Splunk:** click logs, if indexed.
 - **Known-answer tests:** a test click on a test message is counted.
-- **Unknown when:** click or open records are not collected.
+- **Unknown when:** click or open records are not collected; or the message carried an attachment and the coverage report lacks `attachment_open_telemetry` (endpoint records of files opened, by hash) for every recipient's host. An absence of click records is not evidence (round 6, B2).
 - **Attacker influence:** low.
 - **Owner:** email specialist.
 
 ## traffic.denied_only
-- **Measures:** counts of allowed or established versus denied connections from `src` (to `dest` when given) in the alert window.
-- **Triage rule:** yes if allowed = 0 and denied ≥ 1. No parameter; the window is the fixed alert window.
+- **Measures:** counts of allowed or established versus denied connections from `src` (to `dest` when given) over the 24h look-back ending at the alert time.
+- **Triage rule:** yes if allowed = 0 and denied ≥ 1. No parameter; the window is the triage look-back (`triage_lookback_hours`).
 - **Template kind:** Sigma, with an aggregation (count by action).
 - **Splunk (CIM):** Network_Traffic (`src`, `dest`, `dest_port`, `action`), accelerated.
 - **Known-answer tests:** a known health-check source with allowed traffic returns allowed > 0. The data source shows recent events.
@@ -294,6 +313,6 @@ Run by the SIEM specialist as part of Phase 0, the foundation-readiness gate (de
 9. **Asset IDs in AV and EDR alerts** (the Alerts data model for Defender through the Splunk add-on, `docs/assumptions.md` A5; Malware for others): whether AV alerts carry a device or agent ID. Without it, AV precedents rate medium (the fingerprint falls back to the hostname).
 10. **Entity resolution quality:** the share of alerts mapped to an asset ID and to an identity. The entity guard and per-entity caching (design-decisions §6) depend on it. Minimum bar: at least 90% of alerts resolve their host to an asset with a priority.
 11. **CIM compliance per rule:** each pilot rule's data source is CIM-compliant and populates the rule's required entities.
-12. **EDR feed:** whether EDR data arrives as an alert API, as event logs in Splunk, or both.
+12. **EDR API access:** for each EDR, whether read-only API access is granted (yes/no), with the API's rate limits. Without it, the detections that need endpoint answers (for example AV/EDR run status) are capped at Recommend; the SIEM's copy of the EDR's alerts is a fallback that can only raise.
 
 The report lists each capability as buildable, buildable with gaps (named), or blocked, and feeds the coverage report.

@@ -1,0 +1,12 @@
+id: BE-0010
+name: Approved download source
+description: The tool fetches from an internal server or an approved vendor domain (PKI/CRL, update CDN, internal repository).
+derived_from:
+  source:
+  - splunk/security_content detections/endpoint/windows_file_download_via_certutil.yml (known_false_positives)
+  - splunk/security_content detections/endpoint/bitsadmin_download_file.yml (known_false_positives)
+  - splunk/security_content detections/endpoint/windows_file_download_via_powershell.yml (known_false_positives)
+  - splunk/security_content detections/endpoint/detect_mshta_url_in_command_line.yml (known_false_positives)
+  license:
+  - Apache-2.0
+version: 1

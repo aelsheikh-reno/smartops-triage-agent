@@ -1,0 +1,26 @@
+id: C-04
+text: How many audited closes, and how many independent human closes (manual closes in Shadow and analyst overrides, by distinct analysts), does this fingerprint have in the validity window?
+evidence: human_evidence
+kind: context
+inputs:
+  fingerprint: alert:fingerprint
+  validity_hours:
+    param: precedent_validity_hours
+  current_action: role:reporting_control.action
+feeds:
+- q0
+attacker_influence:
+  rating: low
+  reason: Recorded closes; Q0's own rating follows the detection's fingerprint fields.
+when_not_answered: 'Unknown or source unavailable: Q0 cannot close (it answers unknown and the flow continues); the other closes do not depend on it. Recorded as context_unknown (C-04). It never escalates.'
+on_unknown: flag
+unknown_reason: context_unknown
+derived_from:
+  source:
+  - docs/intake/context-questions.md
+  - docs/design-decisions.md §5
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 2

@@ -7,7 +7,7 @@ Base: smartops-soc-app `context_service/templates/normalized_seed.py`, branch `f
 ## Rules
 - `schema_version` is required. A consumer rejects a major version it does not know.
 - Unknown entity types are rejected, not mapped to the nearest known type. The permitted types are those of smartops-soc-app `engine/contracts/schemas/task-input.v1.schema.json` (main, commit `a2d0eb0`): `host`, `user`, `ip`, `file_hash`, `domain`, `url`, `process`, `file_name`, `command_line`, `process_id`, `process_guid`.
-- Required means the normalizer must fill it or reject the alert. "Per detection" means required when the detection's `required_alert_fields` (through the mapping below) or its precedent entity names it. A per-detection field the normalizer cannot fill flags the alert with reason `entity_missing` and opens a fix ticket for the rule (§4). It never guesses.
+- Required means the normalizer must fill it or reject the alert. "Per detection" means required when the detection's `required_roles` or its precedent entity needs it. A per-detection field the normalizer cannot fill flags the alert with reason `entity_missing` and opens a fix ticket for the rule (§4). It never guesses.
 - Every value is a string unless the Type column says otherwise. Empty is `null` (or `[]` for arrays), never `""` or a placeholder such as `-` or `unknown`.
 - Times are ISO 8601 in UTC. `event_time` is the event's own time, never the alert's creation time.
 - Attacker-controlled values (command lines, URLs, subjects, file names, user agents) are stored as received. They are escaped or bound as parameters by whoever puts them in a query (§10), and pass the injection classifier before any model reads them (§28).
@@ -81,14 +81,19 @@ For vendor alerts (AV/EDR, IDS/IPS, WAF, email gateway, DLP, proxy, firewall, de
 | `reporting_control.vendor` | string | per detection | added for triage | Offline metadata only: never read by a flow. |
 | `reporting_control.product` | string | per detection | added for triage | Offline metadata only. |
 | `reporting_control.action` | string | per detection | added for triage | Normalized action (for example `blocked_pre_execution`, `quarantined_post_execution`, `detected`). |
-| `reporting_control.action_raw` | string | per detection | added for triage | As the product sent it; the value table translates it (§10). |
+| `reporting_control.action_raw` | string | per detection | added for triage | As the product sent it; the broker's translation reads it (§10). |
 | `reporting_control.signature` | string | per detection | added for triage | Detection or signature name. |
 | `reporting_control.signature_id` | string | no | added for triage | |
+| `reporting_control.vendor_alert_id` | string | yes for vendor alerts | added for triage | The reporting product's own alert ID (for Defender, the alert ID in its security API). The broker uses it to find the product's alert through the product's API, the authoritative source (§9). Missing: the broker falls back to device, file hash and a bounded time window; no match or several matches answer unknown. |
+| `reporting_control.endpoint_device` | string | yes for endpoint vendor alerts | added for triage | The reporting product's own device (agent) ID, for the fallback match. |
 | `reporting_control.category` | string | per detection | added for triage | Normalized category or class. |
 | `reporting_control.delivery` | string | yes for vendor alerts | added for triage | `direct_api` or `forwarded`. Forwarded alerts rate medium for attacker influence and cannot close on their own (§14). |
 
-## Mapping from today's bank field names
-Today's bank names `required_alert_fields` in Splunk CIM (and a few raw Sysmon) names. Until the next bank PR renames them, each maps to a v1 path. A name with no v1 slot lives in `additional_fields` and is a candidate for v1.1.
+## Role references in the bank
+The bank refers to the normalized alert only through role references, `role:<role>.<attr>`, listed in `tools/roles.py`; `validate` rejects anything else, including every CIM, ECS and Sysmon field name in `tools/field_names.py`. The role attributes beyond the `roles.*` objects above map onto the seed sections: `email.*` to `email`, `web.*` to `http` (category, user agent, status, app, forwarded-for), `registry.*` to `registry`, `device.*` (id, class, event type, files written) and `dlp.*` (object, object hash, record count) to `additional_fields` until v1.1 gives them sections, `process_access.*` (rights, call stack) and `target_process.path` to `additional_fields`, `actor.name` (the account that acted on `user`) to `authentication.source_user`, and `event.time`/`event.type_id` to `event_time`/`event.event_code`.
+
+## Mapping from the bank's old field names
+Used once, by the bank migration, to rewrite `required_alert_fields` and every field reference to roles. Kept for review:
 
 | Bank name today | v1 path |
 |---|---|

@@ -1,0 +1,50 @@
+# Vendor value table (recipe layer). Maps one product's raw alert values to the bank's alert classes
+# (bank/broker/capabilities.yaml alert_classes). Rows are tried in order; the first match wins; no match gives the class default.
+# match: {<raw property>: <value or list>} compares normalized values (case, surrounding space and trailing periods ignored); {pattern: <regex>} searches the class's role values joined by a space.
+# source: edr_api (the product's own API: authoritative for endpoint.run_status), siem_copy (the product's alert as copied into the SIEM: a fallback), or alert (values read from the normalized alert itself).
+# Each row has an id and a kind: ambiguous (the value does not say what happened: always unknown, in every mode) or
+# unverified (meaning from vendor docs, not confirmed at this customer: may support a close in Shadow and Recommend, marked
+# 'unverified mapping: <table>/<row>', never in Auto). Verified is per customer, recorded in bank/broker/customers/<c>/verifications.yaml.
+vendor: CrowdStrike
+product: Falcon
+source: edr_api
+answers: endpoint.run_status
+feed: 'CrowdStrike API: detection details (PatternDispositionDescription), found by the vendor alert (detection) ID or a bounded device + file hash + time match'
+references:
+- docs/normalization.md (recalled from public event references; not checked)
+- 'issue #9 (verify against the API)'
+license: internal
+classes:
+  run_status:
+    reads:
+    - PatternDispositionDescription
+    rows:
+    - id: run_status.prevention_process_blocked_from_executio
+      match:
+        PatternDispositionDescription: Prevention, process blocked from execution
+      value: pre_execution
+      kind: unverified
+    - id: run_status.prevention_process_killed
+      match:
+        PatternDispositionDescription: Prevention, process killed
+      value: ran
+      kind: unverified
+      note: The process started.
+    - id: run_status.prevention_operation_blocked
+      match:
+        PatternDispositionDescription: Prevention, operation blocked
+      value: ran
+      kind: unverified
+      note: An operation of a running process was blocked; the process ran (round 6).
+    - id: run_status.quarantine_file_quarantined
+      match:
+        PatternDispositionDescription: Quarantine, file quarantined
+      value: unknown
+      kind: ambiguous
+      note: 'Timing not stated. Ambiguous: the value does not say whether the file ran, so it answers unknown in every mode and can never support a close.'
+    - id: run_status.detection_standard_detection
+      match:
+        PatternDispositionDescription: Detection, standard detection
+      value: ran
+      kind: unverified
+    default: unknown

@@ -1,0 +1,28 @@
+id: Q-0049
+text: Was the file blocked before it executed?
+tests: BE-0019
+attacker_influence:
+  rating: low
+  reason: Recorded by the endpoint product.
+  by_source:
+    forwarded: medium
+notes: Answered from the endpoint product's API (its alert evidence), found by the vendor alert ID, else by device, file hash and a bounded time window; no match or several matches answer unknown. If the endpoint
+  product cannot be asked, the answer is not_checked. Post-execution quarantine or cleaning, pending reboot and partial remediation answer unknown and flag.
+derived_from:
+  source:
+  - external review of batch 1 (review/batch-1-vendor-alerts.md, Changes since review)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 3
+kind: triage
+inputs:
+  vendor_alert_id: role:reporting_control.vendor_alert_id
+  endpoint_device: role:reporting_control.endpoint_device
+  file: role:file.sha256
+  at_time: role:event.time
+optional_inputs:
+- vendor_alert_id
+- endpoint_device
+- file

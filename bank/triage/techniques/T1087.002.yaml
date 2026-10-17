@@ -1,0 +1,79 @@
+id: T1087.002
+name: Domain Account
+attack_version: '20.0'
+required_roles:
+- host
+- user
+- process
+- event
+template: ad_discovery
+covers: Account, group or trust discovery
+max_mode: recommend
+max_mode_reason: technique fallback with no true-positive replay data (#14); capped at Recommend until it has some
+auto_excluded_reason: no_tp_replay_data
+fingerprint:
+- role:host.name
+- role:user.name
+- role:process.sha256
+- role:process.parent_name
+fingerprint_influence:
+  role:host.name:
+    rating: low
+    reason: Host that reported the event.
+  role:user.name:
+    rating: low
+    reason: Account recorded by the OS.
+  role:process.sha256:
+    rating: low
+    reason: Computed by the sensor; reproducing it means running the same binary.
+  role:process.parent_name:
+    rating: high
+    reason: File name the attacker can choose.
+precedent_entity: role:host.name
+flow:
+- step: 1
+  question: Q-0000
+  bind:
+    entity: role:host.name
+  attacker_influence:
+    rating: low
+    reason: An attacker cannot freely reproduce the fingerprint's host, user, process hash.
+  on_yes: close:inherit:precedent_match
+  on_no: next
+  on_unknown: next
+  guards:
+  - question: Q-0045
+    then: flag
+    rule:
+      gte:
+        param: alert_history_min_count
+- step: 2
+  question: Q-0026
+  on_yes: close:benign_true_positive:authorized_security_test
+  on_no: next
+  on_unknown: next
+- step: 3
+  question: Q-0002
+  on_yes: next
+  on_no: escalate
+  on_unknown: flag
+- step: 4
+  question: Q-0014
+  rule:
+    gte:
+      param: entity_baseline_min_days
+  on_yes: flag
+  on_no: next
+  on_unknown: next
+  note: 'Was close:benign_true_positive:activity_baselined_on_host. Its only none/low yes was identity group membership (Q-0002) plus a baseline rated high, so it flags: group membership is never the only
+    low-rated answer on a close path.'
+- step: 5
+  question: Q-0004
+  on_yes: flag
+  on_no: escalate
+  on_unknown: flag
+derived_from:
+  source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
+  license: MITRE ATT&CK Terms of Use
+status: draft
+version: 6

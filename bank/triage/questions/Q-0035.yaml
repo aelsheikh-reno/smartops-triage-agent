@@ -1,0 +1,17 @@
+id: Q-0035
+text: Is the message quarantined or removed from every recipient mailbox?
+tests: BE-0024
+attacker_influence:
+  rating: low
+  reason: Mailbox state comes from the mail platform; the sender cannot change it.
+derived_from:
+  source:
+  - bank/intake/use_cases.yaml triage_hints
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  message: role:email.message_id

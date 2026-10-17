@@ -1,0 +1,27 @@
+id: C-02
+text: How many alerts fired on the entity in the grouping window, and from how many distinct detections; and how many distinct detections fired on it at each normalized severity in the last 24 hours?
+kind: context
+inputs:
+  entity: alert:entity
+  window:
+    param: entity_grouping_window_minutes
+  lookback_hours:
+    param: triage_lookback_hours
+feeds:
+- entity_guard
+- q0
+attacker_influence:
+  rating: none
+  reason: Counts alerts already raised; the activity cannot remove them.
+when_not_answered: 'Unknown or source unavailable: the entity cannot be ruled out, so no alert on it closes. Every close becomes a flag with reason context_unknown (C-02). It never escalates.'
+on_unknown: flag
+unknown_reason: context_unknown
+derived_from:
+  source:
+  - docs/intake/context-questions.md
+  - docs/design-decisions.md §5
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 2

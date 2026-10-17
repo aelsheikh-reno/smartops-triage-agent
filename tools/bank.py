@@ -149,9 +149,10 @@ def load():
 
 
 def _proofs():
-    """Proof records for close paths (bank/contract/proof.yaml schema), from bank/triage/proofs/*.yaml."""
+    """Proof records for close paths (bank/contract/proof.yaml schema), from bank/triage/proofs/*.yaml and per-detection
+    folders bank/triage/proofs/<D-ID>/*.yaml."""
     out = []
-    for path in sorted(glob.glob(os.path.join(TRIAGE, "proofs", "*.yaml"))):
+    for path in sorted(glob.glob(os.path.join(TRIAGE, "proofs", "*.yaml")) + glob.glob(os.path.join(TRIAGE, "proofs", "*", "*.yaml"))):
         for rec in (_load(path) or {}).get("proofs") or []:
             out.append(dict(rec, _file=os.path.relpath(path, ROOT)))
     return out

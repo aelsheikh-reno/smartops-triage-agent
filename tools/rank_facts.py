@@ -102,7 +102,7 @@ def main():
         t = B.tainted_closes(b, d["flow"])
         if t:
             total_closes = len(E.close_edges(d["flow"]))
-            print(f"  {d['id']}: {len(t)} of {total_closes} closes, via step(s) {sorted({s for _, _, bad in t for s in bad})}")
+            print(f"  {d['id']}: {len(t)} of {total_closes} closes, via step(s) {sorted({s for _, _, bad in t for s in bad}, key=str)}")
     if no_close:
         print("\nRule-level detections with no close outside Q0:", ", ".join(no_close))
 

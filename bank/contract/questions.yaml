@@ -403,9 +403,6 @@ questions:
     - medium
     - high
     - critical
-# Designed: contract entries for questions and capabilities that are not in the bank yet (the next bank PR adds them).
-# No flow may use them until they are; a guard_only context question may be read only by guards.
-designed:
 - id: C-09
   kind: context
   guard_only: true
@@ -418,6 +415,9 @@ designed:
     - weekend
     - public_holiday
     - change_freeze
+# Designed: contract entries for questions and capabilities that are not in the bank yet (the next bank PR adds them).
+# No flow may use them until they are; a guard_only context question may be read only by guards.
+designed:
 - id: privileged_session_match
   kind: capability
   status: designed

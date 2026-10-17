@@ -637,8 +637,13 @@ def main():
     con = b["contract"]
     cq = con["questions"]
     asked = set(b["questions"]) | set(b["context_questions"])
-    if set(cq) != asked:
-        err("bank/contract/questions.yaml", f"must list every question exactly once: missing {sorted(asked - set(cq))[:5]}, extra {sorted(set(cq) - asked)[:5]}")
+    # A guard-only context question may enter the contract before the bank PR that adds its file (the contract changes in its
+    # own PR first); nothing can read it until then, since every step and guard must name a question the bank has.
+    pending = {q for q in set(cq) - asked if cq[q].get("kind") == "context" and cq[q].get("guard_only")}
+    for q in sorted(pending):
+        info.append(f"{q}: in the contract (guard-only context question), not yet in the bank; the next bank PR adds bank/triage/context/{q}.yaml")
+    if set(cq) - pending != asked:
+        err("bank/contract/questions.yaml", f"must list every question exactly once: missing {sorted(asked - set(cq))[:5]}, extra {sorted(set(cq) - pending - asked)[:5]}")
     ans = con.get("answer") or {}
     if set(ans.get("status") or {}) != {"answered", "unknown", "source_unavailable", "sources_disagree"}:
         err("bank/contract/answer.yaml", "status values are answered, unknown, source_unavailable, sources_disagree")

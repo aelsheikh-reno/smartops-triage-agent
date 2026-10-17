@@ -1,0 +1,24 @@
+detection: D-0031
+name: 'the same with telemetry, but another alert on a recipient''s host: flag (with link-click telemetry too)'
+reason: 'the Q-0076 guard check once #29 applies: with attachment-open and link-click telemetry, Q-0036 answers yes and the other alert on a recipient''s host flags'
+mode: recommend
+overrides:
+  Q-0035: true
+  Q-0036: true
+  Q-0076: medium
+coverage:
+- attachment_open_telemetry
+- link_click_telemetry
+alert:
+  email.sender: a@example.org
+  email.subject: invoice
+  email.recipient: u1@corp.example
+  email.url: http://example.org/x
+  file.sha256: '1111111111111111111111111111111111111111111111111111111111111111'
+  event.time: '2026-10-17T00:00:00Z'
+  reporting_control.action: quarantined
+  email.delivery_stage: post_delivery
+  file.name: invoice.docm
+expect:
+  outcome: flag
+order: 42

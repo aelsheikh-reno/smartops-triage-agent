@@ -136,6 +136,8 @@ class CleanRoom:
         cap = q["capability"]["name"]
         if cap == "email.no_interaction" and n.get("file.sha256") and "attachment_open_telemetry" not in (case.get("coverage") or []):
             return None   # B2: the message carried an attachment and no host records attachment opens: missing clicks are not evidence
+        if cap == "email.no_interaction" and n.get("email.url") and "link_click_telemetry" not in (case.get("coverage") or []):
+            return None   # #29: the message carried a link and link clicks are not recorded for the recipient: missing clicks are not evidence
         if q["id"] in (case.get("overrides") or {}):
             return case["overrides"][q["id"]]   # a test case supplies a broker answer the clean room cannot give
         optional = set(q["capability"].get("optional_inputs") or [])

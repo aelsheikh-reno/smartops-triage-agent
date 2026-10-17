@@ -43,7 +43,7 @@ Bank migration (#12): roles instead of field names, typed broker answers with Tr
 
 - validate: PASS (35 detections, 26 technique fallbacks, 76 questions, 8 context questions, 34 context facts, 35 capabilities, 41 parameters, 7 translations: 0 errors, 6 warnings)
 - attacker influence: PASS (61 flows, 353 close paths checked, 0 failing, in 0 flows; 50 closes flag under the forwarded profile, 1 under fingerprint fallback)
-- replay: PASS (replay: 655 TP events in 28 detections, 123/123 regression cases; 0 benign/FP closes, 0 mitigated closes -> PASS)
+- replay: PASS (replay: 655 TP events in 28 detections, 125/125 regression cases; 0 benign/FP closes, 0 mitigated closes -> PASS)
 
 ## Detections
 

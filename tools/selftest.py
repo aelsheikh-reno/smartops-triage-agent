@@ -125,13 +125,31 @@ CASES = [
     ("vendor terms in offline metadata and value tables pass", "validate",
      lambda root: (edit_yaml(os.path.join(root, PSEXEC), lambda d: d.update(data_source=d["data_source"] + ["Splunk ES notable via | tstats from datamodel=Endpoint"])),
                    edit_yaml(os.path.join(root, "bank/recipes/value_tables/generic.yaml"), lambda d: d.update(feed=d["feed"] + " (sourcetype=XmlWinEventLog, dest_ip)"))), None),
+    # Round 3: gates never pass on nothing; raise-only answers; missing context never escalates.
+    ("empty batch: every vendor detection removed", "redteam vendor",
+     lambda root: [os.remove(f) for f in __import__("glob").glob(os.path.join(root, "bank/detections/vendor/*.yaml"))], "loaded 0 flows"),
+    ("empty bank: no detection at all", "validate",
+     lambda root: [os.remove(f) for f in __import__("glob").glob(os.path.join(root, "bank/detections/*/*.yaml"))], "loaded 0 detections"),
+    ("wrong batch name (attacker influence)", "redteam vendr", lambda root: None, "unknown batch vendr"),
+    ("wrong batch name (replay)", "replay escuu", lambda root: None, "unknown batch escuu"),
+    ("class without its raise_only list", "validate", y("bank/capabilities.yaml", lambda d: d["alert_classes"]["av_risk_class"].pop("raise_only")), "declare raise_only"),
+    ("raise-only value leads to a close", "validate",
+     y("bank/detections/vendor/av_detection.yaml", lambda d: d["flow"][3].update(on_no="close:mitigated_true_positive:blocked_low_risk_detection")), "is raise-only"),
+    ("fallback-source table not marked fallback", "validate",
+     y("bank/recipes/value_tables/microsoft-defender-antivirus-event-log.yaml", lambda d: d.pop("fallback")), "declares fallback: true"),
+    ("worst-case default for unknown context", "validate", y("bank/context/C-08.yaml", lambda d: d.update(unanswered_value="server")), "no worst-case default"),
+    ("unknown context escalates", "validate", y("bank/context/C-06.yaml", lambda d: d.update(on_unknown="escalate")), "never escalates"),
+    ("guard escalates on unknown context", "validate",
+     y("bank/detections/vendor/removable_media.yaml", lambda d: first_guard(d, "Q-0067").update(when=["yes", "unknown"])), "never escalates"),
     ("identity groups as the only low-rated yes on a close path", "redteam",
      y(PSEXEC, lambda d: d["flow"][3].update(on_yes="close:benign_true_positive:admin_activity_baselined")), "FAIL escu:detect_psexec"),
 ]
 
 
 def run(root, gate):
-    cmd = {"validate": ["tools/validate.py"], "redteam": ["tools/redteam_paths.py", "--quiet"]}[gate]
+    """gate: validate, redteam or replay, optionally followed by batch arguments ("redteam vendr")."""
+    name, *args = gate.split()
+    cmd = {"validate": ["tools/validate.py"], "redteam": ["tools/redteam_paths.py", "--quiet"], "replay": ["tools/replay.py", "--strict"]}[name] + args
     r = subprocess.run([sys.executable] + cmd, cwd=root, capture_output=True, text=True)
     return r.returncode, r.stdout + r.stderr
 

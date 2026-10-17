@@ -130,7 +130,7 @@ parameters:
       min: 3
       max: 50
     reduces_scrutiny_when: lower
-    description: Hosts the pattern must reach in every week of the lookback for a prevalence yes
+    description: Hosts the pattern must reach in at least org_prevalence_min_weeks of the org_prevalence_of_weeks weeks for a prevalence yes (the Triage side compares the broker's k-th lowest weekly count with it)
   org_prevalence_of_weeks:
     default: 4
     bounds:

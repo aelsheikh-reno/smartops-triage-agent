@@ -28,9 +28,20 @@ Each answer follows the broker answer contract in `docs/broker-questions.md`:
 - `status`: `answered`, `unknown`, `source_unavailable` or `sources_disagree`
 - `provenance`: source, `observed_at`, time-to-live, recipe version, evidence link
 
-"Source down" never reads as "no hit". If C-01 or C-02 comes back `source_unavailable` or `sources_disagree`, the entity guard cannot rule the entity out, so every close on it flags. If C-04 is not `answered`, Q0 does not close. If C-05 or C-06 is not `answered`, the asset is treated as critical and as a crown jewel for that window. If C-07 is not `answered`, the user is treated as privileged. If C-08 is not `answered` (or answers unknown), the entity is treated as a server.
+"Source down" never reads as "no hit". If C-01 or C-02 comes back `source_unavailable` or `sources_disagree`, the entity guard cannot rule the entity out, so every close on it flags. The rule for every context question: If a context question (C-01…C-08) is unknown or its source is unavailable, the alert cannot close on anything that depends on it, and the outcome is a flag with reason `context_unknown`, naming the C-ID. Missing context never escalates by itself, and no unknown answer is replaced by a worst-case value.
 
-Q-0067 (removable media: is the host a server or crown jewel?) is not a broker call of its own: it is a Triage-side rule over the cached answers C-06 and C-08 (`bank/context_rules.yaml` `q0067`, capability `context.rule`). It answers yes when C-06 is yes or C-08 is server; an unanswered C-06 or C-08 answers yes. Before this it was a list lookup.
+| Unknown or unavailable | What happens | Reason |
+|---|---|---|
+| C-01, C-02 | The entity cannot be ruled out: every close on it flags. | `context_unknown` (C-01 / C-02) |
+| C-03, C-04 | Q0 cannot close; it answers unknown and the flow continues. Other closes do not depend on them. | recorded as `context_unknown` |
+| C-05 | Priority stays at the SIEM's own urgency (not raised). Any close that depends on asset priority (Auto autonomy, §19) flags. | `context_unknown` (C-05) |
+| C-06 | Every close flags: Q0 needs a known non-crown-jewel, and no auto-close on a crown jewel. Q-0067 flags. | `context_unknown` (C-06) |
+| C-07 | Priority is not raised for the user. No close depends on it. | recorded as `context_unknown` |
+| C-08 | Q-0067 flags. The entity guard uses the global defaults (3 alerts from 2 detections in 10 minutes). | `context_unknown` (C-08) |
+
+Before round 3 these were worst-case defaults (treat as critical, as a crown jewel, as privileged, as a server). A worst-case default could escalate on missing data; now missing data flags and an analyst decides.
+
+Q-0067 (removable media: is the host a server or crown jewel?) is not a broker call of its own: it is a Triage-side rule over the cached answers C-06 and C-08 (`bank/context_rules.yaml` `q0067`, capability `context.rule`). It answers yes when C-06 is yes or C-08 is server, and its guard escalates. If the answer depends on an unknown C-06 or C-08, it answers unknown and the guard flags (`context_unknown`); a known crown jewel or a known server answers yes even when the other is unknown. Before this it was a list lookup.
 
 ## What is not a context question
 Asked only when a flow step reaches it, as a triage question with its own bank ID: threat intel, baselines, prevalence, EDR detail (process tree, signer, hash).

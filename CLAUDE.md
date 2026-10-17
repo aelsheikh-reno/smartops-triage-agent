@@ -26,6 +26,10 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 - Nothing in the triage layer or the shared bank assumes a specific SIEM, tool or field name.
 - Vendor-specific content (query languages, SIEM product terms, CIM/ECS/vendor field names, vendor API calls) lives only in adapter folders, broker recipes and vendor value tables. Core, triage logic, questions, flows, capabilities and parameters never contain it. Gates enforce this.
 - The SIEM alert only starts triage. The broker answers each capability from the authoritative source set at onboarding, usually the tool's own API; the SIEM is authoritative only for alert history and log searches. A fallback source can only raise scrutiny.
+- An answer from a fallback source, or from an unverified value-table row, may only raise scrutiny: "ran" or "malicious" stands; pre_execution, benign or any other answer that could lead to a close becomes unknown. Each class declares its `raise_only` values.
+- Missing context never closes and never escalates: an unknown or unavailable context question (C-01…C-08) turns any close that depends on it into a flag with reason `context_unknown`, naming the C-ID. No worst-case defaults.
+- The call budget counts calls to outside tools only; our own cached context, list store and case memory don't count. Flows stay at most 5 steps, Q0 included.
+- Gates never pass on nothing: `tools/gates.sh` with no argument runs every batch; an unknown batch or a gate that loads zero detections, flows or replay events fails.
 - Value tables hold what a vendor's values mean (per source, each row verified or not); what the customer accepts lives in Triage-side parameters (bounded, with a direction tag) or context lists. Never mix them.
 - One way in, one way out: alerts enter only through the normalizer; every tool read and every write-back goes through the Tool Broker. No agent or model calls a tool directly.
 - Every broker question has a bank ID, a fixed answer type, a status and provenance, and no threshold.

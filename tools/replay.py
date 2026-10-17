@@ -17,7 +17,7 @@ CVE, otherwise no_data (the clean room holds no vulnerability data).
 This is a test harness, not bank content: it names source formats and products.
 Flows run on normalized alert v1 roles (the harness plays the normalizer) and typed broker answers turned into
 yes/no by each step's rule; alert classes go through the bank's value tables.
-Usage: tools/replay.py [--strict] [ids...]
+Usage: tools/replay.py [--strict] [batch ...]   batches: escu, vendor; none means all; fails if it replays 0 detections or 0 events
 """
 import csv
 import ipaddress
@@ -313,7 +313,7 @@ def measure(b, q, inputs, n, ctx):
             values = {r: n.get(r) for r in reads}
             if all(v in (None, "") for v in values.values()):
                 return None
-        return B.classify(b, cls, values, tables)[0]
+        return B.classify_effective(b, cls, values, tables)[0]
     if cap == "endpoint.run_status":
         # The endpoint API is authoritative (_api: the vendor alerts it matched); without it the SIEM's copy of the alert
         # is the fallback (_raw read through the product's siem_copy table, else the generic one).
@@ -349,7 +349,7 @@ def measure(b, q, inputs, n, ctx):
 
 
 def answer(b, q, item, n, ctx, d):
-    if (q.get("needs") or {}).get("coverage"):
+    if set((q.get("needs") or {}).get("coverage") or []) - set(ctx.get("coverage") or []):
         return "unknown"   # clean room: no coverage report, so the question is no_capability
     value = measure(b, q, B.step_inputs(q, item), n, ctx)
     return B.apply_rule(b, item.get("rule"), value, B.answer_type(b, q["id"]), d)
@@ -373,8 +373,16 @@ def run_flow(b, d, n, ctx):
                 trail.append("guards " + ",".join(f"{g['question']}={a}" for g, a in results) + f" -> {raised}")
                 out = raised
         if out != "next":
-            return out, trail
+            return context_unknown(out, trail, ctx)
     return "flag", trail
+
+
+def context_unknown(out, trail, ctx):
+    """Every close depends on C-06 (Q0 needs a known non-crown-jewel; no auto-close on crown jewels): if C-06 is unknown or
+    its source unavailable (None), the close becomes a flag with reason context_unknown. Missing context never escalates."""
+    if out.startswith("close") and (ctx.get("context") or {}).get("C-06") is None:
+        return "flag", trail + ["context_unknown C-06 -> flag"]
+    return out, trail
 
 
 # Regression cases: hand-built normalized alerts (roles, plus the raw values the value tables read) with a required outcome.
@@ -389,6 +397,12 @@ def api(*evidence):
     return {"tables": GRAPH, "matches": list(evidence)}
 
 
+VERIFIED = ["microsoft-defender-for-endpoint", "generic"]   # as if onboarding had verified these tables' rows (#20, #9)
+USB = {"_coverage": ["device_control_write_events"], "host.name": "srv-01", "user.name": "u1", "event.time": "2026-10-17T00:00:00Z", "device.event_type": "connect", "device.class": "storage",
+       "reporting_control.action": "allowed", "device.files_written": 0}
+
+# (detection, name, alert, required outcome). Alert keys starting with _ are harness inputs: _api (the endpoint API's matches),
+# _raw/_tables (the SIEM copy), _coverage (coverage reports present), _context (context answers; None = unknown or source unavailable), _verified (tables taken as verified).
 REGRESSION = [
  ("vendor:av_detection", "no hash, high-risk class, detected (not blocked) must escalate",
   dict(AV, **{"reporting_control.signature": "HackTool:Win32/Mimikatz", "reporting_control.category": "hacktool", "reporting_control.action_raw": "detected"}), "escalate"),
@@ -401,26 +415,52 @@ REGRESSION = [
  ("vendor:av_detection", "any product, no API, SIEM copy quarantined only, low-risk class: flag",
   dict(AV, **{"file.sha256": "c" * 64, "reporting_control.signature": "Adware:Win32/X", "reporting_control.category": "adware",
               "reporting_control.action_raw": "quarantined"}), "flag"),
- ("vendor:av_detection", "Defender API prevented, low-risk class: mitigated close",
-  dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api({"detectionStatus": "prevented"})}),
-  "close:mitigated_true_positive"),
- ("vendor:av_detection", "Defender API unavailable, SIEM event-log copy says Block, low-risk class: flag (fallback rows unverified)",
-  dict(AV, **PUA, **{"file.sha256": "e" * 64, "reporting_control.action_raw": "Block", "_raw": {"EventID": "1117", "Action Name": "Block"}, "_tables": EVENT_LOG}),
-  "flag"),
+ ("vendor:av_detection", "Defender API prevented, low-risk class, rows not yet verified: flag (raise-only rule)",
+  dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api({"detectionStatus": "prevented"})}), "flag"),
+ ("vendor:av_detection", "Defender API prevented, low-risk class, rows verified: mitigated close",
+  dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api({"detectionStatus": "prevented"}),
+                     "_verified": VERIFIED}), "close:mitigated_true_positive"),
+ ("vendor:av_detection", "C-06 source unavailable: the same verified mitigated close flags (context_unknown)",
+  dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api({"detectionStatus": "prevented"}),
+                     "_verified": VERIFIED, "_context": {"C-06": None}}), "flag"),
+ ("vendor:av_detection", "Defender API unavailable, SIEM event-log copy says Block, low-risk class: flag (fallback is raise-only)",
+  dict(AV, **PUA, **{"file.sha256": "e" * 64, "reporting_control.action_raw": "Block", "_raw": {"EventID": "1117", "Action Name": "Block"}, "_tables": EVENT_LOG,
+                     "_verified": VERIFIED}), "flag"),
+ ("vendor:av_detection", "Defender API unavailable, SIEM event-log copy 1116 (detected): ran stands from the fallback, escalate",
+  dict(AV, **PUA, **{"file.sha256": "e" * 64, "reporting_control.action_raw": "detected", "_raw": {"EventID": "1116", "Action Name": "Not Applicable"},
+                     "_tables": EVENT_LOG, "_verified": VERIFIED}), "escalate"),
  ("vendor:av_detection", "no vendor alert ID, fallback match finds two Defender alerts, low-risk class: flag",
-  dict(AV, **PUA, **{"file.sha256": "f" * 64, "reporting_control.endpoint_device": "dev-1",
+  dict(AV, **PUA, **{"file.sha256": "f" * 64, "reporting_control.endpoint_device": "dev-1", "_verified": VERIFIED,
                      "_api": api({"detectionStatus": "prevented"}, {"detectionStatus": "prevented"})}), "flag"),
  ("vendor:av_detection", "no vendor alert ID, fallback match finds no Defender alert, low-risk class: flag",
-  dict(AV, **PUA, **{"file.sha256": "0" * 64, "reporting_control.endpoint_device": "dev-1", "_api": api()}), "flag"),
+  dict(AV, **PUA, **{"file.sha256": "0" * 64, "reporting_control.endpoint_device": "dev-1", "_api": api(), "_verified": VERIFIED}), "flag"),
+ ("vendor:removable_media", "removable media, rows verified, C-08 unknown: flag (context_unknown), never escalate",
+  dict(USB, _verified=VERIFIED, _context={"C-06": False}), "flag"),
+ ("vendor:removable_media", "removable media, rows verified, C-08 server: today's outcome (Q-0067 escalates)",
+  dict(USB, _verified=VERIFIED, _context={"C-06": False, "C-08": "server"}), "escalate"),
+ ("vendor:removable_media", "removable media, rows verified, C-08 workstation: closes (no data transferred)",
+  dict(USB, _verified=VERIFIED, _context={"C-06": False, "C-08": "workstation"}), "close:benign_true_positive"),
+ ("vendor:removable_media", "removable media, rows verified, C-06 unavailable and C-08 workstation: flag (context_unknown)",
+  dict(USB, _verified=VERIFIED, _context={"C-06": None, "C-08": "workstation"}), "flag"),
+ ("vendor:removable_media", "removable media, rows not yet verified, C-08 server: flag (device class answers unknown)",
+  dict(USB, _context={"C-06": False, "C-08": "server"}), "flag"),
 ]
 
 
 def run_regression(b, ctx):
     failures = []
+    import copy
     for did, name, alert, want in REGRESSION:
-        n = derive(b["detections"][did], dict(alert, _idx=0))
-        c = dict(ctx, alerts=[n], conns=[])
-        out, trail = run_flow(b, b["detections"][did], n, c)
+        bb = b
+        if alert.get("_verified"):
+            bb = copy.deepcopy(b)
+            for t in alert["_verified"]:
+                for spec in bb["value_tables"][t]["classes"].values():
+                    for r in spec.get("rows") or []:
+                        r["verified"] = True
+        n = derive(bb["detections"][did], dict(alert, _idx=0))
+        c = dict(ctx, alerts=[n], conns=[], context=dict(ctx.get("context") or {}, **(alert.get("_context") or {})), coverage=alert.get("_coverage") or [])
+        out, trail = run_flow(bb, bb["detections"][did], n, c)
         got = out if want.startswith("close:") and out.startswith(want) else out.split(":")[0]
         ok = got == want or (want.startswith("close:") and out.startswith(want))
         print(f"  {'ok  ' if ok else 'FAIL'} {did}: {name} -> {out}  [{' > '.join(trail)}]")
@@ -431,13 +471,13 @@ def run_regression(b, ctx):
 
 def main():
     strict = "--strict" in sys.argv
-    only = [a for a in sys.argv[1:] if not a.startswith("--")]
+    batches = B.select_batches([a for a in sys.argv[1:] if not a.startswith("--")])
     b = B.load()
-    # Clean-room customer: no crown-jewel list entries (C-06 answered no) and no asset inventory (C-08 unanswered, so a server).
+    # Clean-room customer: no crown-jewel list entries (C-06 answered no) and no asset inventory (C-08 unknown: Q-0067 flags).
     ctx = {"vuln_unknown": Counter(), "context": {"C-06": False}}
     rows, cannot, fails, mitigated = [], [], [], []
     for did, d in sorted(b["detections"].items()):
-        if only and not any(did.startswith(o) for o in only):
+        if B.batch_of("rule", did) not in batches:
             continue
         if did in NOT_REPLAYABLE:
             cannot.append((did, NOT_REPLAYABLE[did]))
@@ -497,9 +537,12 @@ def main():
     if ctx["vuln_unknown"]:
         print("\nVulnerability step answered unknown (never closes): " + ", ".join(f"{k} {v}" for k, v in sorted(ctx["vuln_unknown"].items())))
     print("\nRegression cases:")
-    reg_fail = run_regression(b, ctx) if not only or any(o.startswith("vendor") for o in only) else []
+    reg_fail = run_regression(b, ctx) if "vendor" in batches else []
+    n_reg = len(REGRESSION) if "vendor" in batches else 0
+    B.require_loaded(f"replay ({', '.join(sorted(batches))})", detections=len(rows), events=sum(r[2] for r in rows))
     bad = fails or reg_fail or (strict and mitigated)
-    print(f"\nreplay: {sum(r[2] for r in rows)} TP events in {len(rows)} detections; {len(fails)} benign/FP closes, {len(mitigated)} mitigated closes"
+    print(f"\nreplay: {sum(r[2] for r in rows)} TP events in {len(rows)} detections, {n_reg - len(reg_fail)}/{n_reg} regression cases; "
+          f"{len(fails)} benign/FP closes, {len(mitigated)} mitigated closes"
           f" -> {'FAIL' if bad else 'PASS'}{' (strict)' if strict else ''}")
     return 1 if bad else 0
 

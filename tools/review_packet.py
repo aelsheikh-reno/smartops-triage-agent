@@ -3,7 +3,7 @@
 question texts, capability and attacker influence, guards, plus the gate results. If
 review/changes/<batch-name>.md exists, it is included as "Changes since review".
 
-Usage: tools/review_packet.py <batch-name> <id-prefix> [<id-prefix> ...]
+Usage: tools/review_packet.py <packet-name> [batch ...]   batches: escu, vendor, technique; none means all
    e.g. tools/review_packet.py batch-1-vendor-alerts vendor:
 """
 import os
@@ -56,9 +56,10 @@ def gate(cmd):
 
 
 def main():
-    name, prefixes = sys.argv[1], sys.argv[2:]
+    name, batches = sys.argv[1], B.select_batches(sys.argv[2:])
     b = B.load()
-    dets = [d for did, d in sorted(b["detections"].items()) if any(did.startswith(p) for p in prefixes)]
+    dets = [d for did, d in sorted(b["detections"].items()) if B.batch_of("rule", did) in batches]
+    B.require_loaded(f"review packet ({', '.join(sorted(batches))})", detections=len(dets))
     used = []
     for d in dets:
         for st in d["flow"]:
@@ -83,7 +84,7 @@ def main():
         with open(changes) as fh:
             L += ["## Changes since review", "", fh.read().strip(), ""]
     L += ["## Gate results", ""]
-    for label, cmd in (("validate", ["tools/validate.py"]), ("attacker influence", ["tools/redteam_paths.py"]), ("replay", ["tools/replay.py"] + prefixes)):
+    for label, cmd in (("validate", ["tools/validate.py"]), ("attacker influence", ["tools/redteam_paths.py"]), ("replay", ["tools/replay.py"] + [x for x in sorted(batches) if x != "technique"] if batches != set(B.BATCHES) else ["tools/replay.py"])):
         status, line = gate(cmd)
         L.append(f"- {label}: {status} ({line})")
     L += ["", "## Detections", ""]

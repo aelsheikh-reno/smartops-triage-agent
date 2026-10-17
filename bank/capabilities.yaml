@@ -67,11 +67,12 @@ scope:   # enforced by the Tool Broker per caller (docs/design-decisions.md §4)
   access: read-only, except list.propose_update (a proposal) and the SIEM write-back actions on the broker's fixed allowlist
   timeout_seconds: 10
   max_calls_per_alert: 6
-  budget_note: 'includes Q0 and every step and guard on the worst path; context questions are asked once per entity and do not count; alert.class, alert.measure (source: alert), lookups in the platform
-    context store (cached per entity) and internal hash or signer resolution do not count; exceeding it flags the alert'
+  budget_counts_sources: [siem, edr_api, siem_copy, asset_inventory, identity_provider, threat_intel, itsm, vuln_scanner, email_security_api, soar]
+  budget_note: 'counts calls to outside tools only (the SIEM, EDR, identity, email, threat intel, change and ticketing, vulnerability scanner, SOAR), on the worst path through Q0, every step and the guards of the closing step. Our own stores do not count: the normalized alert (alert.class, alert.measure), the cached context and list store (list.lookup, context questions), case memory (precedent.check) and rules over cached context answers (context.rule); nor does internal hash or signer resolution. Exceeding it flags the alert. The flow limit (at most 5 steps, Q0 being step 1) is separate and unchanged.'
 source_authority:
   principle: The SIEM alert only starts triage. For each capability the Tool Broker answers from the authoritative source set at onboarding, usually the tool's own API; the SIEM is the authoritative source
-    only for alert history and log searches. A fallback source is used only when the authoritative one is unavailable or not granted, and its unverified answers can only raise scrutiny.
+    only for alert history and log searches. A fallback source is used only when the authoritative one is unavailable or not granted.
+  raise_only_rule: 'An answer from a fallback source, or from an unverified value-table row, may only raise scrutiny. Ran or malicious stands. pre_execution, benign or any other answer that could lead to a close becomes unknown. Each alert class and enum declares its raise_only values; validate enforces the rule per value-table row (verified: false) and per source (fallback: true).'
   sources:
     siem: 'the SIEM: authoritative only for alert history and log searches'
     edr_api: the endpoint product's own API (for example its alert evidence)
@@ -85,6 +86,7 @@ source_authority:
     itsm: the customer's change and ticketing system
     vuln_scanner: the customer's vulnerability scanner
     email_security_api: the email security product's own API
+    soar: read-only SOAR actions on the broker's approved list
     derived: computed by the Triage agent from cached context answers
   siem_authoritative_only_for:
   - entity.alerts
@@ -113,6 +115,7 @@ alert_classes:
     - other
     - unknown
     default: other
+    raise_only: [high_risk]
     description: Risk class of an antivirus or EDR detection from its class and name together. Test files (EICAR and similar) map to other, so they never close as low risk.
   control_action:
     reads:
@@ -137,6 +140,7 @@ alert_classes:
     - encrypted pending
     - justification pending
     - other
+    raise_only: [allowed, delivered, detected, alerted]
     description: What the reporting control did, normalized.
   web_category:
     reads:
@@ -170,6 +174,7 @@ alert_classes:
     - unrated
     - not rated
     - other
+    raise_only: [malware, malicious, phishing, 'command and control', botnet, spyware, cryptomining, 'newly registered', parked, 'dynamic dns']
     description: Normalized web-filtering category. Onboarding maps each product's category list onto these.
   ids_class:
     reads:
@@ -198,6 +203,7 @@ alert_classes:
     - malware-cnc
     - exploit
     - other
+    raise_only: ['attempted-admin', 'attempted-user', 'successful-admin', 'successful-user', 'web-application-attack', 'shellcode-detect', 'trojan-activity', 'exploit-kit', 'command-and-control', 'malware-cnc', exploit]
     description: Normalized intrusion-detection signature class.
   http_status_class:
     reads:
@@ -209,6 +215,7 @@ alert_classes:
     - server_error
     - other
     default: other
+    raise_only: [success]
     description: HTTP status class of the application's answer.
   user_agent_class:
     reads:
@@ -217,6 +224,7 @@ alert_classes:
     - browser
     - other
     default: other
+    raise_only: []
     description: Whether the user agent is a mainstream browser; scripts, tools and empty values are other.
   severity:
     reads:
@@ -229,6 +237,7 @@ alert_classes:
     - critical
     - other
     default: other
+    raise_only: [high, critical]
     description: Normalized severity the reporting control assigned.
   device_event:
     reads:
@@ -238,6 +247,7 @@ alert_classes:
     - write
     - other
     default: other
+    raise_only: []
     description: 'Device-control event type: a device connection, or data written to the device.'
   device_type:
     reads:
@@ -251,6 +261,7 @@ alert_classes:
     - composite
     - network adapter
     - other
+    raise_only: []
     description: Normalized device class.
 
 capabilities:
@@ -287,7 +298,7 @@ capabilities:
   source_authority:
     authoritative: derived
     fallback: []
-  notes: No broker call of its own; counted against the call budget like Q0, conservatively.
+  notes: No broker call of its own; does not count against the call budget (our own cached context). If the result depends on an unknown context answer it answers unknown and flags (context_unknown).
 - name: case.open
   kind: lookup
   group: context
@@ -649,13 +660,14 @@ capabilities:
     - pre_execution
     - ran
     - unknown
+    raise_only: [ran]
   measures: Whether the detected file was stopped before it ran, from the endpoint product's own record of the alert. The broker finds the vendor's alert by vendor_alert_id; if that is missing, by endpoint_device
     (or host), file hash and a time window of match_window_minutes around at_time. No match, or more than one, answers unknown. The vendor's run-status values map through its API value table (bank/recipes/value_tables/,
     source edr_api).
   rating_floor: low
   escalate_only: false
-  notes: 'The SIEM''s copy of the alert (for example an endpoint event log) is a fallback only, used when the API is unavailable or not granted: an unverified fallback row can only raise (ran stays ran),
-    and pre_execution from the fallback counts only from a verified row; otherwise unknown.'
+  notes: 'The SIEM''s copy of the alert (for example an endpoint event log) is a fallback only, used when the API is unavailable or not granted: its answers are raise-only (ran stands;
+    pre_execution becomes unknown, verified or not), and so are answers from unverified rows of the API table.'
   source_authority:
     authoritative: edr_api
     fallback:

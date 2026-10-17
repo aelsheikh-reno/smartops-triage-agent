@@ -8,6 +8,7 @@
 vendor: Microsoft
 product: Defender Antivirus
 source: siem_copy
+fallback: true
 answers: endpoint.run_status
 fallback_for: microsoft-defender-for-endpoint
 feed: 'Windows event log, events 1116 (detection) and 1117 (action taken), Action Name. The SIEM''s copy of the endpoint''s events: a fallback, used only when the Defender API is unavailable or not granted.'

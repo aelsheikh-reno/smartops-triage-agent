@@ -11,7 +11,9 @@ feeds:
 attacker_influence:
   rating: low
   reason: Identity data; changing it needs directory rights.
-when_not_answered: The user is treated as privileged for the window.
+when_not_answered: 'Unknown or source unavailable: priority is not raised for the user; no close depends on it. Recorded as context_unknown (C-07). It never escalates.'
+on_unknown: flag
+unknown_reason: context_unknown
 source:
 - docs/intake/context-questions.md
 - docs/design-decisions.md §5

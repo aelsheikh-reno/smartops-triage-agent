@@ -2,6 +2,7 @@
 import glob
 import os
 import re
+import sys
 
 import yaml
 
@@ -87,6 +88,32 @@ def flows(b):
         yield "rule", d
     for t in b["techniques"].values():
         yield "technique", t
+
+
+# Batches the gates run over. No batch argument means every batch; an unknown name is an error, never "nothing to check".
+BATCHES = {"escu": "rule-level detections from the public rule library (escu:)",
+           "vendor": "generic vendor-alert families (vendor:)",
+           "technique": "technique fallbacks (ATT&CK technique IDs)"}
+
+
+def batch_of(level, flow_id):
+    return "technique" if level == "technique" else flow_id.split(":", 1)[0]
+
+
+def select_batches(args):
+    """Batch names from the command line: none means all; an unknown name exits 2 naming the known ones."""
+    unknown = [a for a in args if a not in BATCHES]
+    if unknown:
+        sys.exit(f"unknown batch {', '.join(unknown)}: expected one of {', '.join(BATCHES)} (or none for all)")
+    return set(args) or set(BATCHES)
+
+
+def require_loaded(gate, **counts):
+    """A gate that loaded nothing has checked nothing: fail, saying what it expected to load."""
+    empty = [k for k, v in counts.items() if not v]
+    if empty:
+        sys.exit(f"FAIL {gate}: loaded 0 {', 0 '.join(empty)}; expected at least one of each "
+                 f"(loaded: {', '.join(f'{k}={v}' for k, v in counts.items())})")
 
 
 def walk_refs(obj):
@@ -179,9 +206,11 @@ LOCAL_KINDS = {"alert"}   # answered from the normalized alert (source: alert): 
 
 
 def is_local(b, qid):
-    """No call budget: answered from the normalized alert, or from the platform's own context store (cached per entity, like context questions)."""
+    """No call budget: the budget counts calls to outside tools only (scope.budget_counts_sources). The normalized alert,
+    our cached context and list store, case memory and rules over cached context answers are our own and do not count."""
     cap = b["capability_by_name"].get(b["questions"][qid]["capability"]["name"], {})
-    return cap.get("kind") in LOCAL_KINDS or (cap.get("source_authority") or {}).get("authoritative") == "context_store"
+    outside = set(b["capabilities"]["scope"].get("budget_counts_sources") or [])
+    return cap.get("kind") in LOCAL_KINDS or (cap.get("source_authority") or {}).get("authoritative") not in outside
 
 
 def guard_requires_yes(g):
@@ -343,14 +372,19 @@ def apply_rule(b, rule, value, atype, detection=None):
 
 
 def context_rule(b, rule, answers):
-    """Evaluate a Triage-side rule over cached context answers ({"C-06": False, "C-08": "workstation"}).
-    A context question with no answer takes its unanswered_value, which always raises scrutiny."""
+    """Evaluate a Triage-side rule over cached context answers ({"C-06": False, "C-08": "workstation"}), in three values:
+    True, False, or None when the result depends on a context answer that is unknown (missing, or None for source unavailable).
+    None makes the step or guard answer unknown, which flags (context_unknown); missing context never escalates."""
     if "any" in rule:
-        return any(context_rule(b, r, answers) for r in rule["any"])
+        got = [context_rule(b, r, answers) for r in rule["any"]]
+        return True if True in got else (None if None in got else False)
     if "all" in rule:
-        return all(context_rule(b, r, answers) for r in rule["all"])
+        got = [context_rule(b, r, answers) for r in rule["all"]]
+        return False if False in got else (None if None in got else True)
     (cid, want), = rule.items()
-    got = answers.get(cid, b["context_questions"][cid].get("unanswered_value"))
+    got = answers.get(cid)
+    if got is None or got == "unknown":
+        return None
     if isinstance(want, dict) and "in" in want:
         return got in want["in"]
     return got == want
@@ -397,20 +431,44 @@ def kth_lowest_weekly_hosts(weekly_hosts, of_weeks, min_weeks):
     return weeks[of_weeks - min_weeks]
 
 
+def class_values(b, cls, answers=None):
+    """(values, raise_only) of an alert class, or of the enum a value table answers (endpoint.run_status)."""
+    spec = b["capability_by_name"][answers]["answer"] if answers else b["capabilities"]["alert_classes"][cls]
+    return spec["values"], set(spec.get("raise_only") or [])
+
+
+def raise_only(b, cls, value, row, answers=None):
+    """The raise-only rule: an answer read from an unverified value-table row, or from a fallback source's table,
+    stands only if it can only raise scrutiny (raise_only: ran, high risk, a malicious category). Anything that
+    could lead to a close (pre_execution, low risk, blocked, a benign category) becomes unknown: None, the status
+    unknown, so the step follows on_unknown whatever its rule says. A class default (no row matched) is the bank's
+    own value, not a vendor reading, and stands."""
+    if row is None or value == "unknown":
+        return value
+    _, ro = class_values(b, cls, answers)
+    table = b["value_tables"].get(row.get("table"), {})
+    if value in ro or (row.get("verified") and not table.get("fallback")):
+        return value
+    return None
+
+
+def classify_effective(b, cls, values, product_tables=(), answers=None):
+    v, row = classify(b, cls, values, product_tables, answers=answers)
+    return raise_only(b, cls, v, row, answers), row
+
+
 def run_status(b, api, siem_copy):
     """endpoint.run_status as the Tool Broker answers it.
     api: None when the endpoint API is unavailable or not granted; otherwise {"tables": [...], "matches": [raw evidence dicts]}
          (an empty or multiple match list answers unknown). siem_copy: {"tables": [...], "raw": {...}} or None.
-    Returns (value, source). The API is authoritative; the SIEM copy is a fallback whose unverified rows can only raise:
-    pre_execution from the fallback counts only from a verified row, otherwise unknown."""
+    Returns (value, source). The API is authoritative; the SIEM copy is a fallback. Both go through the raise-only rule:
+    pre_execution counts only from a verified row of the API table; a fallback answer never supports a close."""
     if api is not None:
         if len(api.get("matches") or []) != 1:
             return "unknown", "edr_api"
-        v, _ = classify(b, "run_status", api["matches"][0], api.get("tables") or [], answers="endpoint.run_status")
-        return v, "edr_api"
+        v, _ = classify_effective(b, "run_status", api["matches"][0], api.get("tables") or [], answers="endpoint.run_status")
+        return v or "unknown", "edr_api"
     if siem_copy:
-        v, row = classify(b, "run_status", siem_copy.get("raw") or {}, siem_copy.get("tables") or [], answers="endpoint.run_status")
-        if v == "pre_execution" and not (row and row.get("verified")):
-            return "unknown", "siem_copy"
-        return v, "siem_copy"
+        v, _ = classify_effective(b, "run_status", siem_copy.get("raw") or {}, siem_copy.get("tables") or [], answers="endpoint.run_status")
+        return v or "unknown", "siem_copy"
     return None, None

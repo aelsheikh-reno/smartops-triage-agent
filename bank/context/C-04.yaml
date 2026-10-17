@@ -13,7 +13,9 @@ feeds:
 attacker_influence:
   rating: low
   reason: Recorded closes; Q0's own rating follows the detection's fingerprint fields.
-when_not_answered: Q0 does not close.
+when_not_answered: 'Unknown or source unavailable: Q0 cannot close (it answers unknown and the flow continues); the other closes do not depend on it. Recorded as context_unknown (C-04). It never escalates.'
+on_unknown: flag
+unknown_reason: context_unknown
 source:
 - docs/intake/context-questions.md
 - docs/design-decisions.md §5

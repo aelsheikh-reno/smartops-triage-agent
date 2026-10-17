@@ -22,6 +22,10 @@ Template kinds (§10):
 - **API**: a typed template against a tool's API.
 - **alert source**: the normalized alert itself, through a value table (`bank/recipes/value_tables/`); no tool call and outside the call budget.
 
+Call budget (design-decisions §9, `scope` in `bank/capabilities.yaml`): at most 6 calls per alert on the worst path (Q0, the steps and the guards of the closing step). It counts calls to outside tools only: the SIEM, the EDR, identity, email, threat intel, change and ticketing, the vulnerability scanner and SOAR (`budget_counts_sources`). Lookups in our own cached context and list store do not count (`list.lookup`, context questions), nor do the alert source, case memory (`precedent.check`) and `context.rule`. The flow limit is separate and unchanged: at most 5 steps, Q0 being step 1, enforced by `validate`.
+
+Raise-only answers: an answer from a fallback source, or from an unverified value-table row, may only raise scrutiny. Each class lists its `raise_only` values (ran, high risk, malicious categories); any other value from such a row or source answers unknown.
+
 Every event-search recipe also runs a data-recency test: the data source must show events within the expected ingestion delay, so an empty result is never read as "no".
 
 ---
@@ -180,7 +184,7 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 
 ## endpoint.run_status
 - **Measures:** whether the detected file was stopped before it ran: pre_execution, ran or unknown, from the endpoint product's own record of the alert.
-- **Source authority:** the endpoint product's API (for Defender, the alert evidence in its security API). The broker finds the product's alert by `reporting_control.vendor_alert_id`; if that is missing, by `reporting_control.endpoint_device`, file hash and `edr_alert_match_window_minutes` (default 10, min 1, max 60). No match or several matches answer unknown. Fallback, only when the API is unavailable or not granted: the SIEM's copy of the product's alert, through its `siem_copy` value table; it answers unknown unless the matching row is verified pre_execution (none is today).
+- **Source authority:** the endpoint product's API (for Defender, the alert evidence in its security API). The broker finds the product's alert by `reporting_control.vendor_alert_id`; if that is missing, by `reporting_control.endpoint_device`, file hash and `edr_alert_match_window_minutes` (default 10, min 1, max 60). No match or several matches answer unknown. Fallback, only when the API is unavailable or not granted: the SIEM's copy of the product's alert, through its `siem_copy` value table; its answers are raise-only: ran stands, pre_execution becomes unknown, verified or not. Unverified rows of the API table are raise-only too.
 - **Triage rule:** the step's enum rule (Q-0049: pre_execution means yes, unknown means unknown).
 - **Template kind:** API lookup, with the run-status value table in the API recipe.
 - **Known-answer tests:** known prevented, blocked, quarantined and detected alerts return pre_execution, ran, unknown and ran (#20 for Defender, #9 for CrowdStrike).
@@ -189,8 +193,8 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Owner:** endpoint specialist.
 
 ## context.rule
-- **Measures:** nothing new. The Triage agent applies a fixed rule (`context_rule` on the question) to cached context answers. Q-0067 reads C-06 (crown jewel) and C-08 (asset class): yes when C-06 is yes or C-08 is server. An unanswered context question takes its `unanswered_value`, which raises.
-- **Template kind:** none; no tool call. It is counted against the call budget conservatively.
+- **Measures:** nothing new. The Triage agent applies a fixed rule (`context_rule` on the question) to cached context answers. Q-0067 reads C-06 (crown jewel) and C-08 (asset class): yes when C-06 is yes or C-08 is server. An unknown context answer never takes a worst-case value.
+- **Template kind:** none; no tool call, so it does not count against the call budget (the budget counts outside tools only). Three-valued: if the result depends on an unknown context answer, it answers unknown and flags (`context_unknown`).
 - **Owner:** Triage agent.
 
 ## vuln.not_applicable

@@ -11,8 +11,9 @@ feeds:
 attacker_influence:
   rating: low
   reason: Asset data maintained by the customer.
-when_not_answered: The entity is treated as a server for the window.
-unanswered_value: server
+when_not_answered: 'Unknown or source unavailable: Q-0067 flags with reason context_unknown (C-08); the entity guard uses the global defaults (entity_guard_min_alerts, entity_guard_min_detections, entity_grouping_window_minutes). It never escalates.'
+on_unknown: flag
+unknown_reason: context_unknown
 source:
 - docs/intake/context-questions.md
 - docs/design-decisions.md §5

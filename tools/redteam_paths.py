@@ -20,7 +20,7 @@ It is also checked under the fingerprint_fallback profile: a detection whose fin
 fall back (for example asset ID to hostname) rates Q0 at its fallback rating; precedent closes that
 lose their none/low yes are reported as closes that flag when the fallback is used.
 
-Usage: tools/redteam_paths.py [--quiet] [ids...]   exit 1 on any failing path
+Usage: tools/redteam_paths.py [--quiet] [batch ...]   exit 1 on any failing path, an unknown batch, or 0 flows loaded
 """
 import os
 import sys
@@ -45,13 +45,14 @@ def check(b, d, profile="direct"):
 
 def main():
     quiet = "--quiet" in sys.argv
-    only = [a for a in sys.argv[1:] if not a.startswith("--")]
+    batches = B.select_batches([a for a in sys.argv[1:] if not a.startswith("--")])
     b = B.load()
-    n_paths = n_fail = 0
+    n_flows = n_paths = n_fail = 0
     failing, forwarded, fallback = {}, {}, {}
     for level, d in B.flows(b):
-        if only and not any(d["id"].startswith(o) for o in only):
+        if B.batch_of(level, d["id"]) not in batches:
             continue
+        n_flows += 1
         for ok, path, outcome, yes in check(b, d):
             n_paths += 1
             if not ok:
@@ -77,8 +78,9 @@ def main():
         print("Closes that become flags when the fingerprint falls back (Q0 at its fallback rating):")
         for did, n in sorted(fallback.items()):
             print(f"  {did}: {n}")
+    B.require_loaded(f"attacker influence ({', '.join(sorted(batches))})", flows=n_flows, close_paths=n_paths)
     if not quiet or failing:
-        print(f"\n{n_paths} close paths checked, {n_fail} failing, in {len(failing)} flows; "
+        print(f"\n{n_flows} flows, {n_paths} close paths checked, {n_fail} failing, in {len(failing)} flows; "
               f"{sum(forwarded.values())} closes flag under the forwarded profile, {sum(fallback.values())} under fingerprint fallback")
     return 1 if n_fail else 0
 

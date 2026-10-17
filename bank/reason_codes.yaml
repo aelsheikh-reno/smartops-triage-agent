@@ -119,6 +119,9 @@ reason_codes:
 - code: no_data_transferred
   disposition: benign_true_positive
   description: Device connected; the control recorded zero files written.
+- code: context_unknown
+  disposition: flag
+  description: A context question (C-01…C-08) the outcome depends on is unknown or its source is unavailable. The alert cannot close on anything that depends on it and flags; the flag names the C-ID. Missing context never escalates by itself.
 - code: entity_missing
   disposition: flag
   description: A role the detection requires (required_roles, or the precedent entity) could not be filled by the normalizer. The alert flags, and the normalizer opens a fix ticket for the rule's entity mapping or field extraction. It never guesses an entity.

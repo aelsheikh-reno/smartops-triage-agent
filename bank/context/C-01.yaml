@@ -11,7 +11,9 @@ feeds:
 attacker_influence:
   rating: none
   reason: Case records the activity cannot touch.
-when_not_answered: 'The entity cannot be ruled out: every close on it flags.'
+when_not_answered: 'Unknown or source unavailable: the entity cannot be ruled out, so no alert on it closes. Every close becomes a flag with reason context_unknown (C-01). It never escalates.'
+on_unknown: flag
+unknown_reason: context_unknown
 source:
 - docs/intake/context-questions.md
 - docs/design-decisions.md §5

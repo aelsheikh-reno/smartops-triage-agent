@@ -21,7 +21,7 @@ wording against them.
 
 Only `pre_execution` may close, and only for low-risk classes. `ran` escalates; `unknown` flags.
 
-This is no longer an alert class: the answer comes from the endpoint product's API, the authoritative source (`docs/broker-questions.md`, Source authority). The broker finds the product's alert by the vendor alert ID, else by device, file hash and a bounded window; no match or several answer unknown. The SIEM's copy of the alert is a fallback only (tables with `source: siem_copy`), used when the API is unavailable or not granted; it answers unknown unless the matching row is verified pre_execution, and none is today.
+This is no longer an alert class: the answer comes from the endpoint product's API, the authoritative source (`docs/broker-questions.md`, Source authority). The broker finds the product's alert by the vendor alert ID, else by device, file hash and a bounded window; no match or several answer unknown. The SIEM's copy of the alert is a fallback only (tables with `source: siem_copy`), used when the API is unavailable or not granted; its answers are raise-only: "ran" stands, pre_execution becomes unknown, verified or not (`fallback: true`). The same raise-only rule applies to every unverified row in every table: until onboarding verifies a row, an answer from it that could lead to a close is unknown.
 
 | Table (source) | Raw value | Class value | Verified |
 |---|---|---|---|

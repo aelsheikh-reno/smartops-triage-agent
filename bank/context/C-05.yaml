@@ -10,7 +10,9 @@ feeds:
 attacker_influence:
   rating: low
   reason: Asset data maintained by the customer.
-when_not_answered: The asset is treated as critical for the window.
+when_not_answered: 'Unknown or source unavailable: priority stays at the SIEM''s own urgency (not raised), and no close that depends on asset priority (Auto autonomy, §19) stands: it becomes a flag with reason context_unknown (C-05). It never escalates.'
+on_unknown: flag
+unknown_reason: context_unknown
 source:
 - docs/intake/context-questions.md
 - docs/design-decisions.md §5

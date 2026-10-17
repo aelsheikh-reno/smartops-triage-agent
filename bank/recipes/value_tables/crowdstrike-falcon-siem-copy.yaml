@@ -8,6 +8,7 @@
 vendor: CrowdStrike
 product: Falcon (SIEM copy)
 source: siem_copy
+fallback: true
 answers: endpoint.run_status
 fallback_for: crowdstrike-falcon
 feed: 'Falcon detections as copied into the SIEM (same PatternDispositionDescription wording): a fallback, used only when the CrowdStrike API is unavailable or not granted.'

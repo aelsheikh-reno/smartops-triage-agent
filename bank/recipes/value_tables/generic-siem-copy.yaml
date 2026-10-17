@@ -8,6 +8,7 @@
 vendor: any
 product: any (SIEM copy)
 source: siem_copy
+fallback: true
 answers: endpoint.run_status
 scope: generic
 feed: 'Normalized run-status names any product''s alert may carry in the SIEM: a fallback only (unverified rows can only raise).'

@@ -222,6 +222,9 @@ def main():
     known_sources, siem_ok = set(sa_doc.get("sources") or {}), set(sa_doc.get("siem_authoritative_only_for") or [])
     if not sa_doc.get("principle") or not known_sources:
         err("bank/capabilities.yaml source_authority", "needs the principle and the list of sources")
+    outside = set(b["capabilities"]["scope"].get("budget_counts_sources") or [])
+    if not outside or outside - known_sources or outside & {"alert", "context_store", "case_memory", "derived"}:
+        err("bank/capabilities.yaml scope", "budget_counts_sources lists the outside tools the call budget counts (sources from source_authority.sources; never our own stores)")
     for name, c in caps.items():
         w = f"bank/capabilities.yaml {name}"
         sa = c.get("source_authority") or {}
@@ -381,6 +384,13 @@ def main():
         err("bank/context", f"context questions must be exactly {', '.join(want_c)}")
     for cid, q in b["context_questions"].items():
         check_question(cid, q, True)
+        w = q["_file"]
+        if q.get("on_unknown") != "flag" or q.get("unknown_reason") != "context_unknown":
+            err(w, "missing context never closes and never escalates: on_unknown: flag, unknown_reason: context_unknown")
+        if "unanswered_value" in q or re.search(r"treated as|counts as", str(q.get("when_not_answered")), re.I):
+            err(w, "no worst-case default for unknown context (treated as / counts as): it flags with context_unknown")
+    if (b["reason_codes"].get("context_unknown") or {}).get("disposition") != "flag":
+        err("bank/reason_codes.yaml", "context_unknown must exist with disposition flag")
     # context rules: every referenced question and parameter exists
     cr = b["context_rules"] or {}
     for sect in ("entity_guard", "q0", "priority", "q0067"):
@@ -486,6 +496,21 @@ def main():
                     err(w, f"{cname} row {i}: needs a match")
                 if r.get("verified") is False and not generic:
                     unverified_classes.setdefault(cname, []).append(f"{t.get('vendor')} {t.get('product')}")
+    for cname, cdef in list(classes.items()) + [("run_status (endpoint.run_status)", caps.get("endpoint.run_status", {}).get("answer", {}))]:
+        if "raise_only" not in cdef or not set(cdef.get("raise_only") or []) <= set(cdef.get("values") or []):
+            err(f"bank/capabilities.yaml {cname}", "declare raise_only: the values that can only raise scrutiny (they stand from a fallback or unverified row; every other value becomes unknown)")
+    n_downgraded = 0
+    for tname, t in b["value_tables"].items():
+        if bool(t.get("fallback")) != (t.get("source") == "siem_copy"):
+            err(t["_file"], "a table whose source is a fallback (siem_copy) declares fallback: true, and only such a table")
+        for cname, spec in (t.get("classes") or {}).items():
+            for r in spec.get("rows") or []:
+                try:
+                    eff = B.raise_only(b, cname, r.get("value"), dict(r, table=tname), t.get("answers"))
+                except KeyError:
+                    continue
+                n_downgraded += eff != r.get("value")
+    info.append(f"raise-only rule: {n_downgraded} value-table rows answer unknown until verified (unverified or fallback rows whose value could lead to a close)")
     for tname, t in b["value_tables"].items():
         if t.get("source") == "siem_copy" and t.get("fallback_for") and t["fallback_for"] not in b["value_tables"]:
             err(t["_file"], f"fallback_for {t['fallback_for']} is not a value table")
@@ -672,6 +697,22 @@ def main():
             for path, problem in scan_fields({k: v for k, v in item.items() if k not in ("guards",)}, ""):
                 err(where, f"{problem} at {path}")
 
+        def raise_values(item, q):
+            """(class, answer per raise-only value) for a step or guard that reads an alert class or endpoint run status."""
+            name = q["capability"]["name"]
+            if name not in ("alert.class", "endpoint.run_status") or not item.get("rule"):
+                return None, {}
+            cls, answers = (B.step_inputs(q, item).get("class"), None) if name == "alert.class" else ("run_status", name)
+            try:
+                _, ro = B.class_values(b, cls, answers)
+                return cls, {v: B.apply_rule(b, item["rule"], v, "enum", d) for v in ro}
+            except (KeyError, ValueError):
+                return cls, {}
+
+        def reads_context(q):
+            c = caps.get(q["capability"]["name"], {})
+            return c.get("kind") == "derived" or c.get("group") == "context"
+
         for n, st in enumerate(flow, 1):
             where = f"{w} step {n}"
             if st.get("step") != n:
@@ -681,6 +722,12 @@ def main():
                 err(where, f"unknown question {st.get('question')}")
                 continue
             check_item(where, st, q)
+            cls, ans = raise_values(st, q)
+            for v, a in ans.items():
+                if B.outcome_kind(st.get(f"on_{a}", "")) == "close":
+                    err(where, f"{q['id']}: {cls} value {v} is raise-only (it may come from a fallback or unverified row) but leads to a close")
+            if reads_context(q) and B.outcome_kind(st.get("on_unknown", "")) == "escalate":
+                err(where, f"{q['id']} reads context: an unknown context answer flags (context_unknown), it never escalates")
             if n == 1:
                 want, got = B.q0_rating(d), (st.get("attacker_influence") or {}).get("rating")
                 if q["id"] != "Q-0000":
@@ -704,6 +751,12 @@ def main():
                     err(gw, "unknown question")
                     continue
                 check_item(gw, gd, gq)
+                gcls, gans = raise_values(gd, gq)
+                for v, a in gans.items():
+                    if "close" in kinds and a not in gd.get("when", ["yes"]) and a != "unknown":
+                        err(gw, f"{gq['id']}: {gcls} value {v} is raise-only but leaves the close standing (the guard must fire on it)")
+                if reads_context(gq) and "unknown" in (gd.get("when") or []) and gd.get("then") == "escalate":
+                    err(gw, f"{gq['id']} reads context: an unknown context answer flags (context_unknown), it never escalates")
                 if gd.get("then") not in ("flag", "escalate"):
                     err(gw, "then must be flag or escalate")
                 applies = gd.get("applies_to", ["close"])
@@ -844,6 +897,7 @@ def main():
     print(f"\n{len(b['detections'])} detections, {len(b['techniques'])} technique fallbacks, {len(b['questions'])} questions, "
           f"{len(b['context_questions'])} context questions, {len(b['facts'])} context facts, {len(caps)} capabilities, "
           f"{len(b['parameters'])} parameters, {len(b['value_tables'])} value tables: {len(errors)} errors, {len(warnings)} warnings")
+    B.require_loaded("validate", detections=len(b["detections"]), flows=sum(1 for _ in B.flows(b)), questions=len(b["questions"]))
     return 1 if errors else 0
 
 

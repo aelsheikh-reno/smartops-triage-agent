@@ -588,15 +588,17 @@ def proof_record(b, pid):
 
 
 def path_proven(b, d, pid):
-    """A close path is proven when a reviewed record covers its current ID and the detection's true-positive replay meets
-    the bar (bank/contract/proof.yaml proven_when): at least proof_min_tp_events events, none closed on this path, and at
-    least one passing regression case aimed at it. b["replay_coverage"] is the replay gate's per-path report."""
-    if not proof_record(b, pid):
+    """A close path is proven when a reviewed record covers its current ID, the detection's true-positive replay meets the
+    floor (bank/contract/proof.yaml proven_when: at least proof_min_tp_events events, none closed on this path), and every
+    aimed case the record lists passed (flag or escalate in every mode). b["replay_coverage"] is the replay gate's report."""
+    rec = proof_record(b, pid)
+    if not rec or not rec.get("aimed_cases"):
         return False
     cov = ((b.get("replay_coverage") or {}).get("detections") or {}).get(d["id"]) or {}
     need = float(param_value(b, "proof_min_tp_events", d))
     on_path = (cov.get("paths") or {}).get(pid) or {}
-    return cov.get("tp_events", 0) >= need and on_path.get("closes", 0) == 0 and bool((cov.get("aimed") or {}).get(pid))
+    aimed = cov.get("aimed") or {}
+    return cov.get("tp_events", 0) >= need and on_path.get("closes", 0) == 0 and all(aimed.get(c) == "pass" for c in rec["aimed_cases"])
 
 
 def _run_flow(b, d, n, ctx):

@@ -73,9 +73,7 @@ def with_customer(b, case):
     return bb
 
 
-def run_regression(b, batches, aimed=None):
-    """Run the regression cases. A case that names aims_at (path IDs whose yes answers it attacks) and passes is recorded in
-    aimed[detection][path ID] for the per-path coverage report."""
+def run_regression(b, batches):
     failures, n = [], 0
     for case in load_cases("cases"):
         did = case["detection"]
@@ -105,9 +103,35 @@ def run_regression(b, batches, aimed=None):
         print(f"  {'ok  ' if ok else 'FAIL'} {did}: {case['name']} -> {out}  [{' > '.join(trail)}]")
         if not ok:
             failures.append(case["name"])
-        elif aimed is not None:
-            for pid in case.get("aims_at") or []:
-                aimed.setdefault(did, {}).setdefault(pid, []).append(case["name"])
+    return failures, n
+
+
+AIMED_MODES = ("shadow", "recommend", "auto")
+
+
+def run_aimed(b, batches, aimed):
+    """Aimed cases (bank/contract/proof.yaml aimed_case): each is built to satisfy exactly one proof record's path group yes
+    answers, and passes only if it ends in flag or escalate in Shadow, Recommend and Auto, never close. Results go to
+    aimed[detection][case file name] = pass | fail, for the per-path coverage report."""
+    failures, n = [], 0
+    for path in sorted(glob.glob(os.path.join(CASES, "D-*", "aimed", "*.yaml"))):
+        case = yaml.safe_load(open(path))
+        did, name = case["detection"], os.path.basename(path)[:-5]
+        if b["detections"][did]["family"] not in batches:
+            continue
+        n += 1
+        outs = {}
+        for mode in AIMED_MODES:
+            bb = with_customer(b, case)
+            cr = case_broker(bb, case, [], dict({"C-06": False}, **(case.get("context") or {})))
+            a = E.derive(bb["detections"][did], cr.register(dict(case["alert"], _idx=0)))
+            cr.case["alerts"] = [a]
+            outs[mode], _ = E.run_flow(bb, bb["detections"][did], a, {"answerer": cr, "mode": mode, "customer": cr.case["customer"]}, NOW)
+        ok = not any(o.startswith("close") for o in outs.values())
+        aimed.setdefault(did, {})[name] = "pass" if ok else "fail"
+        print(f"  {'ok  ' if ok else 'FAIL'} {did} aimed {name} (proof {case.get('proof')}): " + ", ".join(f"{m} {o}" for m, o in outs.items()))
+        if not ok:
+            failures.append(f"aimed {name}")
     return failures, n
 
 
@@ -229,7 +253,11 @@ def main():
         print("\nVulnerability step answered unknown (never closes): " + ", ".join(f"{k} {v}" for k, v in sorted(vuln_unknown.items())))
     print("\nRegression cases:")
     aimed = {}
-    reg_fail, n_cases = run_regression(b, batches, aimed)
+    reg_fail, n_cases = run_regression(b, batches)
+    print("\nAimed cases (each must flag or escalate in every mode):")
+    aim_fail, n_aimed = run_aimed(b, batches, aimed)
+    reg_fail += aim_fail
+    n_cases += n_aimed
     print("\nAlert sequences on one entity:")
     seq_fail, n_seq = run_sequences(b, batches)
     reg_fail += seq_fail
@@ -254,7 +282,7 @@ def main():
     for did, c in sorted(coverage_out.items()):
         closes = sum(p["closes"] for p in c["paths"].values())
         print(f"  {did}: {c['tp_events']} TP events over {len(c['paths'])} paths, {closes} closes, "
-              f"{sum(len(v) for v in (c.get('aimed') or {}).values())} aimed cases; "
+              f"{sum(1 for v in (c.get('aimed') or {}).values() if v == 'pass')} aimed cases passed; "
               f"{'meets' if c['tp_events'] >= need else 'below'} the {need}-event bar")
     os.makedirs(os.path.dirname(B.COVERAGE_REPORT), exist_ok=True)
     with open(B.COVERAGE_REPORT, "w") as fh:

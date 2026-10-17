@@ -95,18 +95,35 @@ def first_guard(d, qid):
                 return g
 
 
-def prove_all(root, did, events=20, status="reviewed", **rec):
-    """Plant reviewed proof records for every close path of one detection, and a replay coverage report that meets the bar."""
+def prove_all(root, did, events=5, status="reviewed", aimed="pass", **rec):
+    """Plant a reviewed proof record for every close path of one detection, its aimed case file, and a replay coverage
+    report that meets the floor (aimed = the aimed case's replay result)."""
     script = (
         "import sys, json, os, yaml; sys.path.insert(0, 'tools'); import bank as B; from engine import executor as E\n"
         f"b = B.load(); d = b['detections']['{did}']\n"
         "ids = [E.path_id(d, p) for p, o, g in E.enumerate_paths(d['flow']) if o.startswith('close')]\n"
         "os.makedirs('bank/triage/proofs', exist_ok=True); os.makedirs('build', exist_ok=True)\n"
-        f"rec = dict(id='PR-9001', paths=ids, attacker_position='selftest', why_unrealistic_or_guard='selftest', residual_risk='selftest', status='{status}', reviewer='soc lead', reviewed_on='2026-10-17')\n"
+        f"rec = dict(id='PR-9001', paths=ids, attacker_position='selftest', why_unrealistic_or_guard='selftest', residual_risk='selftest', aimed_cases=['selftest-aimed'], status='{status}', reviewer='soc lead', reviewed_on='2026-10-17')\n"
         f"rec.update({rec!r})\n"
         "yaml.safe_dump({'proofs': [rec]}, open('bank/triage/proofs/selftest.yaml', 'w'))\n"
-        f"json.dump({{'detections': {{'{did}': {{'tp_events': {events}, 'paths': {{}}, 'aimed': {{i: ['selftest'] for i in ids}}}}}}}}, open('build/replay_coverage.json', 'w'))\n")
+        f"os.makedirs('tests/cases/{did}/aimed', exist_ok=True)\n"
+        f"yaml.safe_dump(dict(detection='{did}', name='selftest-aimed', reason='selftest', proof='PR-9001', alert={{'host.name': 'h-1'}}), open('tests/cases/{did}/aimed/selftest-aimed.yaml', 'w'))\n"
+        f"json.dump({{'detections': {{'{did}': {{'tp_events': {events}, 'paths': {{}}, 'aimed': {{'selftest-aimed': '{aimed}'}}}}}}}}, open('build/replay_coverage.json', 'w'))\n")
     subprocess.run([sys.executable, "-c", script], cwd=root, check=True)
+
+
+def aimed_d6(overrides):
+    """Plant one aimed case for D-0006's step-2 close and the draft proof record it links to."""
+    def write(root):
+        proof_file([{"id": "PR-1", "paths": [D6_CLOSE], "attacker_position": "x", "why_unrealistic_or_guard": "x", "residual_risk": "x",
+                     "aimed_cases": ["selftest-aimed"], "status": "draft"}])(root)
+        os.makedirs(os.path.join(root, "tests/cases/D-0006/aimed"), exist_ok=True)
+        open(os.path.join(root, "tests/cases/D-0006/aimed/selftest-aimed.yaml"), "w").write(dump({
+            "detection": "D-0006", "name": "selftest-aimed", "reason": "selftest", "proof": "PR-1", "overrides": overrides,
+            "alert": {"host.name": "ws-07", "user.name": "admin1", "process.parent_name": "cmd.exe", "process.name": "psexec.exe",
+                      "process.sha256": "7" * 64, "process.command_line": "psexec.exe -accepteula \\\\srv-02 cmd",
+                      "event.time": "2026-10-17T08:00:00Z", "severity": "medium"}}))
+    return write
 
 
 def proof_file(recs):
@@ -339,8 +356,15 @@ CASES = [
      "does not exist in the current flows"),
     ("a draft proof does not make Auto eligible", "validate", lambda root: (customer({"D-0026": "auto"}, verify=AV_TABLES)(root), prove_all(root, "D-0026", status="draft")),
      "set to Auto with unproven close paths"),
-    ("a proof without enough replay does not make Auto eligible", "validate", lambda root: (customer({"D-0026": "auto"}, verify=AV_TABLES)(root), prove_all(root, "D-0026", events=19)),
+    ("a proof without enough replay does not make Auto eligible", "validate", lambda root: (customer({"D-0026": "auto"}, verify=AV_TABLES)(root), prove_all(root, "D-0026", events=4)),
      "set to Auto with unproven close paths"),
+    # Round 9: the proof floor and aimed cases.
+    ("a proof with no aimed case", "validate",
+     proof_file([{"id": "PR-1", "paths": [D6_CLOSE], "attacker_position": "x", "why_unrealistic_or_guard": "x", "residual_risk": "x", "aimed_cases": [], "status": "draft"}]),
+     "a proof record needs at least one aimed case"),
+    ("an aimed case that closes", "replay endpoint", aimed_d6({"Q-0001": True}), "FAIL D-0006 aimed selftest-aimed"),
+    ("a proof bar below the floor of 5", "validate", y("bank/contract/proof.yaml", lambda c: c["parameters"]["proof_min_tp_events"]["bounds"].update(min=4)),
+     "below the floor of 5"),
     ("a suggests value that isn't a real disposition", "validate",
      y(PSEXEC, lambda d: d["flow"][4].update(flag_suggests={"on_yes": {"suggests": "close:benign_true_positive:no_such_reason", "reason": "selftest"}})), "not a real close disposition"),
     ("a suggestion on an edge that is not a flag", "validate",

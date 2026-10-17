@@ -1223,6 +1223,19 @@ def main():
     all_ids = {E.path_id(d, path) for _, d in B.flows(b) for path, out, g in E.enumerate_paths(d["flow"])}
     if not pf.get("record") or set(pf.get("statuses") or []) != {"draft", "reviewed"} or "proof_min_tp_events" not in params:
         err("bank/contract/proof.yaml", "needs the record schema, statuses draft and reviewed, and the bounded parameter proof_min_tp_events")
+    bar = params.get("proof_min_tp_events") or {}
+    floor = ((pf.get("parameters") or {}).get("proof_min_tp_events") or {}).get("floor")
+    if floor != 5 or bar.get("default", 0) < 5 or (bar.get("bounds") or {}).get("min", 0) < 5:
+        err("bank/contract/proof.yaml", "proof_min_tp_events: default and lower bound must not be below the floor of 5 true-positive events (floor: 5)")
+    aimed_files = {}
+    for path in sorted(glob.glob(os.path.join(B.ROOT, "tests", "cases", "D-*", "aimed", "*.yaml"))):
+        case, w = yaml.safe_load(open(path)) or {}, os.path.relpath(path, B.ROOT)
+        for k in (pf.get("aimed_case") or {}).get("required") or []:
+            if not case.get(k):
+                err(w, f"aimed case missing {k}")
+        if case.get("detection") != os.path.basename(os.path.dirname(os.path.dirname(path))):
+            err(w, "an aimed case's detection must match its folder")
+        aimed_files[(case.get("detection"), os.path.basename(path)[:-5])] = case
     seen_ids = set()
     for rec in b.get("proofs") or []:
         w = f"{rec.get('_file')} {rec.get('id')}"
@@ -1236,11 +1249,24 @@ def main():
         if rec.get("id") in seen_ids:
             err(w, "duplicate proof record id")
         seen_ids.add(rec.get("id"))
+        if not rec.get("aimed_cases"):
+            err(w, "a proof record needs at least one aimed case (tests/cases/<D-ID>/aimed/)")
+        dids = {close_ids.get(pid) for pid in rec.get("paths") or []} - {None}
+        for name in rec.get("aimed_cases") or []:
+            hit = [aimed_files[(did, name)] for did in dids if (did, name) in aimed_files]
+            if not hit:
+                err(w, f"aimed case {name} not found under tests/cases/<D-ID>/aimed/ for this record's detections")
+            elif any(c.get("proof") != rec.get("id") for c in hit):
+                err(w, f"aimed case {name} must link back to this proof record (proof: {rec.get('id')})")
         for pid in rec.get("paths") or []:
             if pid not in all_ids:
                 err(w, f"path {pid} does not exist in the current flows (stale or mistyped)")
             elif pid not in close_ids:
                 err(w, f"path {pid} is not a close path")
+
+    for (did, name), case in aimed_files.items():
+        if case.get("proof") not in seen_ids:
+            err(f"tests/cases/{did}/aimed/{name}.yaml", f"links to proof {case.get('proof')!r}, which does not exist")
 
     # suggested dispositions a bank flag declares (flag_suggests on a step): a real close disposition, on a flag edge
     for _, d in B.flows(b):

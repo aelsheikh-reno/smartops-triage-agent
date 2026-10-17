@@ -22,7 +22,7 @@ def bank(flow, extra_questions=(), **detection):
                                   "defer_rule": {"max_wait_parameter": "defer_max_wait_seconds", "past_max_wait": "source_unavailable"}}},
         "parameters": {"question_timeout_seconds": {"default": 10}, "defer_max_wait_seconds": {"default": 300},
                        "entity_grouping_window_minutes": {"default": 10}, "triage_lookback_hours": {"default": 24},
-                       "min_alerts": {"default": 3}, "proof_min_tp_events": {"default": 20}},
+                       "min_alerts": {"default": 3}, "proof_min_tp_events": {"default": 5}},
         "overlays": {},
         "context_rules": {"q0": {"question": "P0", "yes_when": {"all": [{"C-04.audited": {"gte": 1}}, {"C-06": False}]}},
                           "closes_need_known": [{"question": "C-06", "reason": "context_unknown"}],
@@ -81,10 +81,11 @@ CLOSE_PATH = "SYN-1@vNone:1:P0=no > 2:X-1=yes"   # the synthetic detection has n
 
 
 def proof(status="reviewed", paths=(CLOSE_PATH,), **kw):
-    return dict({"id": "PR-1", "paths": list(paths), "status": status, "reviewer": "soc lead", "reviewed_on": "2026-10-17"}, **kw)
+    return dict({"id": "PR-1", "paths": list(paths), "aimed_cases": ["x-1-attack"], "status": status, "reviewer": "soc lead",
+                 "reviewed_on": "2026-10-17"}, **kw)
 
 
-COVERED = {"detections": {"SYN-1": {"tp_events": 20, "paths": {}, "aimed": {CLOSE_PATH: ["case aimed at X-1"]}}}}
+COVERED = {"detections": {"SYN-1": {"tp_events": 5, "paths": {}, "aimed": {"x-1-attack": "pass"}}}}
 
 
 def run_proven(flow, script, **kw):
@@ -242,11 +243,15 @@ class Proof(unittest.TestCase):
         self.assertEqual(run(self.flow, {"X-1": True}, mode="auto", proofs=[proof(reviewer="")], coverage=COVERED)[0], "flag")
 
     def test_proof_needs_the_replay_bar(self):
-        few = {"detections": {"SYN-1": {"tp_events": 19, "paths": {}, "aimed": {CLOSE_PATH: ["x"]}}}}
-        closed = {"detections": {"SYN-1": {"tp_events": 50, "paths": {CLOSE_PATH: {"events": 1, "closes": 1}}, "aimed": {CLOSE_PATH: ["x"]}}}}
+        few = {"detections": {"SYN-1": {"tp_events": 4, "paths": {}, "aimed": {"x-1-attack": "pass"}}}}
+        closed = {"detections": {"SYN-1": {"tp_events": 50, "paths": {CLOSE_PATH: {"events": 1, "closes": 1}}, "aimed": {"x-1-attack": "pass"}}}}
         unaimed = {"detections": {"SYN-1": {"tp_events": 50, "paths": {}, "aimed": {}}}}
-        for cov in (few, closed, unaimed):
+        aimed_closed = {"detections": {"SYN-1": {"tp_events": 50, "paths": {}, "aimed": {"x-1-attack": "fail"}}}}
+        for cov in (few, closed, unaimed, aimed_closed):
             self.assertEqual(run(self.flow, {"X-1": True}, mode="auto", proofs=[proof()], coverage=cov)[0], "flag")
+
+    def test_proof_without_aimed_cases_is_ignored(self):
+        self.assertEqual(run(self.flow, {"X-1": True}, mode="auto", proofs=[proof(aimed_cases=[])], coverage=COVERED)[0], "flag")
 
     def test_flags_made_from_closes_carry_the_suggestion(self):
         dec = {}

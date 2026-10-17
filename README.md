@@ -2,7 +2,7 @@
 
 Agents (see `docs/design-decisions.md` §7):
 - **Triage agent** (every alert): runs the fixed flow and applies thresholds; a local model writes the explanation and reviews closes (raise-only).
-- **Tool Broker** (every question): routes each question to a domain specialist and returns a measurement plus evidence.
+- **Tool Broker** (every question): the only way out to any tool, for every agent and model, and the only path for SIEM write-back; routes each question to a domain specialist and returns a typed answer with status and provenance.
 - **Domain specialists** (under the Tool Broker): endpoint, network, identity, email, threat intel and SIEM (one per SIEM); build recipes at onboarding and in Shadow, run them per question.
 - **Detection Engineer** (onboarding and rule change): works out what each detection is for; read-only for now.
 - **Use Case Manager** (continuously): keeps facts, lists, questions, runbooks and recipes current; proposes threshold changes.
@@ -18,7 +18,8 @@ Design, workflows and question bank for the SmartOps triage agent. The question 
 | `docs/design-decisions.md` | Settled design: triage method, boundaries, bank structure, storage, operating modes |
 | `docs/build-question-bank-prompt.md` | Brief for building the bank in a Claude Code session |
 | `docs/intake/normalized-alert-v1.md` | The SIEM-agnostic alert every normalizer produces, field by field |
-| `docs/intake/context-prefetch.md` | What the context prefetch puts in the Tool Broker's cache |
+| `docs/intake/context-questions.md` | The context questions C-01…C-07, asked once per entity through the Tool Broker |
+| `docs/broker-questions.md` | What may be asked of the Tool Broker, and which bank questions are context or triage |
 | `docs/reuse-map.md` | What is ported from smartops-soc-app (file and commit), and what is not |
 | `docs/assumptions.md` | Assumptions register: what the design depends on and how each is tested |
 | `docs/pilot-terms.md` | Proposed pilot terms |

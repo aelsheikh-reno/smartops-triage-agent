@@ -21,6 +21,8 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 - Runtime runs only frozen recipes; a live or unproven answer can only raise scrutiny.
 - Every parameter has bounds; removing scrutiny needs human approval.
 - Nothing in the triage layer or the shared bank assumes a specific SIEM, tool or field name.
+- One way in, one way out: alerts enter only through the normalizer; every tool read and every write-back goes through the Tool Broker. No agent or model calls a tool directly.
+- Every broker question has a bank ID, a fixed answer type, a status and provenance, and no threshold.
 - Decisions are per alert; work, caching and the entity guard are per entity.
 - An entity the normalizer can't fill flags, with a fix ticket; never guess.
 - The promotion gate is the audited false-close rate, never agreement.

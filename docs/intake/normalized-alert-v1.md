@@ -1,6 +1,6 @@
 # Normalized alert v1
 
-Status: (designed, not built). This is the contract between the per-SIEM normalizers and the Triage agent (`docs/design-decisions.md` §4). Nothing downstream of the normalizer reads a SIEM's own field names.
+Status: (designed, not built). This is the contract between the per-SIEM normalizers (the only way in, §4) and the Triage agent (`docs/design-decisions.md` §4). Nothing downstream of the normalizer reads a SIEM's own field names.
 
 Base: smartops-soc-app `context_service/templates/normalized_seed.py`, branch `feature/normalized-seed-template`, commit `062d456`. All of the seed's sections and fields are kept unchanged. Fields marked **added for triage** are new in v1.
 
@@ -49,7 +49,7 @@ One object per role. The Triage agent, the entity guard and the cache key on the
 |---|---|---|---|---|
 | `roles.host.name` | string | per detection | added for triage | Filled from `entities.hostname`, `entities.host` or `endpoint.device_name`. |
 | `roles.host.asset_id` | string | per detection | added for triage | Resolved through the customer's asset inventory. Phase 0 requires ≥90% of alerts to resolve to an asset with a priority (§11). The entity key for host grouping (§6). |
-| `roles.host.asset_priority` | string | no | added for triage | From the context prefetch (§5), not the SIEM. |
+| `roles.host.asset_priority` | string | no | added for triage | From context question C-05 (§5), through the Tool Broker, not from the SIEM alert. |
 | `roles.user.name` | string | per detection | added for triage | Normalized as `domain\name` or UPN, one form per customer. |
 | `roles.user.identity_id` | string | per detection | added for triage | Resolved through the identity source. The entity key for user grouping. |
 | `roles.src.ip` | string | per detection | added for triage | |

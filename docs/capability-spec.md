@@ -4,6 +4,8 @@ Status: (designed, not built). The capabilities, measurements and Triage-side ru
 
 One entry per capability in `bank/capabilities.yaml`. The list is the batch-1 set (PR #6), which adds `alert.field`, `url.reputation`, `vuln.not_applicable`, `email.*`, `traffic.denied_only`, `alert.history` and `scan.job_active` to the pilot set.
 
+What may be asked of the broker at all (bank IDs, answer types, status and provenance, no thresholds, scope profiles), and which capabilities are context or triage questions: `docs/broker-questions.md`.
+
 Each capability is split between the two sides of the broker (design-decisions §9):
 - **Measures** is what the Tool Broker returns, with evidence.
 - **Triage rule** is how the Triage agent turns that measurement into yes, no or unknown. Its threshold comes from the parameter table (§13).

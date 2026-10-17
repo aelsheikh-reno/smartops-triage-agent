@@ -19,5 +19,5 @@ license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 2
-notes: Penetration-test and QA engagements are recorded as approved changes naming the tester's source address.
+version: 3
+notes: Penetration-test, red-team and QA engagements must be logged as approved changes naming the tester's source addresses (onboarding checklist); otherwise alerts from approved testers flag.

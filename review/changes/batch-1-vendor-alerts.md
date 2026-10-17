@@ -49,12 +49,13 @@ Applied from the decisions and the external review (first review of draft PR #6)
 | #6 AV fingerprint | The fingerprint and precedent entity use `dest_asset_id`. Without it they fall back to `dest`, and Q0 drops to its fallback rating, medium; the redteam reports 1 precedent close that flags under fallback. `dest_asset_id` is now an optional alert field. |
 | #7 Q-0048 | Binds `file:file_path` so the Tool Broker can resolve the signer, alongside the alert's hash. A quarantined or unresolvable file answers unknown, which now flags (`on_unknown: flag`). CF-0023 states that AV entries match on hash, or on signer plus path while the file is readable. |
 | #8 Removable media | Q-0044 (no files written) carries `needs.coverage: device_control_write_events`. Without write events from the same product in the coverage report, it is no_capability and flags. |
-| #9 Scanners vs testers | CF-0018 gains `entry_type` (scanner or tester). A scanner close needs Q-0052 (an active scan job). A tester close needs Q-0055 (a covering change or engagement record). This applies in IDS, firewall and WAF. In WAF, Q-0033 (vulnerability) is dropped and its step holds the tester path: Q-0055 closes as an authorized security test. An unblocked WAF request now flags. |
+| #9 Scanners vs testers | Pentest and red-team engagements must be logged as approved changes naming the testers' source addresses, or tester alerts flag (Q-0055 note, onboarding form). CF-0018 gains `entry_type` (scanner or tester). A scanner close needs Q-0052 (an active scan job). A tester close needs Q-0055 (a covering change or engagement record). This applies in IDS, firewall and WAF. In WAF, Q-0033 (vulnerability) is dropped and its step holds the tester path: Q-0055 closes as an authorized security test. An unblocked WAF request now flags. |
 | #10 Approved senders | CF-0026 is limited to customer-controlled and transactional-notification domains (`sender_kind`); partner domains are out. |
 | #11 Step order | In user_reported_phishing, the approved-sender check (step 3) now runs before the no-URL/no-attachment check (step 4). |
 | #12 Proxy history | New parameter `proxy_history_min_count` (default 10) for Q-0045 and Q-0046 in proxy_block. |
 | #13 Uncovered vendor detections | Issue opened; no code in this PR. |
 | #14 org.prevalence | validate rejects `window` combined with `min_weeks`/`of_weeks`. |
+| Follow-up to #7 | AV step 2 unknown now continues (regression from #7 fix): a missing or unresolvable hash means the approved-tooling close can't apply, and the flow goes on to the high-risk and pre-execution checks. The replay gate has two regression cases that require high-risk alerts with no hash to escalate. |
 | #15 Cloud-share exfiltration | Issue opened for batch 2; no code in this PR. |
 | Decision d: per-customer AV cap | The family-wide `max_mode: recommend` is replaced by `auto_requires: [vendor_mapping_verified]`. A detection is capped at Recommend for each customer whose product rows for its family are unverified, recorded by the onboarding check "Check vendor alerts are normalized". validate requires the declaration for any family with unverified rows. |
 
@@ -63,5 +64,5 @@ Applied from the decisions and the external review (first review of draft PR #6)
 - **#5, analysis hosts.** Only approved-tooling entries drop to flag. For analysis-host entries, a hash seen outside the list still escalates: a sample from a sandbox appearing on a production host means it escaped containment.
 
 **Other effects worth knowing**
-- AV replay: the 1116 EICAR event (no hash, detected but not blocked) now flags at Q-0048 (unknown) instead of escalating. It still never closes.
+- AV replay: the 1116 EICAR event (no hash, detected but not blocked) escalates again after the follow-up fix (it briefly flagged at Q-0048 after #7).
 - WAF: an unblocked request now flags (before, it reached the vulnerability step, which flagged generic rules and escalated affected hosts).

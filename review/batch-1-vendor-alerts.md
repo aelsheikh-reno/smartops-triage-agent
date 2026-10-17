@@ -61,12 +61,13 @@ Applied from the decisions and the external review (first review of draft PR #6)
 | #6 AV fingerprint | The fingerprint and precedent entity use `dest_asset_id`. Without it they fall back to `dest`, and Q0 drops to its fallback rating, medium; the redteam reports 1 precedent close that flags under fallback. `dest_asset_id` is now an optional alert field. |
 | #7 Q-0048 | Binds `file:file_path` so the Tool Broker can resolve the signer, alongside the alert's hash. A quarantined or unresolvable file answers unknown, which now flags (`on_unknown: flag`). CF-0023 states that AV entries match on hash, or on signer plus path while the file is readable. |
 | #8 Removable media | Q-0044 (no files written) carries `needs.coverage: device_control_write_events`. Without write events from the same product in the coverage report, it is no_capability and flags. |
-| #9 Scanners vs testers | CF-0018 gains `entry_type` (scanner or tester). A scanner close needs Q-0052 (an active scan job). A tester close needs Q-0055 (a covering change or engagement record). This applies in IDS, firewall and WAF. In WAF, Q-0033 (vulnerability) is dropped and its step holds the tester path: Q-0055 closes as an authorized security test. An unblocked WAF request now flags. |
+| #9 Scanners vs testers | Pentest and red-team engagements must be logged as approved changes naming the testers' source addresses, or tester alerts flag (Q-0055 note, onboarding form). CF-0018 gains `entry_type` (scanner or tester). A scanner close needs Q-0052 (an active scan job). A tester close needs Q-0055 (a covering change or engagement record). This applies in IDS, firewall and WAF. In WAF, Q-0033 (vulnerability) is dropped and its step holds the tester path: Q-0055 closes as an authorized security test. An unblocked WAF request now flags. |
 | #10 Approved senders | CF-0026 is limited to customer-controlled and transactional-notification domains (`sender_kind`); partner domains are out. |
 | #11 Step order | In user_reported_phishing, the approved-sender check (step 3) now runs before the no-URL/no-attachment check (step 4). |
 | #12 Proxy history | New parameter `proxy_history_min_count` (default 10) for Q-0045 and Q-0046 in proxy_block. |
 | #13 Uncovered vendor detections | Issue opened; no code in this PR. |
 | #14 org.prevalence | validate rejects `window` combined with `min_weeks`/`of_weeks`. |
+| Follow-up to #7 | AV step 2 unknown now continues (regression from #7 fix): a missing or unresolvable hash means the approved-tooling close can't apply, and the flow goes on to the high-risk and pre-execution checks. The replay gate has two regression cases that require high-risk alerts with no hash to escalate. |
 | #15 Cloud-share exfiltration | Issue opened for batch 2; no code in this PR. |
 | Decision d: per-customer AV cap | The family-wide `max_mode: recommend` is replaced by `auto_requires: [vendor_mapping_verified]`. A detection is capped at Recommend for each customer whose product rows for its family are unverified, recorded by the onboarding check "Check vendor alerts are normalized". validate requires the declaration for any family with unverified rows. |
 
@@ -75,13 +76,13 @@ Applied from the decisions and the external review (first review of draft PR #6)
 - **#5, analysis hosts.** Only approved-tooling entries drop to flag. For analysis-host entries, a hash seen outside the list still escalates: a sample from a sandbox appearing on a production host means it escaped containment.
 
 **Other effects worth knowing**
-- AV replay: the 1116 EICAR event (no hash, detected but not blocked) now flags at Q-0048 (unknown) instead of escalating. It still never closes.
+- AV replay: the 1116 EICAR event (no hash, detected but not blocked) escalates again after the follow-up fix (it briefly flagged at Q-0048 after #7).
 - WAF: an unblocked request now flags (before, it reached the vulnerability step, which flagged generic rules and escalated affected hosts).
 
 ## Gate results
 
 - validate: PASS (35 detections, 26 technique fallbacks, 73 questions, 29 context facts, 21 capabilities: 0 errors, 0 warnings)
-- attacker influence: PASS (791 close paths checked, 0 failing, in 0 flows; 46 closes flag under the forwarded profile, 1 under fingerprint fallback)
+- attacker influence: PASS (795 close paths checked, 0 failing, in 0 flows; 50 closes flag under the forwarded profile, 1 under fingerprint fallback)
 - replay: PASS (replay: 533 TP events in 3 detections; 0 benign/FP closes, 0 mitigated closes -> PASS)
 
 ## Detections
@@ -90,14 +91,14 @@ Applied from the decisions and the external review (first review of draft PR #6)
 
 Generic: an antivirus or EDR product reports a malware detection on a host (normalized malware alert, any product).
 
-Note: High-risk families escalate even when blocked. Only a block before execution can close, and only for low-risk classes; post-execution remediation, pending reboot and partial remediation flag. Test files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail. Approved tooling and analysis hosts match on asset ID, never hostname. A sample from an analysis host seen on any other host in the window escalates; an approved tool's hash seen outside its approved hosts flags. A quarantined or unreadable file with no hash flags. The fingerprint uses the asset ID; without one it falls back to the hostname and the precedent is rated medium. Capped at Recommend for each customer whose product rows in the value mapping are unverified.
+Note: High-risk families escalate even when blocked. Only a block before execution can close, and only for low-risk classes; post-execution remediation, pending reboot and partial remediation flag. Test files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail. Approved tooling and analysis hosts match on asset ID, never hostname. A sample from an analysis host seen on any other host in the window escalates; an approved tool's hash seen outside its approved hosts flags. A quarantined or unreadable file with no hash cannot close as approved tooling; the flow continues. The fingerprint uses the asset ID; without one it falls back to the hostname and the precedent is rated medium. Capped at Recommend for each customer whose product rows in the value mapping are unverified.
 
 Alert fields: dest, user, signature, category, action, file_hash, file_name, file_path, _time. Fingerprint: dest_asset_id (low), signature (low), file_hash (low). Precedent entity: dest_asset_id. Precedent valid for 24h.
 
 | Step | Question | Capability | Influence | Yes | No | Unknown | Guards (on close) |
 |---|---|---|---|---|---|---|---|
 | 1 | Q-0000: Was an alert with the same fingerprint closed by an original decision (an analyst or a non-precedent flow step) with a recorded reason within the validity window, with the precedent entity not a crown jewel and no other alert on it in the window (a mitigated precedent only when this alert was also blocked)? | `case.precedent` | low | close (inherit: precedent_match) | next step | next step | Q-0045 yes → flag; Q-0029 yes → escalate |
-| 2 | Q-0048: Is the detected file approved security tooling on this host (by hash, or signer plus path while the file is readable), or is the host an approved sandbox or analysis host? | `list.lookup` | low | close (benign true positive: approved_security_tooling) | next step | flag to analyst | Q-0073 yes → escalate (if analysis_host); Q-0073 yes → flag (if tool) |
+| 2 | Q-0048: Is the detected file approved security tooling on this host (by hash, or signer plus path while the file is readable), or is the host an approved sandbox or analysis host? | `list.lookup` | low | close (benign true positive: approved_security_tooling) | next step | next step | Q-0073 yes → escalate (if analysis_host); Q-0073 yes → flag (if tool) |
 | 3 | Q-0029: Is the detection in a high-risk family (hack tool, credential dumper, ransomware, web shell, exploit framework, remote access trojan or remote-admin tool, miner, proxyware, crack)? | `alert.field` | low, forwarded medium | **escalate** | next step | next step | – |
 | 4 | Q-0049: Was the file blocked before it executed? | `alert.field` | low, forwarded medium | next step | **escalate** | flag to analyst | – |
 | 5 | Q-0028: Is the detection in a low-risk class (potentially unwanted software, adware, grayware), and not a test file? | `alert.field` | low, forwarded medium | close (mitigated true positive: blocked_low_risk_detection) | flag to analyst | flag to analyst | Q-0046 yes → flag; Q-0030 yes → escalate |

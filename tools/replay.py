@@ -326,6 +326,30 @@ def run_flow(b, d, n, ctx):
     return "flag", trail
 
 
+# Regression cases: hand-built alerts with a required outcome. They run in the clean room like the datasets.
+REGRESSION = [
+ ("vendor:av_detection", "no hash, high-risk class, detected (not blocked) must escalate",
+  {"dest": "ws-01", "signature": "HackTool:Win32/Mimikatz", "category": "hacktool", "action": "detected", "file_path": "C:\\Users\\Public\\m.exe",
+   "file_name": "m.exe", "file_hash": None, "user": "u1", "_time": "2026-10-17T00:00:00Z"}, "escalate"),
+ ("vendor:av_detection", "no hash, high-risk class, blocked must escalate",
+  {"dest": "ws-01", "signature": "HackTool:Win32/Mimikatz", "category": "hacktool", "action": "blocked", "file_path": "C:\\Users\\Public\\m.exe",
+   "file_name": "m.exe", "file_hash": None, "user": "u1", "_time": "2026-10-17T00:00:00Z"}, "escalate"),
+]
+
+
+def run_regression(b, ctx):
+    failures = []
+    for did, name, alert, want in REGRESSION:
+        n = derive(b["detections"][did], dict(alert, _idx=0))
+        c = dict(ctx, alerts=[n], conns=[])
+        out, trail = run_flow(b, b["detections"][did], n, c)
+        got = out.split(":")[0]
+        print(f"  {'ok  ' if got == want else 'FAIL'} {did}: {name} -> {out}  [{' > '.join(trail)}]")
+        if got != want:
+            failures.append(name)
+    return failures
+
+
 def main():
     strict = "--strict" in sys.argv
     only = [a for a in sys.argv[1:] if not a.startswith("--")]
@@ -392,7 +416,9 @@ def main():
             print(f"  {did}: {out}  [{' > '.join(trail)}]")
     if ctx["vuln_unknown"]:
         print("\nVulnerability step answered unknown (never closes): " + ", ".join(f"{k} {v}" for k, v in sorted(ctx["vuln_unknown"].items())))
-    bad = fails or (strict and mitigated)
+    print("\nRegression cases:")
+    reg_fail = run_regression(b, ctx) if not only or any(o.startswith("vendor") for o in only) else []
+    bad = fails or reg_fail or (strict and mitigated)
     print(f"\nreplay: {sum(r[2] for r in rows)} TP events in {len(rows)} detections; {len(fails)} benign/FP closes, {len(mitigated)} mitigated closes"
           f" -> {'FAIL' if bad else 'PASS'}{' (strict)' if strict else ''}")
     return 1 if bad else 0

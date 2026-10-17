@@ -23,5 +23,6 @@ license: internal
 text_origin: original
 legal_review: false
 status: draft
-version: 3
-notes: The file entity lets the Tool Broker resolve the signer. A quarantined or unreadable file with no hash in the alert answers unknown, which flags.
+version: 4
+notes: 'The file entity lets the Tool Broker resolve the signer. A quarantined or unreadable file with no hash in the alert answers unknown: the approved-tooling close cannot apply and the flow continues
+  to the high-risk and pre-execution checks.'

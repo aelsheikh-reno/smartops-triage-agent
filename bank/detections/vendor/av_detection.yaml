@@ -42,8 +42,9 @@ intent: 'Generic: an antivirus or EDR product reports a malware detection on a h
 fp_quality: generic
 notes: High-risk families escalate even when blocked. Only a block before execution can close, and only for low-risk classes; post-execution remediation, pending reboot and partial remediation flag. Test
   files flag. A block reported over forwarded syslog cannot close alone. Crown-jewel hosts flag through the permanent guardrail. Approved tooling and analysis hosts match on asset ID, never hostname. A
-  sample from an analysis host seen on any other host in the window escalates; an approved tool's hash seen outside its approved hosts flags. A quarantined or unreadable file with no hash flags. The fingerprint
-  uses the asset ID; without one it falls back to the hostname and the precedent is rated medium. Capped at Recommend for each customer whose product rows in the value mapping are unverified.
+  sample from an analysis host seen on any other host in the window escalates; an approved tool's hash seen outside its approved hosts flags. A quarantined or unreadable file with no hash cannot close as
+  approved tooling; the flow continues. The fingerprint uses the asset ID; without one it falls back to the hostname and the precedent is rated medium. Capped at Recommend for each customer whose product
+  rows in the value mapping are unverified.
 explanations:
 - BE-0019
 - BE-0020
@@ -97,7 +98,7 @@ flow:
   question: Q-0048
   on_yes: close:benign_true_positive:approved_security_tooling
   on_no: next
-  on_unknown: flag
+  on_unknown: next
   guards:
   - question: Q-0073
     then: escalate
@@ -135,4 +136,4 @@ source:
   title: Antivirus or EDR malware detection
 license: internal
 status: draft
-version: 4
+version: 5

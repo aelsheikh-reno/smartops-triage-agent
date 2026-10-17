@@ -259,6 +259,26 @@ def context_rule(b, rule, answers):
     raise ValueError(f"unknown context rule operator: {want}")
 
 
+def rule_reads(rule):
+    """The context questions a context rule reads (its condition keys, without a .component suffix)."""
+    if isinstance(rule, dict):
+        out = set()
+        for k, v in rule.items():
+            if k in ("any", "all"):
+                for r in v:
+                    out |= rule_reads(r)
+            else:
+                out.add(k.partition(".")[0])
+        return out
+    return set()
+
+
+def guard_only(b, cid):
+    """A context question the contract declares guard_only: only guards may read it, never a flow step or Q0."""
+    entry = (b["contract"].get("questions") or {}).get(cid) or (b["contract"].get("designed") or {}).get(cid) or {}
+    return bool(entry.get("guard_only"))
+
+
 def entity_hot(b, answers):
     """The entity guard (bank/triage/context_rules.yaml entity_guard): True (hot), False, or None (unknown: closes flag)."""
     return context_rule(b, b["context_rules"]["entity_guard"]["hot_when"], answers)
@@ -271,14 +291,26 @@ def q0(b, answers):
 
 def human_evidence(b, closures, analysts_distinct=True):
     """The precedent counts (audited, independent_human) from a list of recorded closes ({kind, analyst, ...}), by the one definition in
-    bank/contract/evidence.yaml: audited closes, and independent human closes (manual closes in Shadow and analyst
-    overrides, by distinct analysts). Kinds the definition lists under never (accepted recommendations, Auto closes,
+    bank/contract/evidence.yaml: audited closes, and independent human closes (the definition's independent_kinds: manual
+    closes in Shadow, analyst overrides, an analyst's own close of a flag, an override of a flag's suggestion; by distinct
+    analysts). Kinds the definition lists under never (accepted recommendations and flag suggestions, Auto closes,
     precedent matches) are not counted."""
     he = b["evidence"]["human_evidence"]
     counted = [c for c in closures if c["kind"] in he["counts"] and c["kind"] not in he["never"]]
     audited = sum(1 for c in counted if c["kind"] == "audited_close")
-    human = [c for c in counted if c["kind"] in ("manual_shadow_close", "analyst_override")]
+    human = [c for c in counted if c["kind"] in (he.get("independent_kinds") or [])]
     return {"audited": audited, "independent_human": len({c.get("analyst") for c in human}) if analysts_distinct else len(human)}
+
+
+def flag_close_kind(decision, analyst_disposition):
+    """How an analyst's close of a flagged alert counts (bank/contract/evidence.yaml flag_closes), from the decision record:
+    no suggestion shown -> flag_own_close (counts); the shown suggestion accepted -> flag_accepted_suggestion (never counts);
+    another disposition -> flag_override (counts)."""
+    if decision.get("outcome") != "flag":
+        raise ValueError("only a flagged alert's close is classified this way")
+    if not decision.get("suggestion_shown") or not decision.get("suggests"):
+        return "flag_own_close"
+    return "flag_accepted_suggestion" if analyst_disposition == decision["suggests"] else "flag_override"
 
 
 # ---------- the message envelope (bank/contract/envelope.yaml) ----------
@@ -437,6 +469,10 @@ def _answer(b, q, item, n, ctx, d):
     if q["id"] == b["context_rules"]["q0"]["question"]:
         value = q0(b, context_answers(b, n, ctx, ctx.get("_detection"), ctx["_now"]))
     elif q.get("context_rule"):
+        if "step" in item:
+            only = sorted(c for c in rule_reads(q["context_rule"]) if guard_only(b, c))
+            if only:
+                raise ValueError(f"{q['id']} reads guard-only context question(s) {only} but is asked as a flow step; it may only be a guard")
         value = context_rule(b, q["context_rule"], context_answers(b, n, ctx, ctx.get("_detection"), ctx["_now"]))
     else:
         status, msg = _send(b, ctx, n, q["id"], item)
@@ -455,19 +491,50 @@ def _answer(b, q, item, n, ctx, d):
 # ---------- one alert through one flow ----------
 def run_flow(b, d, n, ctx, now):
     """One alert through one flow at time now (RFC3339, required) in ctx["mode"] (shadow, recommend or auto; default
-    recommend), asking ctx["answerer"].
+    recommend), asking ctx["answerer"]. Returns (outcome, trail) and leaves the decision record in ctx["decision"]:
+    outcome, path_id, suggests and blocked_by (on a flag the executor made from a close, or a flag the bank declares
+    with a suggestion), suggestion_shown (whether the analyst sees the suggestion: not in Shadow) and proven.
     The Auto rule, in triage terms: a not_checked answer may support a close in Shadow and Recommend (the close is marked
     "not_checked: <question>" in the explanation and decision log), never in Auto (the close becomes a flag). An answer of
-    unknown supports nothing. The provenance in brackets is the broker's, shown here for the gate report only."""
+    unknown supports nothing. The provenance in brackets is the broker's, shown here for the gate report only.
+    Proof status (bank/contract/proof.yaml): in Auto a close on an unproven path becomes a flag; in Shadow and Recommend
+    the close stands, marked "unproven path"."""
+    ctx["_suggest"] = None
+    out, trail = _decide(b, d, n, ctx, now)
+    pid = path_id(d, ctx.get("_path") or [])
+    proven = None
+    if out.startswith("close"):
+        proven = path_proven(b, d, pid)
+        if not proven and ctx.get("mode") == "auto":
+            _suggest(ctx, out, "unproven_path", "no reviewed proof with enough true-positive replay covers this close path")
+            out, trail = "flag", trail + [f"unproven path in Auto: {pid} -> flag"]
+        elif not proven:
+            trail = trail + [f"unproven path: {pid}"]
+    sug = ctx["_suggest"] if out == "flag" else None
+    ctx["decision"] = {"outcome": out, "path_id": pid, "proven": proven,
+                       "suggests": (sug or {}).get("suggests"), "blocked_by": (sug or {}).get("blocked_by"),
+                       "suggestion_shown": bool(sug) and ctx.get("mode", "recommend") != "shadow"}
+    return out, trail
+
+
+def _suggest(ctx, close, rule, reason):
+    """Record the close a flag would have been, and what blocked it (the first rule that turned the close into a flag)."""
+    if close.startswith("close") and not ctx.get("_suggest"):
+        ctx["_suggest"] = {"suggests": close, "blocked_by": {"rule": rule, "reason": reason}}
+
+
+def _decide(b, d, n, ctx, now):
     _clock(ctx, now)
-    ctx["answers"], ctx["_closing_step"], ctx["_detection"], ctx["_no_close"] = [], None, d, []
+    ctx["answers"], ctx["_closing_step"], ctx["_detection"], ctx["_no_close"], ctx["_path"] = [], None, d, [], []
     out, trail = _run_flow(b, d, n, ctx)
     if out.startswith("close") and ctx["_no_close"]:
+        _suggest(ctx, out, "status", f"{', '.join(ctx['_no_close'])}: never supports a close")
         return "flag", trail + [f"{', '.join(ctx['_no_close'])}: never supports a close -> flag"]
     if out.startswith("close"):
         # S1: the entity guard is re-evaluated on fresh context answers immediately before the close is written.
         hot = entity_hot(b, context_answers(b, n, ctx, d, now))
         if hot is not False:
+            _suggest(ctx, out, "entity_guard", f"the entity is {'hot' if hot else 'not known to be quiet'} at write time")
             return "flag", trail + [f"entity guard {'hot' if hot else 'unknown'} at write time -> flag"]
     if out.startswith("close"):
         # Auto exclusions (bank/triage/auto_exclusions.yaml): a detection capped at Recommend, or an excluded close step,
@@ -475,6 +542,7 @@ def run_flow(b, d, n, ctx, now):
         step_codes = auto_excluded(d, ctx["_closing_step"] or {})
         excluded = (auto_excluded(d) if d.get("max_mode") == "recommend" else []) + step_codes
         if excluded and ctx.get("mode") == "auto":
+            _suggest(ctx, out, "auto_excluded", ", ".join(excluded))
             return "flag", trail + [f"auto_excluded ({', '.join(excluded)}) in Auto -> flag"]
         if step_codes:
             trail = trail + [f"auto_excluded: {', '.join(step_codes)}"]
@@ -483,15 +551,54 @@ def run_flow(b, d, n, ctx, now):
         # Auto: the stricter of (B) the trust rule (a close resting on a not_checked answer flags) and (A) the same flow with
         # every not_checked answer read as unknown (round 6, §5.1: the trust rule alone was weaker on 94 paths).
         b_out = "flag" if out.startswith("close") else out
-        a_out, a_trail = _run_flow(b, d, n, dict(ctx, _nc_as_unknown=True, answers=[]))
+        a_out, a_trail = _run_flow(b, d, n, dict(ctx, _nc_as_unknown=True, answers=[], _path=[], _suggest=None))
         if SEVERITY[outcome_kind(a_out)] > SEVERITY[outcome_kind(b_out)]:
+            ctx["_suggest"] = None
             return a_out, trail + [f"not_checked answer in Auto: {', '.join(nc)}; read as unknown the flow gives {a_out} [{' > '.join(a_trail)}], the stricter -> {a_out}"]
         if out.startswith("close"):
+            _suggest(ctx, out, "trust_rule", f"not_checked answer in Auto: {', '.join(nc)}")
             return "flag", trail + [f"not_checked answer in Auto: {', '.join(nc)} -> flag"]
         return out, trail
     if out.startswith("close") and nc:
         trail = trail + [f"not_checked: {x}" for x in nc]
     return out, trail
+
+
+# ---------- path IDs and proof status ----------
+def path_id(d, path):
+    """The stable ID of a path (bank/contract/proof.yaml path_id): detection ID, detection version, and the step and answer
+    sequence. path: [(step, answer)] as enumerate_paths gives it, or [(step number, question, answer)]."""
+    parts = []
+    for x in path:
+        if len(x) == 2:
+            st, a = x
+            parts.append(f"{st['step']}:{st['question']}={a}")
+        else:
+            parts.append(f"{x[0]}:{x[1]}={x[2]}")
+    return f"{d['id']}@v{d.get('version')}:" + " > ".join(parts)
+
+
+def proof_record(b, pid):
+    """The reviewed proof record that lists this path ID, or None. Drafts never count; a record whose IDs no longer match
+    the flow is stale and simply lists no current ID."""
+    for rec in b.get("proofs") or []:
+        if rec.get("status") == "reviewed" and rec.get("reviewer") and rec.get("reviewed_on") and pid in (rec.get("paths") or []):
+            return rec
+    return None
+
+
+def path_proven(b, d, pid):
+    """A close path is proven when a reviewed record covers its current ID, the detection's true-positive replay meets the
+    floor (bank/contract/proof.yaml proven_when: at least proof_min_tp_events events, none closed on this path), and every
+    aimed case the record lists passed (flag or escalate in every mode). b["replay_coverage"] is the replay gate's report."""
+    rec = proof_record(b, pid)
+    if not rec or not rec.get("aimed_cases"):
+        return False
+    cov = ((b.get("replay_coverage") or {}).get("detections") or {}).get(d["id"]) or {}
+    need = float(param_value(b, "proof_min_tp_events", d))
+    on_path = (cov.get("paths") or {}).get(pid) or {}
+    aimed = cov.get("aimed") or {}
+    return cov.get("tp_events", 0) >= need and on_path.get("closes", 0) == 0 and all(aimed.get(c) == "pass" for c in rec["aimed_cases"])
 
 
 def _run_flow(b, d, n, ctx):
@@ -501,6 +608,11 @@ def _run_flow(b, d, n, ctx):
         a = _answer(b, q, st, n, ctx, d)
         out = st["on_" + a]
         trail.append(f"{st['question']}={a}")
+        ctx.setdefault("_path", []).append((st["step"], st["question"], a))
+        if out == "flag":   # a flag the bank declares with the close it would have been (flag_suggests on the step)
+            declared = (st.get("flag_suggests") or {}).get("on_" + a)
+            if declared:
+                _suggest(ctx, declared["suggests"], "bank", declared.get("reason", ""))
         if out != "next":
             results = []
             for gd in st.get("guards") or []:
@@ -508,6 +620,8 @@ def _run_flow(b, d, n, ctx):
                     continue
                 results.append((gd, _answer(b, b["questions"][gd["question"]], gd, n, ctx, d)))
             raised = raise_outcome(out, results)
+            if raised == "flag" and out.startswith("close"):
+                _suggest(ctx, out, "guard", "guard " + ", ".join(g["question"] for g, a in results if a == "unknown" or a in g.get("when", ["yes"])))
             if raised != out:
                 trail.append("guards " + ",".join(f"{g['question']}={a}" for g, a in results) + f" -> {raised}")
                 out = raised
@@ -523,6 +637,7 @@ def context_unknown(b, n, out, trail, ctx):
     if out.startswith("close"):
         for need in b["context_rules"].get("closes_need_known") or []:
             if _ask_context(b, ctx, n, need["question"], ctx.get("_detection"), {}) is None:
+                _suggest(ctx, out, need["reason"], f"{need['question']} unknown or unavailable")
                 return "flag", trail + [f"{need['reason']} {need['question']} -> flag"]
     return out, trail
 

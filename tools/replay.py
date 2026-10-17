@@ -40,7 +40,7 @@ COVERAGE = os.path.join(ROOT, "tests", "replay", "coverage.yaml")
 CASES = os.path.join(ROOT, "tests", "cases")
 
 
-def coverage():
+def coverage_yaml():
     return (yaml.safe_load(open(COVERAGE)) or {}).get("detections") or {}
 
 
@@ -89,15 +89,49 @@ def run_regression(b, batches):
         out, trail = E.run_flow(bb, bb["detections"][did], a, ctx, NOW)
         exp = case["expect"]
         marked = any(t.startswith("not_checked:") for t in trail)
+        dec = ctx.get("decision") or {}
         if "not" in exp:
             ok = not out.startswith(exp["not"])
         else:
             want = exp["outcome"]
             ok = (out == want or (want.startswith("close:") and out.startswith(want)) or (not want.startswith("close:") and out.split(":")[0] == want)) \
                 and marked == bool(exp.get("marked_not_checked"))
+        if "suggests" in exp:
+            ok = ok and str(dec.get("suggests") or "").startswith(exp["suggests"])
+        if "blocked_by" in exp:
+            ok = ok and (dec.get("blocked_by") or {}).get("rule") == exp["blocked_by"]
         print(f"  {'ok  ' if ok else 'FAIL'} {did}: {case['name']} -> {out}  [{' > '.join(trail)}]")
         if not ok:
             failures.append(case["name"])
+    return failures, n
+
+
+AIMED_MODES = ("shadow", "recommend", "auto")
+
+
+def run_aimed(b, batches, aimed):
+    """Aimed cases (bank/contract/proof.yaml aimed_case): each is built to satisfy exactly one proof record's path group yes
+    answers, and passes only if it ends in flag or escalate in Shadow, Recommend and Auto, never close. Results go to
+    aimed[detection][case file name] = pass | fail, for the per-path coverage report."""
+    failures, n = [], 0
+    for path in sorted(glob.glob(os.path.join(CASES, "D-*", "aimed", "*.yaml"))):
+        case = yaml.safe_load(open(path))
+        did, name = case["detection"], os.path.basename(path)[:-5]
+        if b["detections"][did]["family"] not in batches:
+            continue
+        n += 1
+        outs = {}
+        for mode in AIMED_MODES:
+            bb = with_customer(b, case)
+            cr = case_broker(bb, case, [], dict({"C-06": False}, **(case.get("context") or {})))
+            a = E.derive(bb["detections"][did], cr.register(dict(case["alert"], _idx=0)))
+            cr.case["alerts"] = [a]
+            outs[mode], _ = E.run_flow(bb, bb["detections"][did], a, {"answerer": cr, "mode": mode, "customer": cr.case["customer"]}, NOW)
+        ok = not any(o.startswith("close") for o in outs.values())
+        aimed.setdefault(did, {})[name] = "pass" if ok else "fail"
+        print(f"  {'ok  ' if ok else 'FAIL'} {did} aimed {name} (proof {case.get('proof')}): " + ", ".join(f"{m} {o}" for m, o in outs.items()))
+        if not ok:
+            failures.append(f"aimed {name}")
     return failures, n
 
 
@@ -136,7 +170,12 @@ def main():
     strict = "--strict" in sys.argv
     batches = B.select_batches([a for a in sys.argv[1:] if not a.startswith("--")])
     b = B.load()
-    cov, rules = coverage(), FO.load()
+    # Inside the replay gate nothing counts as proven (raise-only and reproducible): the per-path coverage it measures is
+    # written to build/replay_coverage.json, which the validator and the runtime read with the proof records.
+    b["replay_coverage"] = {}
+    coverage_out = {}
+    coverage = coverage_out
+    cov, rules = coverage_yaml(), FO.load()
     lookups = os.path.join(DS.ESCU, "lookups", "csv")
     vuln_unknown = Counter()
     rows, cannot, fails, mitigated, gate_errors = [], [], [], [], []
@@ -181,8 +220,13 @@ def main():
         for x in tp:
             cr.register(x)
         outcomes = Counter()
+        paths = {}
         for n in tp:
-            out, trail = E.run_flow(b, d, n, {"answerer": cr, "mode": "recommend", "customer": None}, NOW)
+            rctx = {"answerer": cr, "mode": "recommend", "customer": None}
+            out, trail = E.run_flow(b, d, n, rctx, NOW)
+            pc = paths.setdefault(rctx["decision"]["path_id"], {"events": 0, "closes": 0})
+            pc["events"] += 1
+            pc["closes"] += out.startswith("close")
             key = out.split(":")[0] if not out.startswith("close") else out
             outcomes[key] += 1
             if out.startswith("close:mitigated_true_positive"):
@@ -190,6 +234,7 @@ def main():
             elif out.startswith("close"):
                 fails.append((did, out, trail))
         rows.append((did, len(tests), len(tp), outcomes))
+        coverage[did] = {"tp_events": len(tp), "paths": paths}
     print(f"{'detection':<62} {'datasets':>8} {'TP events':>9}  outcomes")
     for did, nt, ntp, oc in rows:
         print(f"{did:<62} {nt:>8} {ntp:>9}  " + ", ".join(f"{k} {v}" for k, v in sorted(oc.items())))
@@ -207,7 +252,12 @@ def main():
     if vuln_unknown:
         print("\nVulnerability step answered unknown (never closes): " + ", ".join(f"{k} {v}" for k, v in sorted(vuln_unknown.items())))
     print("\nRegression cases:")
+    aimed = {}
     reg_fail, n_cases = run_regression(b, batches)
+    print("\nAimed cases (each must flag or escalate in every mode):")
+    aim_fail, n_aimed = run_aimed(b, batches, aimed)
+    reg_fail += aim_fail
+    n_cases += n_aimed
     print("\nAlert sequences on one entity:")
     seq_fail, n_seq = run_sequences(b, batches)
     reg_fail += seq_fail
@@ -224,6 +274,20 @@ def main():
     else:
         print(f"replay: 0 events, every one of the {len(cannot)} detections without replay data is capped at Recommend")
     bad = fails or reg_fail or (strict and mitigated) or uncapped or gate_errors
+    # per-path replay coverage (bank/contract/proof.yaml proven_when): TP events and closes per path, and the passing cases aimed at each path
+    for did, a in aimed.items():
+        coverage_out.setdefault(did, {"tp_events": 0, "paths": {}})["aimed"] = a
+    print("\nPer-path replay coverage (for proof status; written to build/replay_coverage.json):")
+    need = E.param_value(b, "proof_min_tp_events")
+    for did, c in sorted(coverage_out.items()):
+        closes = sum(p["closes"] for p in c["paths"].values())
+        print(f"  {did}: {c['tp_events']} TP events over {len(c['paths'])} paths, {closes} closes, "
+              f"{sum(1 for v in (c.get('aimed') or {}).values() if v == 'pass')} aimed cases passed; "
+              f"{'meets' if c['tp_events'] >= need else 'below'} the {need}-event bar")
+    os.makedirs(os.path.dirname(B.COVERAGE_REPORT), exist_ok=True)
+    with open(B.COVERAGE_REPORT, "w") as fh:
+        import json
+        json.dump({"detections": coverage_out, "proof_min_tp_events": need}, fh, indent=1, sort_keys=True)
     print(f"\nreplay: {sum(r[2] for r in rows)} TP events in {len(rows)} detections, {n_reg - len(reg_fail)}/{n_reg} regression cases; "
           f"{len(fails)} benign/FP closes, {len(mitigated)} mitigated closes"
           f" -> {'FAIL' if bad else 'PASS'}{' (strict)' if strict else ''}")

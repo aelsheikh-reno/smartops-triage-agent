@@ -1,0 +1,23 @@
+# When an answer counts as checked for a customer (extends contract/answer.yaml trust; round 8). (designed, not built:
+# the shared verification data comes with the next bank PR.) The meaning the broker gives a product's value is checked
+# for a customer when either
+#   a) the customer verified it themselves (per-customer verification), or
+#   b) a shared verification exists for the product and version (a vendor doc plus an in-depth check), AND the customer
+#      holds a sanity sample of at least verification_shared_sanity_alerts real alerts on that same product version.
+# A version mismatch, in the shared record or in the sanity sample, means not_checked. The Triage agent still sees only
+# the trust; how the broker stores these records is the broker's business.
+shared_record:
+  required: [product, version, vendor_doc, in_depth_check, covers, checked_by, checked_on]
+  covers: the identifiers of the value meanings the shared check confirmed
+sanity_sample:
+  required: [product, product_version, alerts, checked_by, checked_on]
+parameters:
+  verification_shared_sanity_alerts:
+    layer: broker
+    default: 20
+    bounds:
+      min: 20
+      max: 1000
+    reduces_scrutiny_when: lower
+    description: Real alerts at this customer, on the same product version, that a sanity sample needs before a shared verification counts for the customer.
+    unit: alerts

@@ -1,0 +1,9 @@
+# Planted fixture for the shared-verification route (bank/contract/verification.yaml). Not real verification data: the
+# real shared records come with the next bank PR, under bank/broker/verifications/shared/<product>/<version>.yaml.
+product: microsoft-defender-for-endpoint
+version: '10.8'
+vendor_doc: https://learn.microsoft.com/en-us/graph/api/resources/security-alertevidence?view=graph-rest-1.0
+in_depth_check: planted fixture (tests only)
+covers: [run_status.detectionstatus_prevented, run_status.detectionstatus_detected]
+checked_by: test fixture
+checked_on: '2026-10-17'

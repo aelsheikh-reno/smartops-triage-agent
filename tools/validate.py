@@ -500,10 +500,12 @@ def main():
     # B3: human evidence is defined once (bank/contract/evidence.yaml); every count of closes declares and uses it
     he = (b["evidence"] or {}).get("human_evidence") or {}
     ev_file = "bank/contract/evidence.yaml"
-    if set(he.get("counts") or {}) != {"manual_shadow_close", "analyst_override", "audited_close"}:
-        err(ev_file, "human_evidence counts exactly manual_shadow_close, analyst_override and audited_close")
-    if not {"accepted_recommendation", "auto_close", "precedent_match"} <= set(he.get("never") or {}) or set(he.get("counts") or {}) & set(he.get("never") or {}):
-        err(ev_file, "accepted recommendations, Auto closes and precedent matches never count as human evidence")
+    if set(he.get("counts") or {}) != {"manual_shadow_close", "analyst_override", "audited_close", "flag_own_close", "flag_override"}:
+        err(ev_file, "human_evidence counts exactly manual_shadow_close, analyst_override, audited_close, flag_own_close and flag_override")
+    if not {"accepted_recommendation", "auto_close", "precedent_match", "flag_accepted_suggestion"} <= set(he.get("never") or {}) or set(he.get("counts") or {}) & set(he.get("never") or {}):
+        err(ev_file, "accepted recommendations, accepted flag suggestions, Auto closes and precedent matches never count as human evidence")
+    if set(he.get("independent_kinds") or []) != {"manual_shadow_close", "analyst_override", "flag_own_close", "flag_override"}:
+        err(ev_file, "independent_kinds are the human closes counted per distinct analyst: manual_shadow_close, analyst_override, flag_own_close, flag_override")
     props = (b["proposals"] or {}).get("proposals") or {}
     places = {"C-04": b["context_questions"].get("C-04") or {}, "q0": cr.get("q0") or {},
               "routine_pairs": props.get("routine_pairs") or {}, "list_entries": props.get("list_entries") or {},
@@ -766,7 +768,7 @@ def main():
 
     # ---------- value tables ----------
     row_kinds = {}
-    n_close = n_auto_today = 0
+    n_close = n_auto_today = n_auto_rows = 0
     for tname, t in b["value_tables"].items():
         w = t["_file"]
         for k in ("vendor", "product", "feed", "source", "references", "license", "classes"):
@@ -1121,7 +1123,9 @@ def main():
             if out.startswith("close"):
                 n_close += 1
                 needs = B.close_path_rows(b, path, guards, detection=d)
-                n_auto_today += not needs and E.auto_eligible_path(d, path)
+                eligible = not needs and E.auto_eligible_path(d, path)
+                n_auto_rows += eligible
+                n_auto_today += eligible and E.path_proven(b, d, E.path_id(d, path))
 
     # use-case catalog
     ucs = b["use_cases"]
@@ -1210,7 +1214,118 @@ def main():
                 if not any(st[e].startswith("close") for e in ("on_yes", "on_no")):
                     err(d["_file"], f"step {st['step']}: auto_excluded_reason on a step that never closes")
     info.append(f"close paths: {n_close} usable in Shadow and Recommend; {n_auto_today} Auto-eligible today with no customer verifications "
-                "(the rest need value-table rows verified per customer, or are technique fallbacks capped at Recommend)")
+                f"({n_auto_rows} pass the row and cap rules but are not proven; the rest need value-table rows verified per customer, "
+                "or are capped at Recommend)")
+
+    # proof records for close paths (bank/contract/proof.yaml)
+    pf = (b["contract"].get("proof") or {})
+    close_ids = {E.path_id(d, path): d["id"] for _, d in B.flows(b) for path, out, g in E.enumerate_paths(d["flow"]) if out.startswith("close")}
+    all_ids = {E.path_id(d, path) for _, d in B.flows(b) for path, out, g in E.enumerate_paths(d["flow"])}
+    if not pf.get("record") or set(pf.get("statuses") or []) != {"draft", "reviewed"} or "proof_min_tp_events" not in params:
+        err("bank/contract/proof.yaml", "needs the record schema, statuses draft and reviewed, and the bounded parameter proof_min_tp_events")
+    bar = params.get("proof_min_tp_events") or {}
+    floor = ((pf.get("parameters") or {}).get("proof_min_tp_events") or {}).get("floor")
+    if floor != 5 or bar.get("default", 0) < 5 or (bar.get("bounds") or {}).get("min", 0) < 5:
+        err("bank/contract/proof.yaml", "proof_min_tp_events: default and lower bound must not be below the floor of 5 true-positive events (floor: 5)")
+    aimed_files = {}
+    for path in sorted(glob.glob(os.path.join(B.ROOT, "tests", "cases", "D-*", "aimed", "*.yaml"))):
+        case, w = yaml.safe_load(open(path)) or {}, os.path.relpath(path, B.ROOT)
+        for k in (pf.get("aimed_case") or {}).get("required") or []:
+            if not case.get(k):
+                err(w, f"aimed case missing {k}")
+        if case.get("detection") != os.path.basename(os.path.dirname(os.path.dirname(path))):
+            err(w, "an aimed case's detection must match its folder")
+        aimed_files[(case.get("detection"), os.path.basename(path)[:-5])] = case
+    seen_ids = set()
+    for rec in b.get("proofs") or []:
+        w = f"{rec.get('_file')} {rec.get('id')}"
+        for k in (pf.get("record") or {}).get("required") or []:
+            if not rec.get(k):
+                err(w, f"proof record missing {k}")
+        if rec.get("status") not in (pf.get("statuses") or []):
+            err(w, f"status {rec.get('status')!r} must be draft or reviewed")
+        if rec.get("status") == "reviewed" and not (str(rec.get("reviewer") or "").strip() and str(rec.get("reviewed_on") or "").strip()):
+            err(w, "a reviewed proof record needs a reviewer and a review date")
+        if rec.get("id") in seen_ids:
+            err(w, "duplicate proof record id")
+        seen_ids.add(rec.get("id"))
+        if not rec.get("aimed_cases"):
+            err(w, "a proof record needs at least one aimed case (tests/cases/<D-ID>/aimed/)")
+        dids = {close_ids.get(pid) for pid in rec.get("paths") or []} - {None}
+        for name in rec.get("aimed_cases") or []:
+            hit = [aimed_files[(did, name)] for did in dids if (did, name) in aimed_files]
+            if not hit:
+                err(w, f"aimed case {name} not found under tests/cases/<D-ID>/aimed/ for this record's detections")
+            elif any(c.get("proof") != rec.get("id") for c in hit):
+                err(w, f"aimed case {name} must link back to this proof record (proof: {rec.get('id')})")
+        for pid in rec.get("paths") or []:
+            if pid not in all_ids:
+                err(w, f"path {pid} does not exist in the current flows (stale or mistyped)")
+            elif pid not in close_ids:
+                err(w, f"path {pid} is not a close path")
+
+    for (did, name), case in aimed_files.items():
+        if case.get("proof") not in seen_ids:
+            err(f"tests/cases/{did}/aimed/{name}.yaml", f"links to proof {case.get('proof')!r}, which does not exist")
+
+    # suggested dispositions a bank flag declares (flag_suggests on a step): a real close disposition, on a flag edge
+    for _, d in B.flows(b):
+        for st in d["flow"]:
+            for edge, spec in (st.get("flag_suggests") or {}).items():
+                w = f"{d['_file']} step {st['step']} flag_suggests {edge}"
+                m = E.OUTCOME.match(str((spec or {}).get("suggests") or ""))
+                if edge not in ("on_yes", "on_no", "on_unknown") or st.get(edge) != "flag":
+                    err(w, "a suggestion attaches to a flag edge of the step")
+                if not m or not m.group(2):
+                    err(w, f"suggests {spec.get('suggests')!r} is not a close disposition")
+                elif m.group(2) == "inherit" or (b["reason_codes"].get(m.group(3)) or {}).get("disposition") != m.group(2):
+                    err(w, f"suggests {spec.get('suggests')!r} is not a real close disposition of this detection (reason code and disposition must match; never a precedent)")
+                if not str((spec or {}).get("reason") or "").strip():
+                    err(w, "a suggestion needs a one-line reason (what blocks the close)")
+
+    # designed contract entries and guard-only context questions
+    designed = b["contract"].get("designed") or {}
+    for did_, entry in designed.items():
+        if did_ in b["questions"] or did_ in b["context_questions"] or did_ in b["contract"]["questions"]:
+            err("bank/contract/questions.yaml designed", f"{did_} is designed but already in the bank or the contract's questions")
+        if (entry.get("answer") or {}).get("type") not in (b["contract"]["answer"].get("answer_types") or {}):
+            err("bank/contract/questions.yaml designed", f"{did_}: answer type must be a contract answer type")
+    guard_only_ids = {c for c, e in list(b["contract"]["questions"].items()) + list(designed.items()) if e.get("guard_only")}
+    for sect in ("entity_guard", "q0", "priority", "q0067"):
+        reads = set(((cr.get(sect) or {}).get("reads")) or []) | E.rule_reads((cr.get(sect) or {}).get("yes_when") or (cr.get(sect) or {}).get("hot_when") or {})
+        for cid in sorted(reads & guard_only_ids):
+            err("bank/triage/context_rules.yaml", f"{sect} reads guard-only context question {cid}: only guards may read it")
+    for nd in cr.get("closes_need_known") or []:
+        if nd.get("question") in guard_only_ids:
+            err("bank/triage/context_rules.yaml closes_need_known", f"{nd['question']} is guard-only")
+    for _, d in B.flows(b):
+        for st in d["flow"]:
+            q = b["questions"].get(st["question"]) or {}
+            used = (E.rule_reads(q.get("context_rule") or {}) | set((q.get("inputs") or {}).get("reads") or [])) & guard_only_ids
+            if used:
+                err(f"{d['_file']} step {st['step']}", f"{q.get('id')} reads guard-only context question(s) {sorted(used)}; it may only be a guard")
+
+    # shared verifications per product version (bank/contract/verification.yaml)
+    sv = (b["contract"].get("verification") or {})
+    for (prod, ver), rec in (b.get("shared_verifications") or {}).items():
+        w = rec.get("_file")
+        for k in (sv.get("shared_record") or {}).get("required") or []:
+            if not rec.get(k):
+                err(w, f"shared verification missing {k}")
+        if os.path.basename(os.path.dirname(w)) != prod or os.path.basename(w)[:-5] != ver:
+            err(w, f"a shared verification lives at bank/broker/verifications/shared/{prod}/{ver}.yaml")
+        if prod not in b["value_tables"]:
+            err(w, f"{prod} is not a translation")
+        else:
+            rows = {r["id"] for spec in (b["value_tables"][prod].get("classes") or {}).values() for r in spec.get("rows") or []}
+            for rid in rec.get("covers") or []:
+                if rid not in rows:
+                    err(w, f"covers {rid}, not a row of {prod}")
+    for cust, c in b["customers"].items():
+        for smp in c.get("sanity_samples") or []:
+            for k in (sv.get("sanity_sample") or {}).get("required") or []:
+                if smp.get(k) in (None, ""):
+                    err(c["_file"], f"sanity sample missing {k}")
 
     # customer layer: per-customer verifications, product versions and detection modes
     for cust, c in b["customers"].items():
@@ -1229,6 +1344,10 @@ def main():
                 err(w, f"{did}: technique fallbacks are capped at Recommend (no true-positive replay data)")
             elif d.get("max_mode") == "recommend":
                 err(w, f"{did}: capped at Recommend ({d.get('max_mode_reason')})")
+            unproven = sorted(E.path_id(d, path) for path, out, guards in E.enumerate_paths(d["flow"])
+                              if out.startswith("close") and not E.path_proven(b, d, E.path_id(d, path)))
+            if unproven:
+                err(w, f"{did}: set to Auto with unproven close paths (no reviewed proof with enough replay): {len(unproven)}, e.g. {unproven[0]}")
             missing = sorted({f"{t}/{r}" for path, out, guards in E.enumerate_paths(d["flow"]) if out.startswith("close")
                               for t, r in B.close_path_rows(b, path, guards, customer=cust, detection=d) if not B.row_verified(b, cust, t, r, TODAY)})
             if missing:

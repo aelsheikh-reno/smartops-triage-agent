@@ -403,3 +403,24 @@ questions:
     - medium
     - high
     - critical
+# Designed: contract entries for questions and capabilities that are not in the bank yet (the next bank PR adds them).
+# No flow may use them until they are; a guard_only context question may be read only by guards.
+designed:
+- id: C-09
+  kind: context
+  guard_only: true
+  note: time context of the alert (business hours, after hours, weekend, public holiday, change freeze); read only by guards
+  answer:
+    type: enum
+    values:
+    - business_hours
+    - after_hours
+    - weekend
+    - public_holiday
+    - change_freeze
+- id: privileged_session_match
+  kind: capability
+  status: designed
+  note: the action came through the customer's privileged-access tool or jump host, with a matching privileged session (#24)
+  answer:
+    type: bool

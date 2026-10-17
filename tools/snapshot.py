@@ -41,7 +41,7 @@ def scripted(fixed, nc_on):
 def main():
     replay_txt, gates_txt, out_json = sys.argv[1:4]
     b = B.load()
-    out = {"paths": {}}
+    out = {"paths": {}, "flag_suggestions": {}}
     real = E._answer
     try:
         for lvl, d in B.flows(b):
@@ -55,8 +55,13 @@ def main():
                     cr = CleanRoom(b, alerts=[n], timeline=[n], conns=[], context={"C-06": False}, customer=None, today="2026-10-17",
                                    closures=[], vuln_unknown=Counter())
                     E.derive(d, cr.register(n))
-                    r, trail = E.run_flow(b, d, n, {"answerer": cr, "mode": mode, "customer": None}, NOW)
+                    rctx = {"answerer": cr, "mode": mode, "customer": None}
+                    r, trail = E.run_flow(b, d, n, rctx, NOW)
                     res[m] = r + (" +marked" if any(t.startswith("not_checked:") or t.startswith("auto_excluded:") for t in trail) else "")
+                    dec = rctx.get("decision") or {}
+                    if dec.get("suggests"):
+                        out["flag_suggestions"].setdefault(pid, {})[m] = {"suggests": dec["suggests"], "blocked_by": dec["blocked_by"]["rule"],
+                                                                          "shown": dec["suggestion_shown"]}
                 out["paths"][pid] = res
     finally:
         E._answer = real

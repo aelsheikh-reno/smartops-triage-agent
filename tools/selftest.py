@@ -95,6 +95,58 @@ def first_guard(d, qid):
                 return g
 
 
+def prove_all(root, did, events=5, status="reviewed", aimed="pass", **rec):
+    """Plant a reviewed proof record for every close path of one detection, its aimed case file, and a replay coverage
+    report that meets the floor (aimed = the aimed case's replay result)."""
+    script = (
+        "import sys, json, os, yaml; sys.path.insert(0, 'tools'); import bank as B; from engine import executor as E\n"
+        f"b = B.load(); d = b['detections']['{did}']\n"
+        "ids = [E.path_id(d, p) for p, o, g in E.enumerate_paths(d['flow']) if o.startswith('close')]\n"
+        "os.makedirs('bank/triage/proofs', exist_ok=True); os.makedirs('build', exist_ok=True)\n"
+        f"rec = dict(id='PR-9001', paths=ids, attacker_position='selftest', why_unrealistic_or_guard='selftest', residual_risk='selftest', aimed_cases=['selftest-aimed'], status='{status}', reviewer='soc lead', reviewed_on='2026-10-17')\n"
+        f"rec.update({rec!r})\n"
+        "yaml.safe_dump({'proofs': [rec]}, open('bank/triage/proofs/selftest.yaml', 'w'))\n"
+        f"os.makedirs('tests/cases/{did}/aimed', exist_ok=True)\n"
+        f"yaml.safe_dump(dict(detection='{did}', name='selftest-aimed', reason='selftest', proof='PR-9001', alert={{'host.name': 'h-1'}}), open('tests/cases/{did}/aimed/selftest-aimed.yaml', 'w'))\n"
+        f"json.dump({{'detections': {{'{did}': {{'tp_events': {events}, 'paths': {{}}, 'aimed': {{'selftest-aimed': '{aimed}'}}}}}}}}, open('build/replay_coverage.json', 'w'))\n")
+    subprocess.run([sys.executable, "-c", script], cwd=root, check=True)
+
+
+def aimed_d6(overrides):
+    """Plant one aimed case for D-0006's step-2 close and the draft proof record it links to."""
+    def write(root):
+        proof_file([{"id": "PR-1", "paths": [D6_CLOSE], "attacker_position": "x", "why_unrealistic_or_guard": "x", "residual_risk": "x",
+                     "aimed_cases": ["selftest-aimed"], "status": "draft"}])(root)
+        os.makedirs(os.path.join(root, "tests/cases/D-0006/aimed"), exist_ok=True)
+        open(os.path.join(root, "tests/cases/D-0006/aimed/selftest-aimed.yaml"), "w").write(dump({
+            "detection": "D-0006", "name": "selftest-aimed", "reason": "selftest", "proof": "PR-1", "overrides": overrides,
+            "alert": {"host.name": "ws-07", "user.name": "admin1", "process.parent_name": "cmd.exe", "process.name": "psexec.exe",
+                      "process.sha256": "7" * 64, "process.command_line": "psexec.exe -accepteula \\\\srv-02 cmd",
+                      "event.time": "2026-10-17T08:00:00Z", "severity": "medium"}}))
+    return write
+
+
+def proof_file(recs):
+    def write(root):
+        os.makedirs(os.path.join(root, "bank/triage/proofs"), exist_ok=True)
+        open(os.path.join(root, "bank/triage/proofs/selftest.yaml"), "w").write(dump({"proofs": recs}))
+    return write
+
+
+SHARED = "tests/fixtures/shared_verification/microsoft-defender-for-endpoint-10.8.yaml"
+
+
+def shared_at(version_dir):
+    def write(root):
+        dest = os.path.join(root, "bank/broker/verifications/shared/microsoft-defender-for-endpoint")
+        os.makedirs(dest, exist_ok=True)
+        shutil.copy(os.path.join(root, SHARED), os.path.join(dest, f"{version_dir}.yaml"))
+    return write
+
+
+D6_CLOSE = "D-0006@v9:1:Q-0000=no > 2:Q-0001=yes"
+
+
 # (name, gate, change, expected substring or None for "must pass")
 CASES = [
     ("question reads a field directly", "validate", y(q("Q-0016"), lambda d: d.setdefault("inputs", {}).update(entity="value:dest")), "reads a field directly"),
@@ -181,7 +233,9 @@ CASES = [
     ("Auto with only some of the rows verified", "validate",
      customer({"D-0026": "auto"}, verify=["microsoft-defender-for-endpoint"], products={"microsoft-defender-for-endpoint": "1.0"}),
      "set to Auto while unverified value-table rows"),
-    ("Auto with every row on its close paths verified passes", "validate", customer({"D-0026": "auto"}, verify=AV_TABLES), None),
+    ("Auto with every row on its close paths verified but no proof", "validate", customer({"D-0026": "auto"}, verify=AV_TABLES), "unproven close paths"),
+    ("Auto with every row verified and every close path proven passes", "validate",
+     lambda root: (customer({"D-0026": "auto"}, verify=AV_TABLES)(root), prove_all(root, "D-0026")), None),
     ("verification with a spot check below 20 alerts", "validate", customer({}, verify=AV_TABLES, spot_check_alerts=19), "below verification_min_spot_check_alerts"),
     ("vendor product version change re-opens verification", "validate",
      customer({}, verify=AV_TABLES, products={"microsoft-defender-for-endpoint": "2.0", "generic": "1.0"}), "re-opens verification"),
@@ -289,6 +343,46 @@ CASES = [
     ("vendor name in the executor", "validate", lambda root: open(os.path.join(root, "engine/executor.py"), "a").write("\n# as the CrowdStrike API returns it\n"), "neutral executor: vendor or product name"),
     ("detection ID in the executor", "validate", lambda root: open(os.path.join(root, "engine/executor.py"), "a").write("\nSPECIAL = {'D-0026'}\n"), "neutral executor: detection, technique, question or context-question ID"),
     ("the executor reads a file", "validate", lambda root: open(os.path.join(root, "engine/executor.py"), "a").write("\nimport yaml\n"), "neutral executor: file format"),
+    # Round 8: proof status, suggested dispositions, human evidence for flags, guard-only questions, shared verification.
+    ("Auto on an unproven path", "validate", customer({"D-0006": "auto"}), "set to Auto with unproven close paths"),
+    ("a reviewed proof with no reviewer", "validate",
+     proof_file([{"id": "PR-1", "paths": [D6_CLOSE], "attacker_position": "x", "why_unrealistic_or_guard": "x", "residual_risk": "x", "status": "reviewed", "reviewed_on": "2026-10-17"}]),
+     "a reviewed proof record needs a reviewer"),
+    ("a proof pointing to a missing path", "validate",
+     proof_file([{"id": "PR-1", "paths": ["D-0006@v9:1:Q-0000=no > 2:Q-9999=yes"], "attacker_position": "x", "why_unrealistic_or_guard": "x", "residual_risk": "x", "status": "draft"}]),
+     "does not exist in the current flows"),
+    ("a stale proof (an earlier detection version)", "validate",
+     proof_file([{"id": "PR-1", "paths": [D6_CLOSE.replace("@v9", "@v8")], "attacker_position": "x", "why_unrealistic_or_guard": "x", "residual_risk": "x", "status": "draft"}]),
+     "does not exist in the current flows"),
+    ("a draft proof does not make Auto eligible", "validate", lambda root: (customer({"D-0026": "auto"}, verify=AV_TABLES)(root), prove_all(root, "D-0026", status="draft")),
+     "set to Auto with unproven close paths"),
+    ("a proof without enough replay does not make Auto eligible", "validate", lambda root: (customer({"D-0026": "auto"}, verify=AV_TABLES)(root), prove_all(root, "D-0026", events=4)),
+     "set to Auto with unproven close paths"),
+    # Round 9: the proof floor and aimed cases.
+    ("a proof with no aimed case", "validate",
+     proof_file([{"id": "PR-1", "paths": [D6_CLOSE], "attacker_position": "x", "why_unrealistic_or_guard": "x", "residual_risk": "x", "aimed_cases": [], "status": "draft"}]),
+     "a proof record needs at least one aimed case"),
+    ("an aimed case that closes", "replay endpoint", aimed_d6({"Q-0001": True}), "FAIL D-0006 aimed selftest-aimed"),
+    ("a proof bar below the floor of 5", "validate", y("bank/contract/proof.yaml", lambda c: c["parameters"]["proof_min_tp_events"]["bounds"].update(min=4)),
+     "below the floor of 5"),
+    ("a suggests value that isn't a real disposition", "validate",
+     y(PSEXEC, lambda d: d["flow"][4].update(flag_suggests={"on_yes": {"suggests": "close:benign_true_positive:no_such_reason", "reason": "selftest"}})), "not a real close disposition"),
+    ("a suggestion on an edge that is not a flag", "validate",
+     y(PSEXEC, lambda d: d["flow"][4].update(flag_suggests={"on_no": {"suggests": "close:benign_true_positive:approved_change", "reason": "selftest"}})), "attaches to a flag edge"),
+    ("human evidence: an analyst's own close of a flag no longer counted", "validate",
+     y(EVIDENCE, lambda d: d["human_evidence"]["counts"].pop("flag_own_close")), "counts exactly"),
+    ("human evidence: an accepted flag suggestion counted", "validate",
+     y(EVIDENCE, lambda d: (d["human_evidence"]["never"].pop("flag_accepted_suggestion"), d["human_evidence"]["counts"].update(flag_accepted_suggestion="x"))), "counts exactly"),
+    ("human evidence: an override of a flag's suggestion not counted per analyst", "validate",
+     y(EVIDENCE, lambda d: d["human_evidence"]["independent_kinds"].remove("flag_override")), "independent_kinds are the human closes"),
+    ("a guard-only question read by Q0", "validate",
+     y("bank/contract/questions.yaml", lambda d: next(x for x in d["questions"] if x["id"] == "C-06").update(guard_only=True)), "reads guard-only context question C-06"),
+    ("a guard-only question used in a step", "validate",
+     lambda root: (edit_yaml(os.path.join(root, "bank/contract/questions.yaml"), lambda d: next(x for x in d["questions"] if x["id"] == "C-08").update(guard_only=True)),
+                   edit_yaml(os.path.join(root, PSEXEC), lambda d: d["flow"][1].update(question="Q-0067"))),
+     "it may only be a guard"),
+    ("a shared verification filed under the wrong version", "validate", shared_at("10.9"), "lives at bank/broker/verifications/shared/microsoft-defender-for-endpoint/10.8.yaml"),
+    ("a shared verification filed correctly passes", "validate", shared_at("10.8"), None),
     ("context-question ID in the executor", "validate", lambda root: open(os.path.join(root, "engine/executor.py"), "a").write("\nCROWN_JEWEL = 'C-06'\n"),
      "neutral executor: detection, technique, question or context-question ID"),
     ("no context answer listed as needed for a close", "validate", y("bank/triage/context_rules.yaml", lambda d: d.update(closes_need_known=[])), "closes_need_known must list"),

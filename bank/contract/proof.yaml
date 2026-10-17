@@ -1,0 +1,42 @@
+# Proof records for close paths (round 8). (designed, not built: the review process that writes them.) A close path is
+# proven only when a reviewed record covers its current path ID, true-positive replay for the detection meets the floor
+# below, and every aimed case the record lists passes. In Auto, a close on an unproven path becomes a flag; in Shadow and
+# Recommend it stays a close, marked "unproven path". Records live in bank/triage/proofs/ (none yet). A draft never counts,
+# and a record whose path IDs no longer match the flow (the detection's version or steps changed) is stale and does not count.
+path_id: '<detection id>@v<detection version>:<step>:<question>=<answer> > ... (every step the path answers, in order; guards are not part of it)'
+record:
+  required: [id, paths, attacker_position, why_unrealistic_or_guard, residual_risk, aimed_cases, status]
+  fields:
+    id: PR-0001 style, unique
+    paths: the path IDs covered; paths that share the same close step and set of yes answers may share one record
+    attacker_position: the cheapest attacker position that makes every yes on the path true
+    why_unrealistic_or_guard: why that position is unrealistic, or which guard catches it
+    residual_risk: one line
+    aimed_cases: at least one aimed case (below), by its file name under tests/cases/<D-ID>/aimed/
+    status: draft | reviewed
+    reviewer: required when reviewed
+    reviewed_on: required when reviewed (YYYY-MM-DD)
+aimed_case:
+  what: a replay alert built to satisfy exactly the path group's yes answers; it may be synthetic, written from the attacker's-view record
+  where: tests/cases/<D-ID>/aimed/<name>.yaml
+  required: [detection, name, reason, proof, alert]
+  passes_when: the replay gate runs it in Shadow, Recommend and Auto, and it ends in flag or escalate in every mode, never close
+statuses: [draft, reviewed]
+proven_when:
+  record: a reviewed record lists the path's current ID
+  replay: true-positive replay for the detection has at least proof_min_tp_events events, none of them closed on this path
+  aimed: every aimed case the record lists passes (flag or escalate in every mode)
+parameters:
+  proof_min_tp_events:
+    default: 5
+    bounds:
+      min: 5
+      max: 200
+    reduces_scrutiny_when: lower   # higher raises scrutiny
+    floor: 5   # validate rejects a default or lower bound below this
+    description: True-positive replay events a detection needs, with no close on the path, before a reviewed proof can make that close path proven.
+    unit: events
+    reason: 'With zero closes, N attack events only bound the path''s miss rate below about 3/N at 95% confidence (the rule of
+      three: 20 events, about 15%; 5 events, about 60%). So this floor proves the detection has a real attack corpus, not that
+      a path is safe. Path safety comes from the reviewed attacker''s-view record, an aimed case per path group, and the audited
+      false-close rate at the customer (the promotion gate, docs/design-decisions.md §19).'

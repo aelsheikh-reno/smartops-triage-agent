@@ -1,0 +1,30 @@
+# Reuse map: smartops-soc-app → triage agent
+
+Status: (designed, not built). Nothing here has been ported yet.
+
+smartops-soc-app is read-only from this repo. Reuse means copying the code into the triage agent's own tree, with the source file and commit cited in the copied file's header and in the commit message. Nothing imports from, edits or pushes to smartops-soc-app.
+
+All paths are on smartops-soc-app `main` at commit `a2d0eb0` (2026-10-15). "Introduced" is the commit that first added the code (several were later moved by the AR11 refactor, `12c34e3`, without behaviour change).
+
+## Ported
+
+| What | Source (file, symbol) | Introduced | Port into | Changes needed |
+|---|---|---|---|---|
+| Splunk notable import | `engine/src/smartops/context.py`, `import_notable()` | moved to this file in `12c34e3` (from `webapp/`) | Splunk ES inbound adapter (§4) | Return a normalized alert v1 (`docs/intake/normalized-alert-v1.md`) instead of the seed plus raw row. Drop the Content Management SPL lookup: rule intent moves to the Detection Engineer (§17). |
+| Event-time handling | `engine/src/smartops/context.py`, `notable_event_time()` | `786a32f` | Splunk ES inbound adapter | Keep: `firstTime` with `_time`'s offset, epoch accepted. Record the field used in `source_alert.event_time_field`. Its `ponytail` note (assumes one time zone for ES and the saved search) becomes an onboarding check. |
+| Dedup and grouping | `engine/src/smartops/context.py`, `notables_spl()` (`dedup search_name dest firstTime`) and `group_notables()` | `ebc8e66` | Splunk ES inbound adapter (dedup); intake grouping (§6) | Dedup key becomes (rule ID, primary entity, event time), producing `first_seen`, `last_seen`, `count`. Grouping keys on asset ID and identity ID, not the raw `dest` string, over the grouping window (default 10 minutes). |
+| Query escaping | `engine/src/smartops/context.py`, `_spl_escape()` | `330d1bc` | Splunk recipes and the Splunk adapters | Parameter binding where the SIEM supports it; `_spl_escape` only where a string must be built. Each other SIEM's adapter gets its own escaper with tests. |
+| OpenCTI client (probe first, per-request timeout) | `engine/src/smartops/context.py`, `opencti()` and `_gql()` (`OPENCTI_TIMEOUT`, default 5 s) | `ebc8e66` | Threat-intel specialist, on demand (§5) | Keep the single probe so an unreachable server costs one timeout; return `source_status: unavailable` rather than an empty result. Not part of the prefetch. |
+| Scope and time-window guards | `engine/src/smartops/guards.py`: `ScopeGuard`, `IndexScopeGuard`, `TimeWindowPin`, `RowLimitCap` | `d113695` (`IndexScopeGuard`, `ScopeGuard`, `TimeWindowPin`); `8d21f8b` (`RowLimitCap`) | Tool Broker scope enforcement (§9), for live fallback and build mode | The guards cancel or rewrite agentic tool calls; in the triage runtime frozen recipes already fix scope, so these apply to the specialists' agentic paths only. `TimeWindowPin` pins to the look-back triage window (§3). |
+| MCP tool registry | `engine/src/smartops/tools/registry.py`, `load_mcp_servers()`, `call_tool()`, `family_is_configured()` | `d113695` | Tool Broker: specialist ↔ MCP gateway | Families become capability sources per customer (authoritative plus fallback, §9). Add the read-only SOAR action allowlist. The TLS-no-verify path (`_tls_no_verify_servers`) is not ported. |
+| ESCU BM25 matcher | `engine/src/smartops/context.py`, `escu()` with `docs/corpus/bm25_corpus.json` | `d113695` | Detection Engineer, suggestions only (§17) | Never per alert, never a match on its own: it proposes candidates that the rule owner confirms. The vector search plus reranker stays the primary path. |
+| Telemetry run records (decision-log pattern) | `engine/src/smartops/telemetry.py`, `record()` (one JSON line per step in `investigation.jsonl`, with trace ID) | `58d39c3` | Decision log (§22) | Same append-only, one-record-per-step pattern, keyed by alert and entity; fields as in §22; retention per regulator; stored on the customer's premises. |
+
+## Not reused for triage
+
+| What | Where | Why not |
+|---|---|---|
+| The Analyst hypothesis loop and the model verdict | `engine/src/smartops/analyst.py` (`verdict_gate()`, `follow_up_tasks()`), `engine/src/smartops/broker.py` | A language model plans hypotheses and reaches the verdict. In triage no model output decides a verdict (§18); verdicts come from fixed yes/no flows on frozen recipes. It may inform the later investigation phase. |
+| Per-question agentic broker calls | `engine/src/smartops/broker.py`, `engine/src/smartops/subagents/` | Each question becomes a model-driven tool loop. The README records the cost: one Broker loop over 6 tasks cost about $12 (run `cecd266a`, `README.md` "Cost"). Triage runs per alert at SIEM volume, so it uses frozen recipes with no model in run mode (§10). |
+| Cloud model clients | `engine/src/smartops/subagent_analysts/model.py` (Bedrock imported-model client), the Broker's hosted-provider setup | Every model that touches customer data runs on the customer's premises (§18). |
+| The browser-built context contract | `frontend/src/contract.ts` (built from alert fields, the imported row and the ESCU and OpenCTI answers, ported from the retired `webapp/static/app.js`) | The contract is built in the browser, per alert, as a free-form bundle. Triage uses the server-side normalizer (§4) and the prefetch into the broker's cache (§5). Its earlier form set `event_time` from the browser's clock (`docs/analyst-bug-report.md` C6). |

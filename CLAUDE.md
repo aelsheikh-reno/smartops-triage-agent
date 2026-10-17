@@ -20,9 +20,12 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 - The broker measures, the Triage agent judges; no threshold lives in a recipe.
 - Runtime runs only frozen recipes; a live or unproven answer can only raise scrutiny.
 - Every parameter has bounds; removing scrutiny needs human approval.
+- Nothing in the triage layer or the shared bank assumes a specific SIEM, tool or field name.
 - Decisions are per alert; work, caching and the entity guard are per entity.
+- An entity the normalizer can't fill flags, with a fix ticket; never guess.
 - The promotion gate is the audited false-close rate, never agreement.
-- The falsifier can only reopen or flag.
+- The falsifier can only reopen or flag. SOAR is read-only.
+- smartops-soc-app is read-only from this repo; reuse is by copying with the source commit cited.
 - Unbuilt items are labelled "(designed, not built)".
 - No language model output decides a verdict.
 - Every language-model step that reads alert or customer content goes through the injection classifier first. A hit flags; in Auto it escalates only with a second signal. The text never reaches a model.

@@ -9,6 +9,7 @@ required_roles:
 template: office_child
 covers: Office application launching a payload
 max_mode: recommend
+max_mode_reason: technique fallback with no true-positive replay data (#14); capped at Recommend until it has some
 fingerprint:
 - role:host.name
 - role:user.name

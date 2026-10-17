@@ -22,9 +22,9 @@ Template kinds (§10):
 - **API**: a typed template against a tool's API.
 - **alert source**: the normalized alert itself, through a value table (`bank/recipes/value_tables/`); no tool call and outside the call budget.
 
-Call budget (design-decisions §9, `scope` in `bank/capabilities.yaml`): at most 6 calls per alert on the worst path (Q0, the steps and the guards of the closing step). It counts calls to outside tools only: the SIEM, the EDR, identity, email, threat intel, change and ticketing, the vulnerability scanner and SOAR (`budget_counts_sources`). Lookups in our own cached context and list store do not count (`list.lookup`, context questions), nor do the alert source, case memory (`precedent.check`) and `context.rule`. The flow limit is separate and unchanged: at most 5 steps, Q0 being step 1, enforced by `validate`.
+Call budget (design-decisions §9, `scope` in `bank/capabilities.yaml`): at most 6 calls per alert on the worst path (Q0, the steps and the guards of the closing step). It counts calls to outside tools only: the SIEM, the EDR, identity, email, threat intel, change and ticketing, the vulnerability scanner and SOAR (`budget_counts_sources`). Lookups in our own cached context and list store do not count (`list.lookup`, context questions), nor do the alert source, case memory (`precedent.check`) and `context.rule`. The flow limit is separate and unchanged: at most 5 steps per flow in total, Q0 counting as step 1, enforced by `validate`.
 
-Raise-only answers: an answer from a fallback source, or from an unverified value-table row, may only raise scrutiny. Each class lists its `raise_only` values (ran, high risk, malicious categories); any other value from such a row or source answers unknown.
+Row kinds and modes: an ambiguous row answers unknown in every mode; an unverified row (and any non-ambiguous fallback answer) may support a close in Shadow and Recommend, marked "unverified mapping: <table>/<row>", but in Auto only its raise-only values stand (each class lists them: ran, high risk, malicious categories); a row verified for the customer may support any close. Details: `docs/broker-questions.md`.
 
 Every event-search recipe also runs a data-recency test: the data source must show events within the expected ingestion delay, so an empty result is never read as "no".
 
@@ -180,15 +180,15 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Known-answer tests:** a replayed sample alert per vendor family returns the expected normalized values. An unapproved raw value is reported as pending translation.
 - **Unknown when:** the field is missing or empty, its value is in `unknown_values`, or the value's translation is not yet approved (which taints the close).
 - **Attacker influence:** rated per question and per source profile (direct API vs forwarded syslog).
-- **Owner:** Tool Broker (alert source). New value-table rows are proposed by the Use Case Manager and approved by a human; a family with unverified product rows is capped at Recommend for that customer.
+- **Owner:** Tool Broker (alert source). New value-table rows are proposed by the Use Case Manager and approved by a human; a detection is Auto-eligible for a customer only when every row on its close paths is verified for that customer (customer layer).
 
 ## endpoint.run_status
 - **Measures:** whether the detected file was stopped before it ran: pre_execution, ran or unknown, from the endpoint product's own record of the alert.
-- **Source authority:** the endpoint product's API (for Defender, the alert evidence in its security API). The broker finds the product's alert by `reporting_control.vendor_alert_id`; if that is missing, by `reporting_control.endpoint_device`, file hash and `edr_alert_match_window_minutes` (default 10, min 1, max 60). No match or several matches answer unknown. Fallback, only when the API is unavailable or not granted: the SIEM's copy of the product's alert, through its `siem_copy` value table; its answers are raise-only: ran stands, pre_execution becomes unknown, verified or not. Unverified rows of the API table are raise-only too.
+- **Source authority:** the endpoint product's API (for Defender, the alert evidence in its security API). The broker finds the product's alert by `reporting_control.vendor_alert_id`; if that is missing, by `reporting_control.endpoint_device`, file hash and `edr_alert_match_window_minutes` (default 10, min 1, max 60). No match or several matches answer unknown. Fallback, only when the API is unavailable or not granted: the SIEM's copy of the product's alert, through its `siem_copy` value table; its answers follow the unverified rule (Shadow and Recommend only, marked; never Auto), and its ambiguous rows (1117 Block, quarantine) answer unknown in every mode. Rows of the API table are unverified until the customer verifies them.
 - **Triage rule:** the step's enum rule (Q-0049: pre_execution means yes, unknown means unknown).
 - **Template kind:** API lookup, with the run-status value table in the API recipe.
 - **Known-answer tests:** known prevented, blocked, quarantined and detected alerts return pre_execution, ran, unknown and ran (#20 for Defender, #9 for CrowdStrike).
-- **Unknown when:** no match or several matches, mixed evidence, a quarantine or cleaning after execution, pending reboot, partial remediation, or a fallback answer from an unverified row.
+- **Unknown when:** no match or several matches, mixed evidence, a quarantine or cleaning after execution, pending reboot, partial remediation, an ambiguous row (in every mode), or in Auto an unverified row or a fallback answer.
 - **Attacker influence:** low from the API; medium when forwarded.
 - **Owner:** endpoint specialist.
 

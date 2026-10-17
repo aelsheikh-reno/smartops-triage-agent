@@ -11,8 +11,9 @@ Beyond structure, it enforces the bank's design rules:
 - every question is tagged context or triage; context questions C-01..C-07 exist and are wired
 - honest ratings: no question rated below its capability's floor without a written reason; change.window needs an
   independent approver
-- value tables: every row verified or not; a family whose classes have unverified product rows declares
-  auto_requires: [vendor_mapping_verified]
+- value tables: every row has an id and a kind (ambiguous or unverified); an ambiguous row never maps to a value that
+  supports a close; verified is per customer (bank/overlays/customer/<c>/verifications.yaml), and a detection set to Auto
+  for a customer needs every value-table row on its close paths verified for that customer
 """
 import glob
 import json
@@ -44,6 +45,7 @@ PROSE = {"text", "name", "intent", "notes", "note", "description", "reason", "so
          "on_no", "on_unknown", "step", "question", "kind", "feeds", "when_not_answered", "sigma_logsource_none", "required_roles",
          "precedent_validity_reason", "parameters", "rule", "list", "context", "context_questions", "coverage", "fallback_rating", "rating",
          "join", "first", "all", "repo", "_file"}
+TODAY = __import__("datetime").date.today().isoformat()
 THRESHOLD_KEYS = {"min_count", "min_hosts", "min_days", "min_weeks", "of_weeks", "threshold", "op", "values", "unknown_op", "unknown_values", "max_count"}
 WINDOW_KEYS = {"lookback_days", "lookback_weeks", "lookback_hours", "max_age_days", "validity_hours", "window"}   # windows may travel to the broker
 QUERY_SYNTAX = re.compile(r"\b(tstats|sourcetype|inputlookup|index\s*=)|\|\s*stats\b", re.I)
@@ -460,7 +462,8 @@ def main():
         err("runtime bundle", "value tables are recipe data and never enter the runtime bundle")
 
     # ---------- value tables ----------
-    unverified_classes = {}
+    row_kinds = {}
+    n_close = n_auto_today = 0
     for tname, t in b["value_tables"].items():
         w = t["_file"]
         for k in ("vendor", "product", "feed", "source", "references", "license", "classes"):
@@ -476,7 +479,7 @@ def main():
                 if not vals or cname != "run_status":
                     err(w, f"a table answering {answers} holds the class run_status with that capability's values")
                     continue
-                cdef = {"values": vals, "default": "unknown"}
+                cdef = {"values": vals, "default": "unknown", "raise_only": caps[answers]["answer"].get("raise_only")}
             elif cname not in classes:
                 err(w, f"unknown alert class {cname}")
                 continue
@@ -490,27 +493,27 @@ def main():
             for i, r in enumerate(spec.get("rows") or []):
                 if r.get("value") not in cdef["values"]:
                     err(w, f"{cname} row {i}: value {r.get('value')!r} is not a value of the class")
-                if r.get("verified") not in (True, False):
-                    err(w, f"{cname} row {i}: verified must be true or false")
+                rid = r.get("id") or f"row {i}"
+                if not r.get("id") or [x.get("id") for x in spec["rows"]].count(r["id"]) > 1:
+                    err(w, f"{cname} row {i}: needs an id, unique in the table")
+                if r.get("kind") not in ("ambiguous", "unverified"):
+                    err(w, f"{cname} {rid}: kind must be ambiguous or unverified (verified is per customer, in the customer layer)")
+                if "verified" in r:
+                    err(w, f"{cname} {rid}: verified is per customer (bank/overlays/customer/<c>/verifications.yaml), not a row key")
+                ro = set(cdef.get("raise_only") or [])
+                if r.get("kind") == "ambiguous" and r.get("value") not in ro | {"unknown"}:
+                    err(w, f"{cname} {rid}: an ambiguous row maps to {r.get('value')!r}, which could support a close; it must answer unknown")
                 if not isinstance(r.get("match"), dict) or not r["match"]:
-                    err(w, f"{cname} row {i}: needs a match")
-                if r.get("verified") is False and not generic:
-                    unverified_classes.setdefault(cname, []).append(f"{t.get('vendor')} {t.get('product')}")
+                    err(w, f"{cname} {rid}: needs a match")
+                row_kinds[r.get("kind")] = row_kinds.get(r.get("kind"), 0) + 1
     for cname, cdef in list(classes.items()) + [("run_status (endpoint.run_status)", caps.get("endpoint.run_status", {}).get("answer", {}))]:
         if "raise_only" not in cdef or not set(cdef.get("raise_only") or []) <= set(cdef.get("values") or []):
             err(f"bank/capabilities.yaml {cname}", "declare raise_only: the values that can only raise scrutiny (they stand from a fallback or unverified row; every other value becomes unknown)")
-    n_downgraded = 0
     for tname, t in b["value_tables"].items():
         if bool(t.get("fallback")) != (t.get("source") == "siem_copy"):
             err(t["_file"], "a table whose source is a fallback (siem_copy) declares fallback: true, and only such a table")
-        for cname, spec in (t.get("classes") or {}).items():
-            for r in spec.get("rows") or []:
-                try:
-                    eff = B.raise_only(b, cname, r.get("value"), dict(r, table=tname), t.get("answers"))
-                except KeyError:
-                    continue
-                n_downgraded += eff != r.get("value")
-    info.append(f"raise-only rule: {n_downgraded} value-table rows answer unknown until verified (unverified or fallback rows whose value could lead to a close)")
+    info.append(f"value-table rows: {row_kinds.get('unverified', 0)} unverified (may support a close in Shadow and Recommend, marked; never in Auto), "
+                f"{row_kinds.get('ambiguous', 0)} ambiguous (unknown in every mode)")
     for tname, t in b["value_tables"].items():
         if t.get("source") == "siem_copy" and t.get("fallback_for") and t["fallback_for"] not in b["value_tables"]:
             err(t["_file"], f"fallback_for {t['fallback_for']} is not a value table")
@@ -634,9 +637,8 @@ def main():
             err(w, "precedent_entity must be a role (or derived) reference")
         for k, v in (d.get("parameters") or {}).items():
             param_check(err, f"{w} parameters", params, k, v)
-        for req in d.get("auto_requires") or []:
-            if req not in (b["capabilities"].get("auto_requirements") or {}):
-                err(w, f"auto_requires {req} is not declared in capabilities.yaml auto_requirements")
+        if "auto_requires" in d:
+            err(w, "auto_requires is replaced by per-customer verification: a detection is Auto-eligible for a customer only when every value-table row on its close paths is verified for that customer")
         flow = d.get("flow", [])
         if not 1 <= len(flow) <= 5:
             err(w, f"flow has {len(flow)} steps (1-5 allowed)")
@@ -801,18 +803,12 @@ def main():
                 err(where, "last step cannot fall through with next")
         if not any(B.OUTCOME.match(st.get(e, "")) and st.get(e, "").startswith("close") for st in flow[1:] for e in ("on_yes", "on_no")):
             info.append(f"{d['id']}: no close outside Q0 (escalate/flag only)")
-        # vendor value tables: unverified product rows for this family's classes cap it at Recommend
-        items = [x for st in flow for x in [st] + (st.get("guards") or []) if x.get("question") in b["questions"]]
-        used_classes = {B.step_inputs(b["questions"][x["question"]], x).get("class") for x in items
-                        if b["questions"][x["question"]]["capability"]["name"] == "alert.class"}
-        if any(b["questions"][x["question"]]["capability"]["name"] == "endpoint.run_status" for x in items):
-            used_classes.add("run_status")
-        rows = sorted({p for c in used_classes for p in unverified_classes.get(c, [])})
-        if rows and "vendor_mapping_verified" not in (d.get("auto_requires") or []):
-            err(w, f"its alert classes have unverified product rows ({', '.join(rows)}): declare auto_requires: [vendor_mapping_verified] "
-                   "(capped at Recommend for each customer whose product rows are unverified)")
-        elif rows:
-            info.append(f"{d['id']}: capped at Recommend per customer until that customer's product rows are verified ({', '.join(rows)})")
+        # close paths: usable in Shadow/Recommend; Auto-eligible only with every value-table row on them verified per customer
+        for path, out, guards in B.enumerate_paths(flow):
+            if out.startswith("close"):
+                n_close += 1
+                needs = B.close_path_rows(b, path, guards)
+                n_auto_today += not needs and d.get("max_mode") != "recommend"
 
     # use-case catalog
     ucs = b["use_cases"]
@@ -876,9 +872,34 @@ def main():
                     else "technique-only" if fallbacks else "none")
             if u.get("coverage") != want:
                 err(w, f"coverage is {u.get('coverage')}, bank says {want}")
-    for did, d in b["detections"].items():
-        if d.get("family") == "vendor" and d.get("max_mode") == "recommend" and "vendor_mapping_verified" not in (d.get("auto_requires") or []) and not d.get("max_mode_reason"):
+    for did, d in list(b["detections"].items()) + list(b["techniques"].items()):
+        if d.get("max_mode") == "recommend" and not d.get("max_mode_reason"):
             err(d["_file"], "max_mode recommend needs a max_mode_reason")
+    info.append(f"close paths: {n_close} usable in Shadow and Recommend; {n_auto_today} Auto-eligible today with no customer verifications "
+                "(the rest need value-table rows verified per customer, or are technique fallbacks capped at Recommend)")
+
+    # customer layer: per-customer verifications, product versions and detection modes
+    for cust, c in b["customers"].items():
+        w = c["_file"]
+        for rec in c.get("verifications") or []:
+            for problem in B.verification_problems(b, cust, rec, TODAY):
+                err(w, f"verification {rec.get('table')}/{rec.get('row')}: {problem}")
+        for did, mode in (c.get("modes") or {}).items():
+            d = b["detections"].get(did) or b["techniques"].get(did)
+            if mode not in B.MODES or not d:
+                err(w, f"mode {did}: {mode} must be shadow, recommend or auto for a detection or technique fallback in the bank")
+                continue
+            if mode != "auto":
+                continue
+            if did in b["techniques"]:
+                err(w, f"{did}: technique fallbacks are capped at Recommend (no true-positive replay data)")
+            elif d.get("max_mode") == "recommend":
+                err(w, f"{did}: capped at Recommend ({d.get('max_mode_reason')})")
+            missing = sorted({f"{t}/{r}" for path, out, guards in B.enumerate_paths(d["flow"]) if out.startswith("close")
+                              for t, r in B.close_path_rows(b, path, guards, customer=cust) if not B.row_verified(b, cust, t, r, TODAY)})
+            if missing:
+                err(w, f"{did}: set to Auto while unverified value-table rows sit on its close paths: {', '.join(missing[:6])}"
+                       + (f" and {len(missing) - 6} more" if len(missing) > 6 else ""))
     for x in b["pilot"]["detections"]:
         if x["id"] not in b["detections"]:
             err("bank/pilot.yaml", f"{x['id']} has no detection file")

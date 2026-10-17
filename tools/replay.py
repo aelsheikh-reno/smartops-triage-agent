@@ -313,12 +313,12 @@ def measure(b, q, inputs, n, ctx):
             values = {r: n.get(r) for r in reads}
             if all(v in (None, "") for v in values.values()):
                 return None
-        return B.classify_effective(b, cls, values, tables)[0]
+        return B.classify_effective(b, cls, values, tables, ctx=ctx)[0]
     if cap == "endpoint.run_status":
         # The endpoint API is authoritative (_api: the vendor alerts it matched); without it the SIEM's copy of the alert
         # is the fallback (_raw read through the product's siem_copy table, else the generic one).
         copy = {"raw": n.get("_raw") or {"value": n.get("reporting_control.action_raw")}, "tables": n.get("_tables") or []}
-        return B.run_status(b, n.get("_api"), copy)[0]
+        return B.run_status(b, n.get("_api"), copy, ctx=ctx)[0]
     if cap == "list.lookup" and (b["facts"].get(inputs.get("list")) or {}).get("default_entries"):
         # A context list that starts from default entries (CF-0031 internal networks: the private ranges) holds them in the clean room.
         import ipaddress
@@ -356,6 +356,16 @@ def answer(b, q, item, n, ctx, d):
 
 
 def run_flow(b, d, n, ctx):
+    """One alert through one flow in ctx["mode"] (shadow, recommend or auto; default recommend). A close that rests on an
+    unverified value-table mapping is marked in the trail, as the explanation and decision log would mark it."""
+    ctx["marks"] = []
+    out, trail = _run_flow(b, d, n, ctx)
+    if out.startswith("close") and ctx["marks"]:
+        trail = trail + sorted(set(ctx["marks"]))
+    return out, trail
+
+
+def _run_flow(b, d, n, ctx):
     trail = []
     for st in d["flow"]:
         q = b["questions"][st["question"]]
@@ -397,12 +407,16 @@ def api(*evidence):
     return {"tables": GRAPH, "matches": list(evidence)}
 
 
-VERIFIED = ["microsoft-defender-for-endpoint", "generic"]   # as if onboarding had verified these tables' rows (#20, #9)
+VERIFIED = ["microsoft-defender-for-endpoint", "generic"]   # tables a synthetic customer has verified (as after #20 and onboarding)
 USB = {"_coverage": ["device_control_write_events"], "host.name": "srv-01", "user.name": "u1", "event.time": "2026-10-17T00:00:00Z", "device.event_type": "connect", "device.class": "storage",
        "reporting_control.action": "allowed", "device.files_written": 0}
+API_PREVENTED = dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api({"detectionStatus": "prevented"})})
+BLOCK_1117 = dict(AV, **PUA, **{"file.sha256": "e" * 64, "reporting_control.action_raw": "Block", "_raw": {"EventID": "1117", "Action Name": "Block"}, "_tables": EVENT_LOG})
 
-# (detection, name, alert, required outcome). Alert keys starting with _ are harness inputs: _api (the endpoint API's matches),
-# _raw/_tables (the SIEM copy), _coverage (coverage reports present), _context (context answers; None = unknown or source unavailable), _verified (tables taken as verified).
+# (detection, name, alert, required outcome). A required outcome ending in "+unverified" also requires the close to be marked
+# "unverified mapping: <table>/<row>". Alert keys starting with _ are harness inputs: _mode (shadow, recommend, auto; default
+# recommend), _api (the endpoint API's matches), _raw/_tables (the SIEM copy), _coverage (coverage reports present),
+# _context (context answers; None = unknown or source unavailable), _verified (tables a synthetic customer has verified).
 REGRESSION = [
  ("vendor:av_detection", "no hash, high-risk class, detected (not blocked) must escalate",
   dict(AV, **{"reporting_control.signature": "HackTool:Win32/Mimikatz", "reporting_control.category": "hacktool", "reporting_control.action_raw": "detected"}), "escalate"),
@@ -412,57 +426,74 @@ REGRESSION = [
   dict(AV, **PUA, **{"file.sha256": "a" * 64, "reporting_control.vendor_alert_id": "da-1", "_api": api({"detectionStatus": "blocked"})}), "escalate"),
  ("vendor:av_detection", "Defender API quarantine only (no detection status), low-risk class: flag",
   dict(AV, **PUA, **{"file.sha256": "b" * 64, "reporting_control.vendor_alert_id": "da-2", "_api": api({"remediationStatus": "quarantined"})}), "flag"),
- ("vendor:av_detection", "any product, no API, SIEM copy quarantined only, low-risk class: flag",
+ ("vendor:av_detection", "any product, no API, SIEM copy quarantined only (ambiguous row), low-risk class: flag",
   dict(AV, **{"file.sha256": "c" * 64, "reporting_control.signature": "Adware:Win32/X", "reporting_control.category": "adware",
               "reporting_control.action_raw": "quarantined"}), "flag"),
- ("vendor:av_detection", "Defender API prevented, low-risk class, rows not yet verified: flag (raise-only rule)",
-  dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api({"detectionStatus": "prevented"})}), "flag"),
- ("vendor:av_detection", "Defender API prevented, low-risk class, rows verified: mitigated close",
-  dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api({"detectionStatus": "prevented"}),
-                     "_verified": VERIFIED}), "close:mitigated_true_positive"),
- ("vendor:av_detection", "C-06 source unavailable: the same verified mitigated close flags (context_unknown)",
-  dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api({"detectionStatus": "prevented"}),
-                     "_verified": VERIFIED, "_context": {"C-06": None}}), "flag"),
- ("vendor:av_detection", "Defender API unavailable, SIEM event-log copy says Block, low-risk class: flag (fallback is raise-only)",
-  dict(AV, **PUA, **{"file.sha256": "e" * 64, "reporting_control.action_raw": "Block", "_raw": {"EventID": "1117", "Action Name": "Block"}, "_tables": EVENT_LOG,
-                     "_verified": VERIFIED}), "flag"),
+ ("vendor:av_detection", "Defender API prevented, low-risk, unverified rows, Recommend: recommended close, marked unverified",
+  dict(API_PREVENTED, _mode="recommend"), "close:mitigated_true_positive+unverified"),
+ ("vendor:av_detection", "Defender API prevented, low-risk, unverified rows, Shadow: close shown, marked unverified",
+  dict(API_PREVENTED, _mode="shadow"), "close:mitigated_true_positive+unverified"),
+ ("vendor:av_detection", "Defender API prevented, low-risk, unverified rows, Auto: not closed (flag)",
+  dict(API_PREVENTED, _mode="auto"), "flag"),
+ ("vendor:av_detection", "Defender API prevented, low-risk, rows verified for the customer, Auto: mitigated close",
+  dict(API_PREVENTED, _mode="auto", _verified=VERIFIED), "close:mitigated_true_positive"),
+ ("vendor:av_detection", "C-06 source unavailable: the same verified Auto close flags (context_unknown)",
+  dict(API_PREVENTED, _mode="auto", _verified=VERIFIED, _context={"C-06": None}), "flag"),
+ ("vendor:av_detection", "event 1117 Block (ambiguous), Shadow: flag", dict(BLOCK_1117, _mode="shadow"), "flag"),
+ ("vendor:av_detection", "event 1117 Block (ambiguous), Recommend: flag", dict(BLOCK_1117, _mode="recommend"), "flag"),
+ ("vendor:av_detection", "event 1117 Block (ambiguous), Auto, other rows verified: flag", dict(BLOCK_1117, _mode="auto", _verified=VERIFIED), "flag"),
  ("vendor:av_detection", "Defender API unavailable, SIEM event-log copy 1116 (detected): ran stands from the fallback, escalate",
   dict(AV, **PUA, **{"file.sha256": "e" * 64, "reporting_control.action_raw": "detected", "_raw": {"EventID": "1116", "Action Name": "Not Applicable"},
-                     "_tables": EVENT_LOG, "_verified": VERIFIED}), "escalate"),
+                     "_tables": EVENT_LOG}), "escalate"),
  ("vendor:av_detection", "no vendor alert ID, fallback match finds two Defender alerts, low-risk class: flag",
-  dict(AV, **PUA, **{"file.sha256": "f" * 64, "reporting_control.endpoint_device": "dev-1", "_verified": VERIFIED,
+  dict(AV, **PUA, **{"file.sha256": "f" * 64, "reporting_control.endpoint_device": "dev-1",
                      "_api": api({"detectionStatus": "prevented"}, {"detectionStatus": "prevented"})}), "flag"),
  ("vendor:av_detection", "no vendor alert ID, fallback match finds no Defender alert, low-risk class: flag",
-  dict(AV, **PUA, **{"file.sha256": "0" * 64, "reporting_control.endpoint_device": "dev-1", "_api": api(), "_verified": VERIFIED}), "flag"),
- ("vendor:removable_media", "removable media, rows verified, C-08 unknown: flag (context_unknown), never escalate",
-  dict(USB, _verified=VERIFIED, _context={"C-06": False}), "flag"),
- ("vendor:removable_media", "removable media, rows verified, C-08 server: today's outcome (Q-0067 escalates)",
-  dict(USB, _verified=VERIFIED, _context={"C-06": False, "C-08": "server"}), "escalate"),
- ("vendor:removable_media", "removable media, rows verified, C-08 workstation: closes (no data transferred)",
-  dict(USB, _verified=VERIFIED, _context={"C-06": False, "C-08": "workstation"}), "close:benign_true_positive"),
- ("vendor:removable_media", "removable media, rows verified, C-06 unavailable and C-08 workstation: flag (context_unknown)",
-  dict(USB, _verified=VERIFIED, _context={"C-06": None, "C-08": "workstation"}), "flag"),
- ("vendor:removable_media", "removable media, rows not yet verified, C-08 server: flag (device class answers unknown)",
-  dict(USB, _context={"C-06": False, "C-08": "server"}), "flag"),
+  dict(AV, **PUA, **{"file.sha256": "0" * 64, "reporting_control.endpoint_device": "dev-1", "_api": api()}), "flag"),
+ ("vendor:removable_media", "removable media, C-08 unknown: flag (context_unknown), never escalate",
+  dict(USB, _context={"C-06": False}), "flag"),
+ ("vendor:removable_media", "removable media, C-08 server: Q-0067 escalates",
+  dict(USB, _context={"C-06": False, "C-08": "server"}), "escalate"),
+ ("vendor:removable_media", "removable media, C-08 workstation, Recommend: close (no data transferred), marked unverified",
+  dict(USB, _context={"C-06": False, "C-08": "workstation"}), "close:benign_true_positive+unverified"),
+ ("vendor:removable_media", "removable media, C-08 workstation, unverified rows, Auto: flag",
+  dict(USB, _mode="auto", _context={"C-06": False, "C-08": "workstation"}), "flag"),
+ ("vendor:removable_media", "removable media, C-08 workstation, rows verified, Auto: close",
+  dict(USB, _mode="auto", _verified=VERIFIED, _context={"C-06": False, "C-08": "workstation"}), "close:benign_true_positive"),
+ ("vendor:removable_media", "removable media, C-06 unavailable and C-08 workstation: flag (context_unknown)",
+  dict(USB, _context={"C-06": None, "C-08": "workstation"}), "flag"),
 ]
+
+
+TODAY = "2026-10-17"
+
+
+def synthetic_customer(b, tables):
+    """A customer that verified every non-ambiguous row of these tables (cited doc, 20-alert spot check, version, expiry)."""
+    recs = [{"table": t, "row": r["id"], "vendor_doc": (b["value_tables"][t].get("references") or ["doc"])[0], "spot_check_alerts": 20,
+             "checked_by": "product operator", "checked_on": TODAY, "product_version": "1.0", "expires": "2027-10-17"}
+            for t in tables for spec in b["value_tables"][t]["classes"].values() for r in spec.get("rows") or [] if r.get("kind") != "ambiguous"]
+    return {"customer": "regression", "products": {t: "1.0" for t in tables}, "verifications": recs, "modes": {}}
 
 
 def run_regression(b, ctx):
     failures = []
     import copy
     for did, name, alert, want in REGRESSION:
-        bb = b
+        bb, customer = b, None
         if alert.get("_verified"):
-            bb = copy.deepcopy(b)
-            for t in alert["_verified"]:
-                for spec in bb["value_tables"][t]["classes"].values():
-                    for r in spec.get("rows") or []:
-                        r["verified"] = True
+            bb, customer = copy.deepcopy(b), "regression"
+            bb["customers"][customer] = synthetic_customer(bb, alert["_verified"])
         n = derive(bb["detections"][did], dict(alert, _idx=0))
-        c = dict(ctx, alerts=[n], conns=[], context=dict(ctx.get("context") or {}, **(alert.get("_context") or {})), coverage=alert.get("_coverage") or [])
+        c = dict(ctx, alerts=[n], conns=[], context=dict(ctx.get("context") or {}, **(alert.get("_context") or {})), coverage=alert.get("_coverage") or [],
+                 mode=alert.get("_mode", "recommend"), customer=customer, today=TODAY)
         out, trail = run_flow(bb, bb["detections"][did], n, c)
+        need_mark = want.endswith("+unverified")
+        want = want.replace("+unverified", "")
         got = out if want.startswith("close:") and out.startswith(want) else out.split(":")[0]
-        ok = got == want or (want.startswith("close:") and out.startswith(want))
+        ok = (got == want or (want.startswith("close:") and out.startswith(want))) and \
+            (not need_mark or any(t.startswith("unverified mapping:") for t in trail)) and \
+            (need_mark or not any(t.startswith("unverified mapping:") for t in trail))
         print(f"  {'ok  ' if ok else 'FAIL'} {did}: {name} -> {out}  [{' > '.join(trail)}]")
         if not ok:
             failures.append(name)
@@ -474,7 +505,7 @@ def main():
     batches = B.select_batches([a for a in sys.argv[1:] if not a.startswith("--")])
     b = B.load()
     # Clean-room customer: no crown-jewel list entries (C-06 answered no) and no asset inventory (C-08 unknown: Q-0067 flags).
-    ctx = {"vuln_unknown": Counter(), "context": {"C-06": False}}
+    ctx = {"vuln_unknown": Counter(), "context": {"C-06": False}, "mode": "recommend", "customer": None, "today": TODAY}
     rows, cannot, fails, mitigated = [], [], [], []
     for did, d in sorted(b["detections"].items()):
         if B.batch_of("rule", did) not in batches:

@@ -26,7 +26,7 @@ Design, workflows and question bank for the SmartOps triage agent. The question 
 | `docs/assumptions.md` | Assumptions register: what the design depends on and how each is tested |
 | `docs/pilot-terms.md` | Proposed pilot terms |
 | `bank/` | The question bank (YAML, built from the brief) |
-| `bank/recipes/value_tables/` | Vendor value tables: each product's raw alert values mapped to the bank's alert classes, each row verified or not (recipe data, never in the runtime bundle) |
+| `bank/recipes/value_tables/` | Vendor value tables: each product's raw alert values mapped to the bank's alert classes, each row ambiguous or unverified, verified per customer in `bank/overlays/customer/` (recipe data, never in the runtime bundle) |
 | `bank/context/`, `bank/context_rules.yaml` | Context questions C-01…C-08 and how the entity guard, Q0 and priority use them |
 | `tools/` | Validation (`validate.py`, with the role registry `roles.py` and the field-name list `field_names.py`), close-path gate, strict true-positive replay, gate self-test, SQL loader and context-fact ranking; `gates.sh` runs them all |
 

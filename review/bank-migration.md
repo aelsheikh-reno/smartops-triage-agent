@@ -34,15 +34,15 @@ Bank migration (#12): roles instead of field names, typed broker answers with Tr
 - change.window: a change approved by one of its own implementers answers unknown (was yes).
 - Defender event-log 1117 "Block" now maps to unknown (was blocked before execution): flags instead of a possible mitigated close, until the lab test (#20).
 - Round 2: Q-0049 reads the endpoint API first (vendor alert ID, else device + hash + window); the SIEM copy is a fallback. Q-0067 is a Triage-side rule over C-06 and C-08.
-- Round 3, raise-only answers: an answer from a fallback source or an unverified value-table row stands only if it raises (ran, high risk, malicious). 61 rows today answer unknown until verified, so most vendor-family closes flag until onboarding verifies their rows.
+- Round 4, row kinds and modes (replaces round 3's raise-only rule): ambiguous rows (5: Defender event 1117 Block and 1117 Quarantine/Remove/Clean, CrowdStrike quarantine in its API and SIEM-copy tables, generic post-execution remediation states) answer unknown in every mode; unverified rows (110) may support a close in Shadow and Recommend, marked, never in Auto; verified is per customer. A detection is Auto-eligible for a customer only when every row on its close paths is verified for that customer (replaces vendor_mapping_verified). Technique fallbacks stay capped at Recommend (#26).
 - Round 3, missing context: an unknown or unavailable context question flags with context_unknown and never escalates. Q-0067 with C-08 unknown flags (was: escalate, treated as a server).
 - vendor:ids_alert is now capped at Recommend per customer until its IDS classification rows are verified.
 
 ## Gate results
 
-- validate: PASS (35 detections, 26 technique fallbacks, 73 questions, 8 context questions, 31 context facts, 32 capabilities, 30 parameters, 7 value tables: 0 errors, 0 warnings)
+- validate: PASS (35 detections, 26 technique fallbacks, 73 questions, 8 context questions, 31 context facts, 32 capabilities, 31 parameters, 7 value tables: 0 errors, 0 warnings)
 - attacker influence: PASS (61 flows, 739 close paths checked, 0 failing, in 0 flows; 50 closes flag under the forwarded profile, 1 under fingerprint fallback)
-- replay: PASS (replay: 655 TP events in 28 detections, 17/17 regression cases; 0 benign/FP closes, 0 mitigated closes -> PASS)
+- replay: PASS (replay: 655 TP events in 28 detections, 22/22 regression cases; 0 benign/FP closes, 0 mitigated closes -> PASS)
 
 ## Detections
 

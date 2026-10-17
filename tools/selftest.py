@@ -43,6 +43,30 @@ def overlay(*overrides):
     return write
 
 
+CUSTOMER = "bank/overlays/customer/selftest/verifications.yaml"
+
+
+def customer(modes, verify=(), products=None, **rec_changes):
+    """Write a customer layer: product versions, verification records for every non-ambiguous row of the verify tables, modes."""
+    def write(root):
+        recs = []
+        for t in verify:
+            doc = yaml.safe_load(open(os.path.join(root, "bank/recipes/value_tables", t + ".yaml")))
+            for spec in doc["classes"].values():
+                for r in spec.get("rows") or []:
+                    if r.get("kind") != "ambiguous":
+                        recs.append(dict({"table": t, "row": r["id"], "vendor_doc": (doc.get("references") or ["doc"])[0], "spot_check_alerts": 20,
+                                          "checked_by": "product operator", "checked_on": "2026-10-17", "product_version": "1.0",
+                                          "expires": "2099-01-01"}, **rec_changes))
+        os.makedirs(os.path.join(root, os.path.dirname(CUSTOMER)), exist_ok=True)
+        open(os.path.join(root, CUSTOMER), "w").write(dump({"customer": "selftest", "products": products or {t: "1.0" for t in verify},
+                                                             "verifications": recs, "modes": modes}))
+    return write
+
+
+AV_TABLES = ["microsoft-defender-for-endpoint", "generic"]
+
+
 def y(path, fn):
     return lambda root: edit_yaml(os.path.join(root, path), fn)
 
@@ -91,9 +115,11 @@ CASES = [
     ("override outside bounds", "validate", overlay({"param": "precedent_validity_hours", "value": 100, "approved_by": "x", "owner": "y", "expiry": "z"}), "outside bounds"),
     ("context question missing", "validate", lambda root: os.remove(os.path.join(root, "bank/context/C-03.yaml")), "context questions must be exactly"),
     ("entity_missing reason code missing", "validate", t("bank/reason_codes.yaml", "- code: entity_missing", "- code: entity_gone"), "entity_missing"),
-    ("unverified product rows without the cap", "validate", y("bank/detections/vendor/ids_alert.yaml", lambda d: d.pop("auto_requires")), "declare auto_requires"),
-    ("value-table row without verified", "validate",
-     y("bank/recipes/value_tables/microsoft-defender-for-endpoint.yaml", lambda d: d["classes"]["run_status"]["rows"][0].pop("verified")), "verified must be"),
+    ("old auto_requires key", "validate", y("bank/detections/vendor/ids_alert.yaml", lambda d: d.update(auto_requires=["vendor_mapping_verified"])), "replaced by per-customer"),
+    ("value-table row with no kind", "validate",
+     y("bank/recipes/value_tables/microsoft-defender-for-endpoint.yaml", lambda d: d["classes"]["run_status"]["rows"][0].pop("kind")), "kind must be"),
+    ("verified written into the shared bank row", "validate",
+     y("bank/recipes/value_tables/microsoft-defender-for-endpoint.yaml", lambda d: d["classes"]["run_status"]["rows"][0].update(verified=True)), "verified is per customer"),
     # Round 2: thresholds stay Triage-side, classification principle, source authority, per-class parameters.
     ("threshold at the broker in org.prevalence", "validate", y(q("Q-0015"), lambda d: d["capability"]["inputs"].update(min_hosts=3)), "threshold or comparison"),
     ("org.prevalence statistic setting as a literal", "validate", y(q("Q-0015"), lambda d: d["capability"]["inputs"].update(min_weeks=2)), "bound to a recipe_statistic parameter"),
@@ -141,6 +167,22 @@ CASES = [
     ("unknown context escalates", "validate", y("bank/context/C-06.yaml", lambda d: d.update(on_unknown="escalate")), "never escalates"),
     ("guard escalates on unknown context", "validate",
      y("bank/detections/vendor/removable_media.yaml", lambda d: first_guard(d, "Q-0067").update(when=["yes", "unknown"])), "never escalates"),
+    # Round 4: row kinds, per-customer verification, Auto eligibility, technique fallbacks capped at Recommend.
+    ("ambiguous row mapped to a close-supporting value", "validate",
+     y("bank/recipes/value_tables/microsoft-defender-antivirus-event-log.yaml",
+       lambda d: next(r for r in d["classes"]["run_status"]["rows"] if r["id"] == "run_status.1117_block").update(value="pre_execution")), "an ambiguous row maps to"),
+    ("Auto with unverified rows on a close path", "validate", customer({"vendor:av_detection": "auto"}), "set to Auto while unverified value-table rows"),
+    ("Auto with only some of the rows verified", "validate",
+     customer({"vendor:av_detection": "auto"}, verify=["microsoft-defender-for-endpoint"], products={"microsoft-defender-for-endpoint": "1.0"}),
+     "set to Auto while unverified value-table rows"),
+    ("Auto with every row on its close paths verified passes", "validate", customer({"vendor:av_detection": "auto"}, verify=AV_TABLES), None),
+    ("verification with a spot check below 20 alerts", "validate", customer({}, verify=AV_TABLES, spot_check_alerts=19), "below verification_min_spot_check_alerts"),
+    ("vendor product version change re-opens verification", "validate",
+     customer({}, verify=AV_TABLES, products={"microsoft-defender-for-endpoint": "2.0", "generic": "1.0"}), "re-opens verification"),
+    ("expired verification", "validate", customer({}, verify=AV_TABLES, expires="2020-01-01"), "expired"),
+    ("verification without a cited vendor doc", "validate", customer({}, verify=AV_TABLES, vendor_doc=""), "missing vendor_doc"),
+    ("technique fallback set to Auto in the bank", "validate", y("bank/techniques/T1003.001.yaml", lambda d: d.update(max_mode="auto")), "capped at recommend"),
+    ("technique fallback set to Auto for a customer", "validate", customer({"T1003.001": "auto"}), "technique fallbacks are capped at Recommend"),
     ("identity groups as the only low-rated yes on a close path", "redteam",
      y(PSEXEC, lambda d: d["flow"][3].update(on_yes="close:benign_true_positive:admin_activity_baselined")), "FAIL escu:detect_psexec"),
 ]

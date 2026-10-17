@@ -46,11 +46,15 @@ def load():
     overlays = {}
     for path in sorted(glob.glob(os.path.join(BANK, "overlays", "customer", "*", "parameters.yaml"))):
         overlays[os.path.basename(os.path.dirname(path))] = dict(_load(path) or {}, _file=os.path.relpath(path, ROOT))
+    customers = {}   # the customer layer: product versions, per-customer row verifications, detection modes
+    for path in sorted(glob.glob(os.path.join(BANK, "overlays", "customer", "*", "verifications.yaml"))):
+        customers[os.path.basename(os.path.dirname(path))] = dict(_load(path) or {}, _file=os.path.relpath(path, ROOT))
     params_doc = _load(os.path.join(BANK, "parameters.yaml"))
     return {
         "seeds": seeds,
         "value_tables": tables,
         "overlays": overlays,
+        "customers": customers,
         "context_questions": _by_id("context/C-*.yaml"),
         "context_rules": _load(os.path.join(BANK, "context_rules.yaml")),
         "precedence": params_doc.get("precedence"),
@@ -437,38 +441,110 @@ def class_values(b, cls, answers=None):
     return spec["values"], set(spec.get("raise_only") or [])
 
 
-def raise_only(b, cls, value, row, answers=None):
-    """The raise-only rule: an answer read from an unverified value-table row, or from a fallback source's table,
-    stands only if it can only raise scrutiny (raise_only: ran, high risk, a malicious category). Anything that
-    could lead to a close (pre_execution, low risk, blocked, a benign category) becomes unknown: None, the status
-    unknown, so the step follows on_unknown whatever its rule says. A class default (no row matched) is the bank's
-    own value, not a vendor reading, and stands."""
-    if row is None or value == "unknown":
+MODES = ("shadow", "recommend", "auto")
+VERIFICATION_FIELDS = ("table", "row", "vendor_doc", "spot_check_alerts", "checked_by", "checked_on", "product_version", "expires")
+
+
+def verification_problems(b, customer, rec, today):
+    """Why a per-customer verification record does not verify its row ([] when it does)."""
+    out = [f"missing {k}" for k in VERIFICATION_FIELDS if not rec.get(k)]
+    t = b["value_tables"].get(rec.get("table"))
+    row = next((r for spec in ((t or {}).get("classes") or {}).values() for r in spec.get("rows") or [] if r.get("id") == rec.get("row")), None)
+    if row is None:
+        out.append(f"no row {rec.get('table')}/{rec.get('row')}")
+    elif row.get("kind") == "ambiguous":
+        out.append("an ambiguous row cannot be verified")
+    need = param_value(b, "verification_min_spot_check_alerts", customer=customer)
+    if isinstance(rec.get("spot_check_alerts"), int) and rec["spot_check_alerts"] < need:
+        out.append(f"spot check of {rec['spot_check_alerts']} alerts, below verification_min_spot_check_alerts ({need})")
+    if rec.get("expires") and str(rec["expires"]) < str(today):
+        out.append(f"expired {rec['expires']}")
+    current = ((b["customers"].get(customer) or {}).get("products") or {}).get(rec.get("table"))
+    if rec.get("product_version") and str(current) != str(rec["product_version"]):
+        out.append(f"checked on product version {rec['product_version']}, customer runs {current}: the version change re-opens verification")
+    return out
+
+
+def row_verified(b, customer, table, row_id, today):
+    """Verified is per customer: a complete, unexpired verification record for the customer's current product version."""
+    if not customer:
+        return False
+    for rec in (b["customers"].get(customer) or {}).get("verifications") or []:
+        if rec.get("table") == table and rec.get("row") == row_id and not verification_problems(b, customer, rec, today):
+            return True
+    return False
+
+
+def row_answer(b, cls, value, row, answers=None, ctx=None):
+    """The value a matched row may give, by row kind and mode. ctx: {"mode", "customer", "today", "marks": [...]}.
+    - ambiguous: always None (status unknown), in every mode: it never supports a close.
+    - verified for the customer (and not read from a fallback source): the value, in every mode.
+    - unverified, or any non-ambiguous fallback-source answer: in Shadow and Recommend the value, marked
+      "unverified mapping: <table>/<row>" for the explanation and decision log; in Auto only a raise-only value
+      (ran, high risk, malicious) stands, anything that could support a close is None.
+    A class default (no row matched) is the bank's own value and stands."""
+    if row is None:
         return value
-    _, ro = class_values(b, cls, answers)
+    if row.get("kind") == "ambiguous":
+        return None
+    ctx = ctx if ctx is not None else {}
     table = b["value_tables"].get(row.get("table"), {})
-    if value in ro or (row.get("verified") and not table.get("fallback")):
+    if not table.get("fallback") and row_verified(b, ctx.get("customer"), row.get("table"), row.get("id"), ctx.get("today", "")):
         return value
-    return None
+    mode = ctx.get("mode", "recommend")
+    _, ro = class_values(b, cls, answers)
+    if mode == "auto" and value not in ro:
+        return None
+    if value not in ro:
+        ctx.setdefault("marks", []).append(f"unverified mapping: {row.get('table')}/{row.get('id')}")
+    return value
 
 
-def classify_effective(b, cls, values, product_tables=(), answers=None):
+def close_path_rows(b, path, guards, customer=None):
+    """(table, row id) pairs a close path may rest on: every non-ambiguous row whose value could support a close (not
+    raise-only), in the tables that answer a class read by a step or yes-guard on the path. With a customer, only the
+    product tables the customer runs (customer layer products) plus the generic tables; without one, every table.
+    Fallback-source tables are left out: their answers are treated as unverified and never support an Auto close, so in
+    Auto a fallback answer flags rather than closes."""
+    items = [st for st, a in path if a in ("yes", "no")] + [g for g in guards if guard_requires_yes(g)]
+    runs = set(((b["customers"].get(customer) or {}).get("products") or {})) if customer else None
+    out = set()
+    for it in items:
+        q = b["questions"][it["question"]]
+        name = q["capability"]["name"]
+        if name == "alert.class":
+            cls, answers = step_inputs(q, it).get("class"), None
+        elif name == "endpoint.run_status":
+            cls, answers = "run_status", name
+        else:
+            continue
+        _, ro = class_values(b, cls, answers)
+        for tname, t in b["value_tables"].items():
+            if t.get("answers") != answers or t.get("fallback") or (runs is not None and tname not in runs and t.get("scope") != "generic"):
+                continue
+            for r in ((t.get("classes") or {}).get(cls) or {}).get("rows") or []:
+                if r.get("kind") != "ambiguous" and r.get("value") not in ro:
+                    out.add((tname, r["id"]))
+    return out
+
+
+def classify_effective(b, cls, values, product_tables=(), answers=None, ctx=None):
     v, row = classify(b, cls, values, product_tables, answers=answers)
-    return raise_only(b, cls, v, row, answers), row
+    return row_answer(b, cls, v, row, answers, ctx), row
 
 
-def run_status(b, api, siem_copy):
+def run_status(b, api, siem_copy, ctx=None):
     """endpoint.run_status as the Tool Broker answers it.
     api: None when the endpoint API is unavailable or not granted; otherwise {"tables": [...], "matches": [raw evidence dicts]}
          (an empty or multiple match list answers unknown). siem_copy: {"tables": [...], "raw": {...}} or None.
-    Returns (value, source). The API is authoritative; the SIEM copy is a fallback. Both go through the raise-only rule:
-    pre_execution counts only from a verified row of the API table; a fallback answer never supports a close."""
+    Returns (value, source). The API is authoritative; the SIEM copy is a fallback. Both go through row_answer: an ambiguous
+    row is unknown in every mode; a fallback answer is treated as unverified (never supports an Auto close)."""
     if api is not None:
         if len(api.get("matches") or []) != 1:
             return "unknown", "edr_api"
-        v, _ = classify_effective(b, "run_status", api["matches"][0], api.get("tables") or [], answers="endpoint.run_status")
+        v, _ = classify_effective(b, "run_status", api["matches"][0], api.get("tables") or [], answers="endpoint.run_status", ctx=ctx)
         return v or "unknown", "edr_api"
     if siem_copy:
-        v, _ = classify_effective(b, "run_status", siem_copy.get("raw") or {}, siem_copy.get("tables") or [], answers="endpoint.run_status")
+        v, _ = classify_effective(b, "run_status", siem_copy.get("raw") or {}, siem_copy.get("tables") or [], answers="endpoint.run_status", ctx=ctx)
         return v or "unknown", "siem_copy"
     return None, None

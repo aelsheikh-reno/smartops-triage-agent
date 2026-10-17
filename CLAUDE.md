@@ -11,12 +11,12 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 ## Rules
 - YAML under `bank/` is the source of truth. Everything else is generated from it.
 - Every question declares exactly one capability from `bank/capabilities.yaml` and is tagged `kind: context` or `kind: triage`. The broker returns a typed answer (bool, count, number, enum, time); each flow step on a non-bool question carries a rule that turns it into yes/no against a bounded parameter. No tool names or query language in the bank; the Tool Broker maps capabilities to the customer's tools.
-- No schema field names in the bank (CIM, ECS, Sysmon or vendor; list in `tools/field_names.py`). Detections declare `required_roles`, and questions refer to roles (`role:host.asset_id`, `tools/roles.py`). Vendor value patterns and lists live in value tables under `bank/recipes/value_tables/`, each row verified or not.
+- No schema field names in the bank (CIM, ECS, Sysmon or vendor; list in `tools/field_names.py`). Detections declare `required_roles`, and questions refer to roles (`role:host.asset_id`, `tools/roles.py`). Vendor value patterns and lists live in value tables under `bank/recipes/value_tables/`, each row ambiguous or unverified (verified is per customer).
 - No vendor or product names anywhere in the bank (list in `tools/vendors.py`). Only `data_source`, `sigma_logsource`, `sigma_refs`, `source` and `license` may name them; seed data lives in `bank/seeds/` and vendor value tables in `bank/recipes/value_tables/`; neither is ever in the runtime bundle.
 - Question text describes only what to check about an entity, never where or with which tool.
 - The runtime bundle (`tools/export_bundle.py`) excludes offline metadata (`data_source`, `sigma_logsource`, `sigma_refs`, `source`, `license`) and must contain no vendor names; `validate` enforces both.
 - Any allowlist or "known tool" question matches on file hash, or code-signing signer plus path. Never on name or path alone.
-- Flows: at most 5 steps, early exit, `on_yes` / `on_no` / `on_unknown` on every step.
+- Flows: at most 5 steps in total, Q0 counting as step 1; early exit, `on_yes` / `on_no` / `on_unknown` on every step.
 - Every question records `source` and `license`. Flag text copied from non-Apache sources for legal review.
 - New questions start as `status: draft`. Only a human marks them `approved`.
 - The Use Case Manager proposes; a human approves anything that reduces scrutiny. The Triage agent's own auto-closures are never evidence for a Use Case Manager proposal.
@@ -25,12 +25,13 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 - Every parameter has bounds; removing scrutiny needs human approval.
 - Nothing in the triage layer or the shared bank assumes a specific SIEM, tool or field name.
 - Vendor-specific content (query languages, SIEM product terms, CIM/ECS/vendor field names, vendor API calls) lives only in adapter folders, broker recipes and vendor value tables. Core, triage logic, questions, flows, capabilities and parameters never contain it. Gates enforce this.
-- The SIEM alert only starts triage. The broker answers each capability from the authoritative source set at onboarding, usually the tool's own API; the SIEM is authoritative only for alert history and log searches. A fallback source can only raise scrutiny.
-- An answer from a fallback source, or from an unverified value-table row, may only raise scrutiny: "ran" or "malicious" stands; pre_execution, benign or any other answer that could lead to a close becomes unknown. Each class declares its `raise_only` values.
+- The SIEM alert only starts triage. The broker answers each capability from the authoritative source set at onboarding, usually the tool's own API; the SIEM is authoritative only for alert history and log searches. A fallback-source answer follows the unverified rule (never an Auto close).
+- Every value-table row has a kind. Ambiguous: unknown in every mode, never supports a close. Unverified: may support a close in Shadow and Recommend, marked "unverified mapping: <table>/<row>", never in Auto. Verified: per customer, in the customer layer (cited doc, spot check of at least 20 real alerts, checker, date, product version, expiry; a version change re-opens it). A fallback answer follows the unverified rule. A detection is Auto-eligible for a customer only when every row on its close paths is verified for that customer.
+- Technique fallbacks are capped at Recommend until they have true-positive replay data.
 - Missing context never closes and never escalates: an unknown or unavailable context question (C-01…C-08) turns any close that depends on it into a flag with reason `context_unknown`, naming the C-ID. No worst-case defaults.
-- The call budget counts calls to outside tools only; our own cached context, list store and case memory don't count. Flows stay at most 5 steps, Q0 included.
+- The call budget counts calls to outside tools only; our own cached context, list store and case memory don't count. Flows stay at most 5 steps in total, Q0 counting as step 1.
 - Gates never pass on nothing: `tools/gates.sh` with no argument runs every batch; an unknown batch or a gate that loads zero detections, flows or replay events fails.
-- Value tables hold what a vendor's values mean (per source, each row verified or not); what the customer accepts lives in Triage-side parameters (bounded, with a direction tag) or context lists. Never mix them.
+- Value tables hold what a vendor's values mean (per source, each row ambiguous or unverified; verified per customer); what the customer accepts lives in Triage-side parameters (bounded, with a direction tag) or context lists. Never mix them.
 - One way in, one way out: alerts enter only through the normalizer; every tool read and every write-back goes through the Tool Broker. No agent or model calls a tool directly.
 - Every broker question has a bank ID, a fixed answer type, a status and provenance, and no threshold.
 - Decisions are per alert; work, caching and the entity guard are per entity.

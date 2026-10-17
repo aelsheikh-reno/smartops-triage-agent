@@ -60,8 +60,6 @@ fingerprint_influence:
     rating: low
     reason: Hash of the file already judged; reproducing it reproduces that file.
 precedent_entity_fallback: role:host.name
-auto_requires:
-- vendor_mapping_verified
 flow:
 - step: 1
   question: Q-0000

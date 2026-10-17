@@ -9,6 +9,7 @@ required_roles:
 template: download
 covers: Binary or script downloading content
 max_mode: recommend
+max_mode_reason: technique fallback with no true-positive replay data (#14); capped at Recommend until it has some
 derived_fields:
   url_hosts:
     from: role:process.command_line

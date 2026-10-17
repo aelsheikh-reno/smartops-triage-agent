@@ -150,6 +150,14 @@ parameters:
     category: recipe_statistic
     description: How many of the of_weeks weeks must reach org_prevalence_min_hosts. Sets which weekly count the broker returns (k = of_weeks - min_weeks + 1); must not exceed org_prevalence_of_weeks.
     unit: weeks
+  verification_min_spot_check_alerts:
+    default: 20
+    bounds:
+      min: 20
+      max: 1000
+    reduces_scrutiny_when: lower
+    description: Real alerts at this customer on which the Product Operator spot-checked a value-table row before that row counts as verified for the customer (with a cited vendor doc, checker, date, product version and expiry).
+    unit: alerts
   org_prevalence_escape_min_hosts:
     default: 1
     bounds:

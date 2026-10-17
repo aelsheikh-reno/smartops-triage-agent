@@ -50,8 +50,6 @@ source:
 license: internal
 status: draft
 version: 6
-auto_requires:
-- vendor_mapping_verified
 flow:
 - step: 1
   question: Q-0000

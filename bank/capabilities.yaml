@@ -53,8 +53,7 @@ source_profiles:
 unverified_seed: A yes whose evidence rests on a seed entry with verified false taints the flow. That step, and any later close reached through it, becomes flag until onboarding verifies the entry.
 coverage_items:
   device_control_write_events: The customer's device-control product also reports file-write events. Without them a connect event that records zero files written proves nothing.
-auto_requirements:
-  vendor_mapping_verified: Every row of docs/normalization.md for the products this customer runs in the detection's family is verified, as recorded by the onboarding check "Check vendor alerts are normalized".
+auto_eligibility: 'A detection is Auto-eligible for a customer only when every value-table row on its close paths is verified for that customer (bank/overlays/customer/<c>/verifications.yaml: cited vendor doc, a Product Operator spot check of at least verification_min_spot_check_alerts real alerts, checker, date, vendor product version, expiry). A vendor product version change re-opens verification. Technique fallbacks are capped at Recommend. validate enforces this for every customer that sets a detection to Auto.'
 
 scope:   # enforced by the Tool Broker per caller (docs/design-decisions.md §4)
   profiles:
@@ -72,7 +71,7 @@ scope:   # enforced by the Tool Broker per caller (docs/design-decisions.md §4)
 source_authority:
   principle: The SIEM alert only starts triage. For each capability the Tool Broker answers from the authoritative source set at onboarding, usually the tool's own API; the SIEM is the authoritative source
     only for alert history and log searches. A fallback source is used only when the authoritative one is unavailable or not granted.
-  raise_only_rule: 'An answer from a fallback source, or from an unverified value-table row, may only raise scrutiny. Ran or malicious stands. pre_execution, benign or any other answer that could lead to a close becomes unknown. Each alert class and enum declares its raise_only values; validate enforces the rule per value-table row (verified: false) and per source (fallback: true).'
+  row_kind_rule: 'Every value-table row has a kind. ambiguous: the value does not say what happened; unknown in every mode, never supports a close. unverified: meaning from vendor docs, not confirmed at this customer; may support a close in Shadow and Recommend (marked unverified mapping: <table>/<row>), never an Auto close (in Auto only the class raise_only values stand). verified: per customer, in bank/overlays/customer/<c>/verifications.yaml; may support any close. A fallback-source answer follows the unverified rule unless its row is ambiguous.'
   sources:
     siem: 'the SIEM: authoritative only for alert history and log searches'
     edr_api: the endpoint product's own API (for example its alert evidence)
@@ -666,8 +665,8 @@ capabilities:
     source edr_api).
   rating_floor: low
   escalate_only: false
-  notes: 'The SIEM''s copy of the alert (for example an endpoint event log) is a fallback only, used when the API is unavailable or not granted: its answers are raise-only (ran stands;
-    pre_execution becomes unknown, verified or not), and so are answers from unverified rows of the API table.'
+  notes: 'The SIEM''s copy of the alert (for example an endpoint event log) is a fallback only, used when the API is unavailable or not granted: its answers follow the unverified rule
+    (Shadow and Recommend only, never Auto), and its ambiguous rows (1117 Block, quarantine) answer unknown in every mode.'
   source_authority:
     authoritative: edr_api
     fallback:

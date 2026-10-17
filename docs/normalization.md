@@ -9,33 +9,32 @@ tables are recipe data: they may name products and never enter the runtime bundl
 
 This page is the onboarding guide for those tables; the tables themselves are the source of truth.
 
-Rule (design-decisions §9, enforced by `tools/validate.py`): the cap is per customer. A detection whose
-alert classes have unverified product rows declares `auto_requires: [vendor_mapping_verified]`, and is
-capped at Recommend for each customer whose product rows are unverified. The onboarding check "Check
-vendor alerts are normalized" records which products each customer runs and verifies their rows. Today
-`vendor:av_detection` (Defender, CrowdStrike) and `vendor:ids_alert` (Cisco intrusion classifications)
-carry the cap. Generic rows (vendor `any`) do not cap a family; onboarding still confirms each product's
-wording against them.
+Rule (design-decisions §9, `docs/broker-questions.md`, enforced by `tools/validate.py`): every row has a
+kind, ambiguous or unverified; verified is per customer. A detection is Auto-eligible for a customer only
+when every row on its close paths is verified for that customer. The onboarding check "Check
+vendor alerts are normalized" records which products each customer runs and verifies their rows. No row is verified for any customer today, so no detection whose close paths read a value table is
+Auto-eligible yet; Shadow and Recommend closes on unverified rows are marked. Generic rows (vendor `any`)
+are unverified like product rows; onboarding confirms each product's wording against them.
 
 ## Whether the file ran (`endpoint.run_status`: pre_execution, ran, unknown)
 
 Only `pre_execution` may close, and only for low-risk classes. `ran` escalates; `unknown` flags.
 
-This is no longer an alert class: the answer comes from the endpoint product's API, the authoritative source (`docs/broker-questions.md`, Source authority). The broker finds the product's alert by the vendor alert ID, else by device, file hash and a bounded window; no match or several answer unknown. The SIEM's copy of the alert is a fallback only (tables with `source: siem_copy`), used when the API is unavailable or not granted; its answers are raise-only: "ran" stands, pre_execution becomes unknown, verified or not (`fallback: true`). The same raise-only rule applies to every unverified row in every table: until onboarding verifies a row, an answer from it that could lead to a close is unknown.
+This is no longer an alert class: the answer comes from the endpoint product's API, the authoritative source (`docs/broker-questions.md`, Source authority). The broker finds the product's alert by the vendor alert ID, else by device, file hash and a bounded window; no match or several answer unknown. The SIEM's copy of the alert is a fallback only (tables with `source: siem_copy`), used when the API is unavailable or not granted; its answers follow the unverified rule (`fallback: true`): they may support a close in Shadow and Recommend, marked, never in Auto. Ambiguous rows (1117 Block, 1117 Quarantine/Remove/Clean, a quarantine alone) answer unknown in every mode.
 
-| Table (source) | Raw value | Class value | Verified |
+| Table (source) | Raw value | Class value | Kind |
 |---|---|---|---|
-| Microsoft Defender for Endpoint (API: Graph alert evidence; `edr_api`) | `detectionStatus` prevented, `remediationStatus` prevented | pre_execution | false (#20) |
-| | `detectionStatus` blocked ("remediated at run time"), `remediationStatus` blocked ("blocked while executing"), `detectionStatus` detected | ran | false (#20) |
+| Microsoft Defender for Endpoint (API: Graph alert evidence; `edr_api`) | `detectionStatus` prevented, `remediationStatus` prevented | pre_execution | unverified (#20) |
+| | `detectionStatus` blocked ("remediated at run time"), `remediationStatus` blocked ("blocked while executing"), `detectionStatus` detected | ran | unverified (#20) |
 | | quarantine alone, or anything else | unknown | default |
-| Microsoft Defender Antivirus (event log in the SIEM; `siem_copy`, fallback) | 1116 (detection, no action) | ran | false |
-| | 1117 Quarantine, Remove, Clean | unknown | false |
-| | 1117 Block | unknown | false. Changed in the bank migration: it was mapped to blocked before execution, but the event does not say whether the file ran |
-| CrowdStrike Falcon (API; `edr_api`; a matching `siem_copy` table is the fallback) | Prevention, process blocked from execution | pre_execution | false |
-| | Prevention, process killed; Detection, standard detection | ran | false |
-| | Quarantine, file quarantined | unknown | false |
-| Any product (generic SIEM copy; `siem_copy`, fallback) | blocked_pre_execution, deleted_pre_execution | pre_execution | false |
-| | post-execution quarantine or cleaning, pending reboot, partial or failed remediation | unknown | false |
+| Microsoft Defender Antivirus (event log in the SIEM; `siem_copy`, fallback) | 1116 (detection, no action) | ran | unverified |
+| | 1117 Quarantine, Remove, Clean | unknown | ambiguous |
+| | 1117 Block | unknown | ambiguous. Changed in the bank migration: it was mapped to blocked before execution, but the event does not say whether the file ran |
+| CrowdStrike Falcon (API; `edr_api`; a matching `siem_copy` table is the fallback) | Prevention, process blocked from execution | pre_execution | unverified |
+| | Prevention, process killed; Detection, standard detection | ran | unverified |
+| | Quarantine, file quarantined | unknown | ambiguous |
+| Any product (generic SIEM copy; `siem_copy`, fallback) | blocked_pre_execution, deleted_pre_execution | pre_execution | unverified |
+| | post-execution quarantine or cleaning, pending reboot, partial or failed remediation | unknown | ambiguous |
 
 Microsoft's definitions are quoted in `docs/assumptions.md` A4. Which property carries them per evidence
 type in the real feed, and whether it reaches the SIEM, is the lab test in #20.

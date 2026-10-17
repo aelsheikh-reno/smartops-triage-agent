@@ -19,8 +19,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bank as B  # noqa: E402
+from engine import executor as E  # noqa: E402
 
-ORDER = B.SEVERITY
+ORDER = E.SEVERITY
 
 
 def nc_capable(b, qid):
@@ -38,33 +39,6 @@ def nc_capable(b, qid):
     return False
 
 
-def kind(out):
-    return B.outcome_kind(out)
-
-
-def a_outcomes(b, flow, fixed, i=0):
-    """Outcomes of run A from step i: NC answers unknown, other answers as fixed (by step number) or free."""
-    if i >= len(flow):
-        return {"flag"}
-    st = flow[i]
-    if nc_capable(b, st["question"]):
-        answers = ["unknown"]
-    elif st["step"] in fixed:
-        answers = [fixed[st["step"]]]
-    else:
-        answers = ["yes", "no", "unknown"]
-    outs = set()
-    for a in answers:
-        out = st["on_" + a]
-        if out == "next":
-            outs |= a_outcomes(b, flow, fixed, i + 1)
-            continue
-        results = [(g, "unknown" if nc_capable(b, g["question"]) else ("no" if "no" not in g.get("when", ["yes"]) else "yes"))
-                   for g in st.get("guards") or [] if B.guard_applies(g, out)]
-        outs.add(kind(B.raise_outcome(out, results)))
-    return outs
-
-
 def main():
     show = "--list" in sys.argv
     batches = B.select_batches([a for a in sys.argv[1:] if not a.startswith("--")])
@@ -75,16 +49,16 @@ def main():
         if B.batch_of(lvl, d) not in batches:
             continue
         flow = d["flow"]
-        for path, out, guards in B.enumerate_paths(flow):
+        for path, out, guards in E.enumerate_paths(flow):
             n_paths += 1
             nc_steps = [st["step"] for st, a in path if a != "unknown" and nc_capable(b, st["question"])]
-            nc_guards = [g["question"] for g in guards if nc_capable(b, g["question"])] if kind(out) == "close" else []
+            nc_guards = [g["question"] for g in guards if nc_capable(b, g["question"])] if E.outcome_kind(out) == "close" else []
             if not nc_steps and not nc_guards:
                 continue
             n_nc += 1
-            b_out = "flag" if kind(out) == "close" else kind(out)   # the trust rule (guards pass)
+            b_out = "flag" if E.outcome_kind(out) == "close" else E.outcome_kind(out)   # the trust rule (guards pass)
             fixed = {st["step"]: a for st, a in path}
-            a_outs = a_outcomes(b, flow, fixed)
+            a_outs = E.walk_outcomes(flow, fixed, lambda qid: nc_capable(b, qid))
             worst = max(a_outs, key=ORDER.get)
             if ORDER[worst] > ORDER[b_out]:
                 last = path[-1][0]

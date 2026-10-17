@@ -1,0 +1,8 @@
+detection: D-0026
+source_rule: product_alert:av_edr_malware
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  field: _kind
+  op: in
+  value:
+  - av

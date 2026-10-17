@@ -1,0 +1,13 @@
+detection: D-0027
+source_rule: product_alert:firewall_deny
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: _kind
+    op: in
+    value:
+    - conn
+  - field: action
+    op: in
+    value:
+    - blocked

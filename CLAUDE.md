@@ -52,6 +52,7 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 - At runtime a language model may only raise scrutiny (close → flag), never lower it.
 - Every model that touches customer data runs on the customer's premises. The design names model roles, never one fixed model.
 - Public source repos are cloned into `sources/`, which is git-ignored. Never commit them.
+- A bank PR may add tests and raise expected outcomes, but never lower them or change the engine, contract or gates; those change in their own PR.
 - Work on a feature branch, push it, and open a draft PR. Never commit to `main` directly.
   Exception: docs-only changes (README, CLAUDE.md, docs/) may be committed directly to main. Anything under bank/ or tools/ goes through a branch and PR.
 - Stop and show the user after each step of the brief. Keep replies concise.

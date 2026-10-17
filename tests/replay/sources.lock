@@ -1,0 +1,12 @@
+# Public source repositories the replay gate reads, pinned by commit (round 7). Datasets are fetched by SHA; a failed
+# download fails the gate. tools/replay.py checks that the local security_content clone is at its pinned commit.
+splunk/attack_data:
+  commit: "aafa53ea228fbab8d9ac3e33c9275fab2136909d"
+  license: Apache-2.0
+  url: https://github.com/splunk/attack_data
+  fetch: https://media.githubusercontent.com/media/splunk/attack_data/{commit}/{path}
+splunk/security_content:
+  commit: "d6afc62b750dc2ed34e3696999bf26fe476b9b1e"
+  license: Apache-2.0
+  url: https://github.com/splunk/security_content
+  clone: sources/security_content

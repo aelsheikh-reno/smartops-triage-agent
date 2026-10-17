@@ -1,0 +1,13 @@
+detection: D-0008
+source_rule: escu:detect_sharphound_usage
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  any:
+  - field: process_name
+    op: in
+    value:
+    - sharphound.exe
+  - field: original_file_name
+    op: in
+    value:
+    - sharphound.exe

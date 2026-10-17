@@ -1,0 +1,18 @@
+detection: D-0023
+source_rule: escu:windows_service_creation_on_remote_endpoint
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: process_name
+    op: in
+    value:
+    - sc.exe
+  - field: process
+    op: matches
+    value: \\\\
+  - field: process
+    op: matches
+    value: create
+  - field: process
+    op: matches
+    value: binpath

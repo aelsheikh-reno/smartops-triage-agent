@@ -1,0 +1,25 @@
+detection: D-0026
+name: 'event 1117 Block (ambiguous), Auto, other rows verified: flag'
+reason: 'event 1117 Block (ambiguous), Auto, other rows verified: flag'
+mode: auto
+verified:
+- microsoft-defender-for-endpoint
+- generic
+alert:
+  host.name: ws-01
+  user.name: u1
+  event.time: '2026-10-17T00:00:00Z'
+  file.path: C:\Users\Public\m.exe
+  file.name: m.exe
+  reporting_control.signature: PUA:Win32/Presenoker
+  reporting_control.category: pua
+  file.sha256: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+  reporting_control.action_raw: Block
+  _raw:
+    EventID: '1117'
+    Action Name: Block
+  _tables:
+  - microsoft-defender-antivirus-event-log
+expect:
+  outcome: flag
+order: 13

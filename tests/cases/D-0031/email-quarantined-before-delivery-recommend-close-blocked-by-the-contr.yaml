@@ -1,0 +1,19 @@
+detection: D-0031
+name: 'email quarantined before delivery, Recommend: close (blocked by the control), marked not_checked'
+reason: 'email quarantined before delivery, Recommend: close (blocked by the control), marked not_checked'
+mode: recommend
+overrides:
+  Q-0035: true
+alert:
+  email.sender: a@example.org
+  email.subject: invoice
+  email.recipient: u1@corp.example
+  email.url: http://example.org/x
+  file.sha256: '1111111111111111111111111111111111111111111111111111111111111111'
+  event.time: '2026-10-17T00:00:00Z'
+  reporting_control.action: quarantined
+  email.delivery_stage: pre_delivery
+expect:
+  outcome: close:mitigated_true_positive
+  marked_not_checked: true
+order: 17

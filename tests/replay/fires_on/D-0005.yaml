@@ -1,0 +1,12 @@
+detection: D-0005
+source_rule: escu:detect_mshta_url_in_command_line
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: process_name
+    op: in
+    value:
+    - mshta.exe
+  - field: process
+    op: matches
+    value: https?://

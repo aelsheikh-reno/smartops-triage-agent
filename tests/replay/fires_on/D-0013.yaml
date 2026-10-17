@@ -1,0 +1,16 @@
+detection: D-0013
+source_rule: escu:suspicious_regsvr32_register_suspicious_path
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: process_name
+    op: in
+    value:
+    - regsvr32.exe
+  - field: process
+    op: matches
+    value: \\appdata\\|\\programdata\\|\\windows\\temp\\
+  - not:
+      field: process
+      op: matches
+      value: \.dll|\.ax|\.ocx

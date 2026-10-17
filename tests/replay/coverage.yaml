@@ -1,0 +1,140 @@
+note: Which detections the replay gate replays, and from which security_content test files (their attack_data datasets). A detection marked not replayable needs a reason and must be capped at Recommend
+  with auto_excluded_reason no_tp_replay_data (tools/validate.py checks both). A replayable detection that replays zero true-positive events fails the replay gate. Test data, not bank content.
+detections:
+  D-0001:
+    replayable: true
+    tests_from:
+    - detections/endpoint/add_or_set_windows_defender_exclusion.yml
+  D-0002:
+    replayable: true
+    tests_from:
+    - detections/endpoint/bitsadmin_download_file.yml
+  D-0003:
+    replayable: true
+    tests_from:
+    - detections/endpoint/creation_of_shadow_copy.yml
+  D-0004:
+    replayable: true
+    tests_from:
+    - detections/endpoint/deleting_shadow_copies.yml
+  D-0005:
+    replayable: true
+    tests_from:
+    - detections/endpoint/detect_mshta_url_in_command_line.yml
+  D-0006:
+    replayable: true
+    tests_from:
+    - detections/endpoint/detect_psexec_with_accepteula_flag.yml
+  D-0007:
+    replayable: true
+    tests_from:
+    - detections/endpoint/detect_remote_access_software_usage_process.yml
+  D-0008:
+    replayable: true
+    tests_from:
+    - detections/endpoint/detect_sharphound_usage.yml
+  D-0009:
+    replayable: true
+    tests_from:
+    - detections/endpoint/malicious_powershell_process___execution_policy_bypass.yml
+  D-0010:
+    replayable: true
+    tests_from:
+    - detections/endpoint/process_execution_via_wmi.yml
+  D-0011:
+    replayable: true
+    tests_from:
+    - detections/endpoint/registry_keys_used_for_persistence.yml
+  D-0012:
+    replayable: true
+    tests_from:
+    - detections/endpoint/remote_process_instantiation_via_winrm_and_powershell.yml
+  D-0013:
+    replayable: true
+    tests_from:
+    - detections/endpoint/suspicious_regsvr32_register_suspicious_path.yml
+  D-0014:
+    replayable: true
+    tests_from:
+    - detections/endpoint/suspicious_rundll32_no_command_line_arguments.yml
+  D-0015:
+    replayable: true
+    tests_from:
+    - detections/endpoint/suspicious_scheduled_task_from_public_directory.yml
+  D-0016:
+    replayable: true
+    tests_from:
+    - detections/endpoint/windows_event_log_cleared.yml
+  D-0017:
+    replayable: true
+    tests_from:
+    - detections/endpoint/windows_file_download_via_certutil.yml
+  D-0018:
+    replayable: true
+    tests_from:
+    - detections/endpoint/windows_file_download_via_powershell.yml
+  D-0019:
+    replayable: true
+    tests_from:
+    - detections/endpoint/windows_office_product_spawned_uncommon_process.yml
+  D-0020:
+    replayable: true
+    tests_from:
+    - detections/endpoint/windows_possible_credential_dumping.yml
+  D-0021:
+    replayable: true
+    tests_from:
+    - detections/endpoint/windows_remote_services_rdp_enable.yml
+  D-0022:
+    replayable: true
+    tests_from:
+    - detections/endpoint/windows_schtasks_create_run_as_system.yml
+  D-0023:
+    replayable: true
+    tests_from:
+    - detections/endpoint/windows_service_creation_on_remote_endpoint.yml
+  D-0024:
+    replayable: true
+    tests_from:
+    - detections/endpoint/windows_vulnerable_driver_installed.yml
+  D-0025:
+    replayable: true
+    tests_from:
+    - detections/endpoint/detect_new_local_admin_account.yml
+  D-0026:
+    replayable: true
+    tests_from:
+    - detections/endpoint/windows_defender_threat_detected_on_kernel_object_path.yml
+    note: 'vendor family: replayed on the vendor telemetry these security_content tests ship with'
+  D-0027:
+    replayable: true
+    tests_from:
+    - detections/network/cisco_secure_firewall___blocked_connection.yml
+    note: 'vendor family: replayed on the vendor telemetry these security_content tests ship with'
+  D-0028:
+    replayable: true
+    tests_from:
+    - detections/network/cisco_secure_firewall___intrusion_events_by_threat_activity.yml
+    - detections/network/cisco_secure_firewall___high_priority_intrusion_classification.yml
+    note: 'vendor family: replayed on the vendor telemetry these security_content tests ship with'
+  D-0029:
+    replayable: false
+    reason: ESCU proxy datasets hold allowed requests only, no URL-filter blocks
+  D-0030:
+    replayable: false
+    reason: no WAF event dataset ships with any ESCU test
+  D-0031:
+    replayable: false
+    reason: no email-gateway event dataset ships with any ESCU test
+  D-0032:
+    replayable: false
+    reason: no user-report dataset exists in splunk/attack_data
+  D-0033:
+    replayable: false
+    reason: no DLP event dataset ships with any ESCU test
+  D-0034:
+    replayable: false
+    reason: no device-control event dataset ships with any ESCU test
+  D-0035:
+    replayable: false
+    reason: no device-control event dataset ships with any ESCU test

@@ -1,0 +1,12 @@
+detection: D-0014
+source_rule: escu:suspicious_rundll32_no_command_line_arguments
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: process_name
+    op: in
+    value:
+    - rundll32.exe
+  - field: process
+    op: matches
+    value: rundll32(\.exe)?"?\s*$

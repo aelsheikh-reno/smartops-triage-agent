@@ -1,0 +1,16 @@
+detection: D-0009
+source_rule: escu:malicious_powershell_process___execution_policy_bypass
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  all:
+  - field: process_name
+    op: in
+    value:
+    - powershell.exe
+    - pwsh.exe
+  - field: process
+    op: matches
+    value: ' -ex'
+  - field: process
+    op: matches
+    value: ' bypass( |$)'

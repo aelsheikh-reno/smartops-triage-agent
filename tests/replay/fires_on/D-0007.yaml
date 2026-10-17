@@ -1,0 +1,11 @@
+detection: D-0007
+source_rule: escu:detect_remote_access_software_usage_process
+note: When this event would fire the source rule, on the harness's normalised event fields (tests/replay/datasets.py). Test data, not bank content.
+fires_when:
+  field: process_name
+  op: lookup
+  value:
+    csv: remote_access_software.csv
+    column: remote_utility
+    where:
+      isutility: 'TRUE'

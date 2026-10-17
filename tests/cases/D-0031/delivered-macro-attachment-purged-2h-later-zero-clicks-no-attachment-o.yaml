@@ -1,0 +1,21 @@
+detection: D-0031
+name: 'delivered macro attachment, purged 2h later, zero clicks, no attachment-open telemetry: flag'
+reason: 'delivered macro attachment, purged 2h later, zero clicks, no attachment-open telemetry: flag'
+mode: recommend
+overrides:
+  Q-0035: true
+  Q-0036: true
+  Q-0076: none
+alert:
+  email.sender: a@example.org
+  email.subject: invoice
+  email.recipient: u1@corp.example
+  email.url: http://example.org/x
+  file.sha256: '1111111111111111111111111111111111111111111111111111111111111111'
+  event.time: '2026-10-17T00:00:00Z'
+  reporting_control.action: quarantined
+  email.delivery_stage: post_delivery
+  file.name: invoice.docm
+expect:
+  outcome: flag
+order: 33

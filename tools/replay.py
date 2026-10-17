@@ -1,681 +1,46 @@
 #!/usr/bin/env python3
 """Replay gate: run flows on true-positive events against a clean-room customer.
 
-For each rule-level detection whose source rule has test datasets (splunk/attack_data), and for
-the vendor families mapped below, this fetches the datasets, normalises events to the bank's
-alert fields, keeps the events the source rule would fire on, and runs the flow with a clean-room
-customer: empty lists, no baselines, no change windows, no precedents, no reputation hits.
-Telemetry in the dataset itself (alert fields, connection outcomes) is used as-is.
+For each rule-level detection that tests/replay/coverage.yaml marks replayable, this fetches the datasets of its
+security_content tests (pinned in tests/replay/sources.lock), normalises the events, keeps the events the source rule
+would fire on (tests/replay/fires_on/<D-ID>.yaml) and runs the flow through the executor (engine/executor.py) with the
+clean-room Tool Broker (tests/replay/clean_room.py): empty lists, no baselines, no change windows, no precedents, no
+reputation hits. Telemetry in the dataset itself (alert fields, connection outcomes) is used as-is.
 
-A close with disposition false_positive, benign_true_positive or inherit on a true-positive event
-FAILS. A close as mitigated_true_positive (the control stopped it) is reported separately; with
---strict it fails too. Guards run as the bank defines them; alert.history counts the earlier
-true-positive events of the same detection in the replay (the alerts that would already have fired).
-Vulnerability lookups report why they answered unknown: no_cve_mapping when the signature names no
-CVE, otherwise no_data (the clean room holds no vulnerability data).
+A close with disposition false_positive, benign_true_positive or inherit on a true-positive event FAILS. A close as
+mitigated_true_positive (the control stopped it) is reported separately; with --strict it fails too. Guards run as the
+bank defines them; alert.history counts the earlier true-positive events of the same detection in the replay (the
+alerts that would already have fired). Vulnerability lookups report why they answered unknown: no_cve_mapping when the
+signature names no CVE, otherwise no_data (the clean room holds no vulnerability data).
 
-This is a test harness, not bank content: it names source formats and products.
-Flows run on normalized alert v1 roles (the harness plays the normalizer) and typed broker answers turned into
-yes/no by each step's rule; alert classes go through the bank's value tables.
+Coverage never drops silently: a failed download fails the gate, a replayable detection that replays zero true-positive
+events fails it, and a detection that is not replayable must be capped at Recommend (no_tp_replay_data).
+Then the regression cases (tests/cases/<D-ID>/*.yaml) and alert sequences (tests/cases/sequences/*.yaml) run.
 Usage: tools/replay.py [--strict] [family ...]   families as in tools/gates.sh; none means all; fails if it replays 0 detections or 0 events
 """
-import csv
-import ipaddress
+import copy
 import glob
-import json
 import os
-import re
-import subprocess
 import sys
-from collections import Counter, defaultdict
+from collections import Counter
 
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
 import bank as B  # noqa: E402
+from engine import executor as E  # noqa: E402
+from tests.replay import datasets as DS, fires_on as FO  # noqa: E402
+from tests.replay.clean_room import CleanRoom  # noqa: E402
 
-CACHE = os.path.join(B.ROOT, "sources", "attack_data")
-ESCU = os.path.join(B.ROOT, "sources", "security_content")
-OFFICE = {"eqnedt32.exe", "excel.exe", "graph.exe", "msaccess.exe", "mspub.exe", "onenote.exe", "onenoteim.exe", "onenotem.exe",
-          "outlook.exe", "powerpnt.exe", "visio.exe", "winproj.exe", "winword.exe"}
-OFFICE_CHILD = {"bitsadmin.exe", "certutil.exe", "cmd.exe", "cscript.exe", "mshta.exe", "powershell.exe", "pwsh.exe", "regsvr32.exe",
-                "rundll32.exe", "wmic.exe", "wscript.exe"}
-
-
-def fetch(url):
-    os.makedirs(CACHE, exist_ok=True)
-    path = os.path.join(CACHE, url.split("/datasets/", 1)[-1].replace("/", "__"))
-    if not os.path.exists(path):
-        r = subprocess.run(["curl", "-sSLf", "--retry", "3", "-o", path, url], capture_output=True, text=True)
-        if r.returncode:
-            return None, r.stderr.strip()[:120]
-    return path, None
-
-
-# ---------- parsers ----------
-def xml_events(text):
-    for chunk in re.findall(r"<Event[ >].*?</Event>", text, re.S):
-        d = dict(re.findall(r"<Data Name=['\"]([^'\"]+)['\"]>([^<]*)</Data>", chunk))
-        d["_eid"] = (re.search(r"<EventID[^>]*>(\d+)</EventID>", chunk) or [None, ""])[1]
-        d["_channel"] = (re.search(r"<Channel>([^<]*)</Channel>", chunk) or [None, ""])[1]
-        d["_computer"] = (re.search(r"<Computer>([^<]*)</Computer>", chunk) or [None, ""])[1]
-        d["_time"] = (re.search(r"SystemTime=['\"]([^'\"]+)", chunk) or [None, ""])[1]
-        yield d
-
-
-def classic_events(text):
-    for rec in re.split(r"\n(?=\d{2}/\d{2}/\d{4} \d{2}:\d{2}:\d{2})", text):
-        code = re.search(r"EventCode=(\d+)", rec)
-        if not code:
-            continue
-        d = {"_eid": code.group(1), "_channel": (re.search(r"LogName=(\S+)", rec) or [None, ""])[1],
-             "_computer": (re.search(r"ComputerName=(\S+)", rec) or [None, ""])[1]}
-        names = re.findall(r"Account Name:\s*(\S+)", rec)
-        d["SubjectUserName"] = names[0] if names else ""
-        d["TargetUserName"] = names[1] if len(names) > 1 else ""
-        d["Group_Name"] = (re.search(r"Group Name:\s*(\S+)", rec) or [None, ""])[1]
-        yield d
-
-
-def json_events(text):
-    for line in text.splitlines():
-        line = line.strip()
-        if line.startswith("{"):
-            try:
-                yield json.loads(re.sub(r'":\s*-\s*([,}])', r'":null\1', line))
-            except json.JSONDecodeError:
-                continue
-
-
-def events(path, sourcetype):
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        text = fh.read()
-    if sourcetype == "XmlWinEventLog":
-        return list(xml_events(text))
-    if sourcetype == "WinEventLog":
-        return list(classic_events(text))
-    return list(json_events(text))
-
-
-# ---------- normalisation to bank alert fields ----------
-base = lambda p: (p or "").replace("/", "\\").split("\\")[-1].lower()
-
-
-def norm_windows(e):
-    eid, ch = e.get("_eid"), e.get("_channel", "").lower()
-    n = {"dest": e.get("_computer"), "_time": e.get("_time"), "_eid": eid, "_channel": ch}
-    if "sysmon" in ch and eid == "1" or eid == "4688":
-        img = e.get("Image") or e.get("NewProcessName")
-        par = e.get("ParentImage") or e.get("ParentProcessName")
-        n.update(process_path=img, process_name=base(img), process=e.get("CommandLine", ""), original_file_name=(e.get("OriginalFileName") or "").lower(),
-                 parent_process_path=par, parent_process_name=base(par), parent_process_guid=e.get("ParentProcessGuid"),
-                 process_guid=e.get("ProcessGuid"), process_hash=e.get("Hashes"), user=e.get("User") or e.get("SubjectUserName"))
-        n["_kind"] = "process"
-    elif "sysmon" in ch and eid == "10":
-        n.update(SourceImage=e.get("SourceImage"), SourceProcessGUID=e.get("SourceProcessGUID"), TargetImage=e.get("TargetImage"),
-                 granted_access=e.get("GrantedAccess"), CallTrace=e.get("CallTrace"), user_id=e.get("SourceUser"), _kind="access")
-    elif "sysmon" in ch and eid in ("12", "13", "14"):
-        path = e.get("TargetObject", "")
-        n.update(registry_path=path, registry_value_name=path.split("\\")[-1], registry_value_data=e.get("Details"),
-                 process_guid=e.get("ProcessGuid"), user=e.get("User"), _kind="registry")
-    elif eid in ("4720", "4732"):
-        n.update(user=e.get("TargetUserName") or e.get("MemberName"), src_user=e.get("SubjectUserName"), group=e.get("TargetUserName") if eid == "4732" else "",
-                 _kind="account", Group_Name=e.get("Group_Name", ""))
-    elif eid in ("1102", "104"):
-        n.update(user=e.get("SubjectUserName") or e.get("SubjectUser") or "", EventCode=eid, _kind="logclear")
-    elif eid == "7045":
-        n.update(ImagePath=e.get("ImagePath"), ServiceName=e.get("ServiceName"), ServiceType=e.get("ServiceType"), _kind="service")
-    elif eid in ("1116", "1117"):
-        act = (e.get("Action Name") or "").lower()
-        n.update(signature=e.get("Threat Name"), category=(e.get("Category Name") or "").lower(), file_path=e.get("Path"),
-                 file_name=base((e.get("Path") or "").split("->")[-1]), file_hash=None, user=e.get("Detection User"),
-                 action=DEFENDER_ACTION.get(act, act) if eid == "1117" else "detected", _kind="av",
-                 _raw={"EventID": eid, "Action Name": e.get("Action Name") or ""}, _tables=["microsoft-defender-antivirus-event-log"])
-    return n
-
-
-# The harness's normalized action for reporting_control.action. Whether the file ran is decided by the bank's
-# value table (bank/broker/translations/), from the raw event ID and Action Name kept in _raw.
-DEFENDER_ACTION = {"block": "blocked", "quarantine": "quarantined", "remove": "removed", "clean": "cleaned", "allow": "allowed", "no action": "detected"}
-def norm_crowdstrike(e):
-    if e.get("event_simpleName") != "ProcessRollup2":
-        return {}
-    img = e.get("ImageFileName")
-    return {"dest": e.get("ComputerName"), "process_path": img, "process_name": base(img), "process": e.get("CommandLine", ""),
-            "parent_process_name": (e.get("ParentBaseFileName") or "").lower(), "parent_process_path": e.get("ParentBaseFileName"),
-            "process_hash": e.get("SHA256HashData"), "user": e.get("UserName"), "process_guid": e.get("TargetProcessId"),
-            "parent_process_guid": e.get("ParentProcessId"), "_kind": "process", "_time": e.get("timestamp")}
-
-
-def norm_estreamer(e):
-    if e.get("EventType") == "IntrusionEvent":
-        blocked = (e.get("InlineResult") or "").lower() in ("blocked", "dropped")
-        return {"src": e.get("InitiatorIP"), "dest": e.get("ResponderIP"), "dest_port": e.get("ResponderPort"), "signature": e.get("IntrusionRuleMessage"),
-                "signature_id": e.get("SignatureID"), "severity": e.get("PriorityID"), "action": "blocked" if blocked else "allowed", "_kind": "ids",
-                "category": e.get("Classification"), "_raw": {"Classification": e.get("Classification") or ""}, "_tables": ["cisco-secure-firewall"],
-                "_time": e.get("EventSecond")}
-    if e.get("EventType") == "ConnectionEvent":
-        return {"src": e.get("InitiatorIP"), "dest": e.get("ResponderIP"), "dest_port": e.get("ResponderPort"), "transport": e.get("Protocol"),
-                "action": "blocked" if (e.get("AC_RuleAction") or "").lower() in ("block", "block with reset") else "allowed",
-                "rule": e.get("FirewallRule"), "_kind": "conn", "_time": e.get("FirstPacketSecond")}
-    return {}
-
-
-def normalise(raw, sourcetype):
-    if sourcetype in ("XmlWinEventLog", "WinEventLog"):
-        return norm_windows(raw)
-    if sourcetype.startswith("crowdstrike"):
-        return norm_crowdstrike(raw)
-    if sourcetype == "cisco:sfw:estreamer":
-        return norm_estreamer(raw)
-    return {}
-
-
-# ---------- what each source rule fires on ----------
-def _lookup(name, col, flt=None):
-    with open(os.path.join(ESCU, "lookups", "csv", name), newline="") as fh:
-        return {r[col].lower() for r in csv.DictReader(fh) if r.get(col) and (flt is None or flt(r))}
-
-
-RMM = _lookup("remote_access_software.csv", "remote_utility", lambda r: r.get("isutility", "").upper() == "TRUE")
-LOLDRV = {x.split("\\")[-1] for x in _lookup("loldrivers.csv", "driver_name")}
-c = lambda n: (n.get("process") or "").lower()
-pn = lambda n: n.get("process_name") or ""
-P = {
- "escu:detect_psexec_with_accepteula_flag": lambda n: (pn(n) in ("psexec.exe", "psexec64.exe") or n.get("original_file_name") == "psexec.c") and "accepteula" in c(n),
- "escu:windows_service_creation_on_remote_endpoint": lambda n: pn(n) == "sc.exe" and "\\\\" in c(n) and "create" in c(n) and "binpath" in c(n),
- "escu:process_execution_via_wmi": lambda n: n.get("parent_process_name") == "wmiprvse.exe" and "dismhost.exe" not in c(n),
- "escu:remote_process_instantiation_via_winrm_and_powershell": lambda n: pn(n) in ("powershell.exe", "pwsh.exe") and "invoke-command" in c(n) and "-computername" in c(n),
- "escu:windows_remote_services_rdp_enable": lambda n: (n.get("registry_path") or "").lower().endswith("fdenytsconnections") and "0x00000000" in (n.get("registry_value_data") or "").lower(),
- "escu:windows_file_download_via_certutil": lambda n: pn(n) == "certutil.exe" and (re.search(r"[-/]url ", c(n)) or (re.search(r"urlcache|verifyctl", c(n)) and re.search(r"[-/]f ", c(n)))),
- "escu:windows_office_product_spawned_uncommon_process": lambda n: n.get("parent_process_name") in OFFICE and pn(n) in OFFICE_CHILD,
- "escu:bitsadmin_download_file": lambda n: pn(n) == "bitsadmin.exe" and re.search(r"transfer|addfile", c(n)),
- "escu:windows_file_download_via_powershell": lambda n: pn(n) in ("powershell.exe", "pwsh.exe") and re.search(r"iwr |invoke-webrequest|wget |curl|\.download(data|file|string)", c(n)),
- "escu:malicious_powershell_process___execution_policy_bypass": lambda n: pn(n) in ("powershell.exe", "pwsh.exe") and " -ex" in c(n) and " bypass " in c(n) + " ",
- "escu:windows_schtasks_create_run_as_system": lambda n: pn(n) == "schtasks.exe" and "/create " in c(n) and "/ru " in c(n) and "system" in c(n),
- "escu:suspicious_scheduled_task_from_public_directory": lambda n: pn(n) == "schtasks.exe" and "/create" in c(n) and re.search(r"\\users\\public\\|\\programdata\\|windows\\temp", c(n)),
- "escu:registry_keys_used_for_persistence": lambda n: n.get("_kind") == "registry" and re.search(r"\\currentversion\\run|startupapproved\\run|user shell folders|winlogon\\(shell|userinit)|\\policies\\explorer\\run", (n.get("registry_path") or "").lower()),
- "escu:detect_new_local_admin_account": lambda n: n.get("_eid") == "4720" or (n.get("_eid") == "4732" and "administrators" in (n.get("Group_Name", "") + (n.get("group") or "")).lower()),
- "escu:windows_possible_credential_dumping": lambda n: n.get("_kind") == "access" and (n.get("TargetImage") or "").lower().endswith("lsass.exe")
-     and (n.get("user_id") or "").upper() not in ("NT AUTHORITY\\SYSTEM", "NT AUTHORITY\\NETWORK SERVICE")
-     and re.search(r"dbgcore|dbghelp|kernel32|kernelbase|ntdll", (n.get("CallTrace") or "").lower())
-     and (int(n.get("granted_access") or "0", 16) & 0x1000 or int(n.get("granted_access") or "0", 16) & 0x40),
- "escu:creation_of_shadow_copy": lambda n: (pn(n) == "vssadmin.exe" and "create" in c(n) and "shadow" in c(n)) or (pn(n) == "wmic.exe" and "shadowcopy" in c(n) and "create" in c(n)),
- "escu:deleting_shadow_copies": lambda n: pn(n) in ("vssadmin.exe", "wmic.exe") and "delete" in c(n) and "shadow" in c(n),
- "escu:add_or_set_windows_defender_exclusion": lambda n: re.search(r"(add|set)-mppreference ", c(n)) and re.search(r"-exclusion|-controlledfolderaccessallowedapplications|-attacksurfacereductiononlyexclusions", c(n)),
- "escu:windows_event_log_cleared": lambda n: n.get("_kind") == "logclear",
- "escu:detect_remote_access_software_usage_process": lambda n: pn(n) in RMM,
- "escu:suspicious_rundll32_no_command_line_arguments": lambda n: pn(n) == "rundll32.exe" and re.search(r'rundll32(\.exe)?"?\s*$', c(n)),
- "escu:suspicious_regsvr32_register_suspicious_path": lambda n: pn(n) == "regsvr32.exe" and re.search(r"\\appdata\\|\\programdata\\|\\windows\\temp\\", c(n)) and not re.search(r"\.dll|\.ax|\.ocx", c(n)),
- "escu:detect_mshta_url_in_command_line": lambda n: pn(n) == "mshta.exe" and re.search(r"https?://", c(n)),
- "escu:windows_vulnerable_driver_installed": lambda n: n.get("_kind") == "service" and "kernel" in (n.get("ServiceType") or "").lower() and base(n.get("ImagePath")) in LOLDRV,
- "escu:detect_sharphound_usage": lambda n: pn(n) == "sharphound.exe" or n.get("original_file_name") == "sharphound.exe",
- "product_alert:ids_signature": lambda n: n.get("_kind") == "ids",
- "product_alert:av_edr_malware": lambda n: n.get("_kind") == "av",
- "product_alert:firewall_deny": lambda n: n.get("_kind") == "conn" and n.get("action") == "blocked",
-}
-# Vendor families replayed on vendor telemetry that ESCU tests ship with.
-VENDOR = {
- "product_alert:ids_signature": ["detections/network/cisco_secure_firewall___intrusion_events_by_threat_activity.yml", "detections/network/cisco_secure_firewall___high_priority_intrusion_classification.yml"],
- "product_alert:av_edr_malware": ["detections/endpoint/windows_defender_threat_detected_on_kernel_object_path.yml"],
- "product_alert:firewall_deny": ["detections/network/cisco_secure_firewall___blocked_connection.yml"],
-}
-NOT_REPLAYABLE = {
- "product_alert:waf_block": "no WAF event dataset ships with any ESCU test",
- "product_alert:email_gateway_threat": "no email-gateway event dataset ships with any ESCU test",
- "product_alert:user_reported_email": "no user-report dataset exists in splunk/attack_data",
- "product_alert:dlp_policy_match": "no DLP event dataset ships with any ESCU test",
- "product_alert:proxy_url_block": "ESCU proxy datasets hold allowed requests only, no URL-filter blocks",
- "product_alert:device_control_connect": "no device-control event dataset ships with any ESCU test",
- "product_alert:device_control_write": "no device-control event dataset ships with any ESCU test",
-}
-
-
-# ---------- harness mapping to normalized alert v1 roles ----------
-# The bank refers to roles, never to fields. The harness plays the normalizer: it maps the CIM-like keys the
-# parsers above produce to role attributes, per event kind, and keeps the raw vendor values the value tables read.
-ROLE = {
-    "_time": "event.time", "dest": "host.name", "dest_asset_id": "host.asset_id", "user": "user.name", "user_id": "user.name",
-    "src_user": "actor.name", "src": "src.ip", "dest_port": "dest.port", "transport": "network.transport", "rule": "network.rule",
-    "process": "process.command_line", "process_name": "process.name", "process_path": "process.path", "process_guid": "process.guid",
-    "process_hash": "process.sha256", "parent_process_guid": "process.parent_guid", "parent_process_path": "process.parent_path",
-    "parent_process_name": "process.parent_name", "registry_path": "registry.path", "registry_value_name": "registry.value_name",
-    "registry_value_data": "registry.value_data", "EventCode": "event.type_id", "ImagePath": "file.path",
-    "SourceImage": "process.path", "SourceProcessGUID": "process.guid", "TargetImage": "target_process.path",
-    "granted_access": "process_access.rights", "CallTrace": "process_access.call_stack",
-    "signature": "reporting_control.signature", "signature_id": "reporting_control.signature_id", "category": "reporting_control.category",
-    "severity": "reporting_control.severity", "action": "reporting_control.action", "file_hash": "file.sha256", "file_name": "file.name",
-    "file_path": "file.path",
-}
-NETWORK_KINDS = {"ids", "conn"}
-
-
-def to_roles(n):
-    out = {}
-    for k, v in n.items():
-        if k.startswith("_") or v in (None, ""):
-            continue
-        r = ROLE.get(k)
-        if k == "dest" and n.get("_kind") in NETWORK_KINDS:
-            r = "dest.ip"
-        if r:
-            out[r] = v
-    if n.get("action") is not None:
-        out["reporting_control.action_raw"] = n.get("_action_raw") or n.get("action")
-    for k in ("_time", "_kind", "_idx", "_raw", "_tables", "_api"):
-        if k in n:
-            out[k] = n[k]
-    if n.get("_time"):
-        out["event.time"] = n["_time"]
-    return out
-
-
-def ref_value(ref, n):
-    """Value of a role:/derived:/alert: reference, or of the role an entity: reference needs (None if missing)."""
-    kind, _, name = ref.partition(":")
-    if kind in ("role", "derived"):
-        return n.get(name)
-    if kind == "alert":
-        return n.get(name)
-    if kind == "entity":
-        return n.get({"process": "process.guid", "parent_process": "process.parent_guid", "module": "process.guid", "file": "file.path", "recipient_hosts": "email.recipient"}[name])
-    return None
-
-
-def derive(d, n):
-    for name, spec in (d.get("derived_fields") or {}).items():
-        src = spec["from"] if isinstance(spec["from"], list) else [spec["from"]]
-        vals = [str(ref_value(f, n)) for f in src if ref_value(f, n) not in (None, "")]
-        if "pattern" in spec:
-            hits = re.findall(spec["pattern"], vals[0], re.I) if vals else []
-            n[name] = (",".join(hits) if spec.get("all") else hits[0]) if hits else None
-        elif spec.get("first"):
-            n[name] = vals[0] if vals else None
-        else:
-            n[name] = spec.get("join", " ").join(vals) if vals else None
-    n["fingerprint"] = "|".join(str(ref_value(f, n)) for f in d["fingerprint"])
-    return n
-
-
-# ---------- clean-room customer: the Tool Broker's typed answers ----------
-def measure(b, q, inputs, n, ctx):
-    """The broker's typed answer for one question on one alert, or None for status unknown."""
-    cap = q["capability"]["name"]
-    if cap == "email.no_interaction" and n.get("file.sha256") and "attachment_open_telemetry" not in (ctx.get("coverage") or []):
-        return None   # B2: the message carried an attachment and no host records attachment opens: missing clicks are not evidence
-    if cap == "precedent.check":
-        return B.q0(b, context_answers(b, n, ctx, d=ctx.get("_detection")))
-    if q["id"] in (ctx.get("overrides") or {}):
-        return ctx["overrides"][q["id"]]   # a regression case supplies a broker answer the clean room cannot give
-    optional = set(q["capability"].get("optional_inputs") or [])
-    for kind, name in B.walk_refs({k: v for k, v in inputs.items() if k not in optional}):
-        if kind != "bind" and ref_value(f"{kind}:{name}", n) in (None, ""):
-            return None
-    if cap == "alert.class":
-        cls = inputs["class"]
-        tables = [t for t in n.get("_tables", []) if cls in (b["value_tables"].get(t, {}).get("classes") or {})]
-        if tables:
-            values = n.get("_raw") or {}
-        else:
-            reads = [inputs["of"].split(":", 1)[1]] if inputs.get("of") else b["capabilities"]["alert_classes"][cls]["reads"]
-            values = {r: n.get(r) for r in reads}
-            if all(v in (None, "") for v in values.values()):
-                return None
-            # further role inputs (for example the email delivery stage) are read by the translation too
-            values.update({str(v).split(":", 1)[1]: n.get(str(v).split(":", 1)[1]) for k, v in inputs.items()
-                           if k not in ("class", "of") and str(v).startswith("role:")})
-        v, ctx["_trust"], ctx["_prov"] = B.classify_effective(b, cls, values, tables, ctx=ctx, question=q["id"])
-        return v
-    if cap == "endpoint.run_status":
-        # The endpoint API is authoritative (_api: the vendor alerts it matched); without it the SIEM's copy of the alert
-        # is the fallback (_raw read through the product's siem_copy table, else the generic one).
-        copy = {"raw": n.get("_raw") or {"value": n.get("reporting_control.action_raw")}, "tables": n.get("_tables") or []}
-        v, ctx["_trust"], ctx["_prov"] = B.run_status(b, n.get("_api"), copy, ctx=ctx, sha256=n.get("file.sha256"))
-        return v
-    if cap == "list.lookup" and (b["facts"].get(inputs.get("list")) or {}).get("default_entries"):
-        # A context list that starts from default entries (CF-0031 internal networks: the private ranges) holds them in the clean room.
-        import ipaddress
-        try:
-            ip = ipaddress.ip_address(str(ref_value(inputs["entity"], n)))
-        except ValueError:
-            return None
-        return any(ip in ipaddress.ip_network(c) for c in b["facts"][inputs["list"]]["default_entries"])
-    if cap == "context.rule":
-        return B.context_rule(b, q["context_rule"], ctx.get("context") or {})
-    if cap == "alert.measure":
-        return float(ref_value(inputs["of"], n))
-    if cap == "traffic.denied_only":
-        conns = [x for x in ctx["conns"] if x.get("src.ip") == n.get("src.ip")]
-        return None if not conns else all(x.get("reporting_control.action") == "blocked" for x in conns)
-    if cap == "alert.history":
-        key = inputs["key"]
-        earlier = [x for x in ctx["alerts"][:n["_idx"]] if ref_value(key, x) == ref_value(key, n)]
-        if inputs.get("distinct"):
-            return len({ref_value(inputs["distinct"], x) for x in earlier})
-        return len(earlier)
-    if cap == "vuln.not_applicable":
-        ctx["vuln_unknown"][("no_cve_mapping" if not re.search(r"CVE-\d{4}-\d+", str(n.get("reporting_control.signature")), re.I) else "no_data")] += 1
-        return None
-    if cap in ("entity.baseline", "org.prevalence", "email.message_status", "email.no_interaction", "email.auth", "file.signer"):
-        return None
-    return False   # precedent.check, list.lookup (CF-0031 internal networks included), identity.groups, change.window, scan.job_active, *.reputation: empty in a clean room
-
-
-def _entity(n):
-    return n.get("host.name") or n.get("user.name") or n.get("email.recipient")
-
-
-def _minutes(t):
-    """Minutes since the epoch for the time formats the datasets use; 0 when a time is missing or unreadable (every such
-    alert then counts as simultaneous, which can only make an entity hotter)."""
-    from datetime import datetime
-    t = str(t or "").strip()
-    for parse in (lambda x: datetime.fromisoformat(x.replace("Z", "+00:00")), lambda x: datetime.strptime(x[:19], "%m/%d/%Y %I:%M:%S"),
-                  lambda x: datetime.strptime(x[:19], "%m/%d/%Y %H:%M:%S"), lambda x: datetime.fromtimestamp(float(x))):
-        try:
-            return parse(t).timestamp() / 60
-        except (ValueError, OverflowError, OSError):
-            pass
-    return 0.0
-
-
-def context_answers(b, n, ctx, d=None, at=None):
-    """The context answers for one alert as the broker would return them, measured fresh at time `at` (default: the alert's
-    own time): C-02 and C-03 from the alerts on the same entity seen so far (ctx["timeline"], else this detection's replayed
-    alerts), C-04 from the recorded closes of the fingerprint (ctx["closures"]) by the human-evidence definition, and the
-    rest (C-01, C-06, C-08) from the case's context. A new alert invalidates the cached C-02: nothing here is cached (S1)."""
-    ans = dict({"C-01": False}, **(ctx.get("context") or {}))
-    seen = ctx.get("timeline") if ctx.get("timeline") is not None else ctx.get("alerts", [])[:n.get("_idx", 0) + 1]
-    now = _minutes(at or n.get("event.time"))
-    p = lambda name: B.param_value(b, name, d, ctx.get("customer"), ans.get("C-08") if ans.get("C-08") in ("server", "workstation", "network", "other") else None)
-    window, look = float(p("entity_grouping_window_minutes")), float(p("triage_lookback_hours")) * 60
-    mine = [x for x in seen if _entity(x) == _entity(n) and now - look <= _minutes(x.get("event.time")) <= now]
-    routine = {tuple(r) for r in ctx.get("routine") or []}
-    counted = [x for x in mine if (_entity(x), x.get("_detection")) not in routine or x.get("severity") in ("high", "critical")]
-    in_window = [x for x in counted if now - window <= _minutes(x.get("event.time"))]
-    c02 = {"alerts": len(in_window), "distinct_detections": len({x.get("_detection") for x in in_window})}
-    top = {}
-    for x in counted:
-        if B.severity_rank(b, x.get("severity")) is not None:
-            top[x.get("_detection")] = max(top.get(x.get("_detection"), x["severity"]), x["severity"], key=lambda s: B.severity_rank(b, s))
-    for level in b["severity"]["scale"]:
-        c02[f"day_detections_{level}"] = sum(1 for v in top.values() if v == level)
-    ans.setdefault("C-02", c02)
-    others = [x.get("severity") for x in mine if x is not n and B.severity_rank(b, x.get("severity")) is not None]
-    ans.setdefault("C-03", max(others, key=lambda s: B.severity_rank(b, s)) if others else "none")
-    fp = n.get("fingerprint")
-    ans.setdefault("C-04", B.human_evidence(b, [c for c in ctx.get("closures") or [] if c.get("fingerprint", fp) == fp]))
-    ans.update(_mode=ctx.get("mode", "recommend"), _severity=n.get("severity"), _detection=d, _customer=ctx.get("customer"),
-               _entity_class=ans.get("C-08"))
-    return ans
-
-
-def answer(b, q, item, n, ctx, d):
-    """The Triage side of one question: the broker's answer, status and trust, turned into yes / no / unknown by the step's rule.
-    Records (question, yes/no/unknown, trust, provenance) in ctx["answers"]; the triage side reads only the trust."""
-    if set((q.get("needs") or {}).get("coverage") or []) - set(ctx.get("coverage") or []):
-        return "unknown"   # clean room: no coverage report, so the question is no_capability
-    ctx["_trust"], ctx["_prov"] = "checked", None
-    value = measure(b, q, B.step_inputs(q, item), n, ctx)
-    if q["id"] in (ctx.get("not_checked") or []) and value is not None:
-        ctx["_trust"], ctx["_prov"] = "not_checked", ctx.get("_prov") or "fallback source"   # a regression case's fallback-source answer
-    a = B.apply_rule(b, item.get("rule"), value, B.answer_type(b, q["id"]), d)
-    if ctx.get("_nc_as_unknown") and ctx["_trust"] == "not_checked":
-        a = "unknown"   # run A of the stricter-of rule: every not_checked answer read as unknown
-    ctx.setdefault("answers", []).append((q["id"], a, ctx["_trust"], ctx["_prov"]))
-    return a
-
-
-def run_flow(b, d, n, ctx):
-    """One alert through one flow in ctx["mode"] (shadow, recommend or auto; default recommend).
-    The Auto rule, in triage terms: a not_checked answer may support a close in Shadow and Recommend (the close is marked
-    "not_checked: <question>" in the explanation and decision log), never in Auto (the close becomes a flag). An answer of
-    unknown supports nothing. The provenance in brackets is the broker's, shown here for the gate report only."""
-    ctx["answers"], ctx["_closing_step"], ctx["_detection"] = [], None, d
-    out, trail = _run_flow(b, d, n, ctx)
-    if out.startswith("close"):
-        # S1: the entity guard is re-evaluated on a fresh C-02 immediately before the close is written.
-        hot = B.entity_hot(b, context_answers(b, n, ctx, d))
-        if hot is not False:
-            return "flag", trail + [f"entity guard {'hot' if hot else 'unknown'} at write time -> flag"]
-    if out.startswith("close"):
-        # Auto exclusions (bank/triage/auto_exclusions.yaml): a detection capped at Recommend, or an excluded close step,
-        # never closes in Auto; in Shadow and Recommend the close stands, marked.
-        step_codes = B.auto_excluded(d, ctx["_closing_step"] or {})
-        excluded = (B.auto_excluded(d) if d.get("max_mode") == "recommend" else []) + step_codes
-        if excluded and ctx.get("mode") == "auto":
-            return "flag", trail + [f"auto_excluded ({', '.join(excluded)}) in Auto -> flag"]
-        if step_codes:
-            trail = trail + [f"auto_excluded: {', '.join(step_codes)}"]
-    nc = sorted({f"{qid} [{prov}]" for qid, a, trust, prov in ctx["answers"] if trust == "not_checked" and a != "unknown"})
-    if ctx.get("mode") == "auto" and nc and not ctx.get("_nc_as_unknown"):
-        # Auto: the stricter of (B) the trust rule (a close resting on a not_checked answer flags) and (A) the same flow with
-        # every not_checked answer read as unknown (round 6, §5.1: the trust rule alone was weaker on 94 paths).
-        b_out = "flag" if out.startswith("close") else out
-        a_out, a_trail = _run_flow(b, d, n, dict(ctx, _nc_as_unknown=True, answers=[]))
-        if B.SEVERITY[B.outcome_kind(a_out)] > B.SEVERITY[B.outcome_kind(b_out)]:
-            return a_out, trail + [f"not_checked answer in Auto: {', '.join(nc)}; read as unknown the flow gives {a_out} [{' > '.join(a_trail)}], the stricter -> {a_out}"]
-        if out.startswith("close"):
-            return "flag", trail + [f"not_checked answer in Auto: {', '.join(nc)} -> flag"]
-        return out, trail
-    if out.startswith("close") and nc:
-        trail = trail + [f"not_checked: {x}" for x in nc]
-    return out, trail
-
-
-def _run_flow(b, d, n, ctx):
-    trail = []
-    for st in d["flow"]:
-        q = b["questions"][st["question"]]
-        a = answer(b, q, st, n, ctx, d)
-        out = st["on_" + a]
-        trail.append(f"{st['question']}={a}")
-        if out != "next":
-            results = []
-            for gd in st.get("guards") or []:
-                if not B.guard_applies(gd, out) or (gd.get("if_entry_type") and n.get("_matched_entry_type") not in gd["if_entry_type"]):
-                    continue
-                results.append((gd, answer(b, b["questions"][gd["question"]], gd, n, ctx, d)))
-            raised = B.raise_outcome(out, results)
-            if raised != out:
-                trail.append("guards " + ",".join(f"{g['question']}={a}" for g, a in results) + f" -> {raised}")
-                out = raised
-        if out != "next":
-            ctx["_closing_step"] = st
-            return context_unknown(out, trail, ctx)
-    return "flag", trail
-
-
-def context_unknown(out, trail, ctx):
-    """Every close depends on C-06 (Q0 needs a known non-crown-jewel; no auto-close on crown jewels): if C-06 is unknown or
-    its source unavailable (None), the close becomes a flag with reason context_unknown. Missing context never escalates."""
-    if out.startswith("close") and (ctx.get("context") or {}).get("C-06") is None:
-        return "flag", trail + ["context_unknown C-06 -> flag"]
-    return out, trail
-
-
-# Regression cases: hand-built normalized alerts (roles, plus the raw values the value tables read) with a required outcome.
-GRAPH = ["microsoft-defender-for-endpoint"]
-EVENT_LOG = ["microsoft-defender-antivirus-event-log"]
-AV = {"host.name": "ws-01", "user.name": "u1", "event.time": "2026-10-17T00:00:00Z", "file.path": "C:\\Users\\Public\\m.exe", "file.name": "m.exe"}
-PUA = {"reporting_control.signature": "PUA:Win32/Presenoker", "reporting_control.category": "pua"}
-
-
-def api(sha, *alerts):
-    """The endpoint API's answer: the vendor alerts the broker matched (by vendor alert ID, else device + hash + window), each
-    with one file evidence item for the alerted file (hash sha) carrying the given statuses. An alert given as a list holds
-    several evidence items as they are."""
-    return {"tables": GRAPH, "matches": [{"evidence": a if isinstance(a, list) else [dict({"type": "fileEvidence", "fileDetails": {"sha256": sha}}, **a)]}
-                                         for a in alerts]}
-
-
-VERIFIED = ["microsoft-defender-for-endpoint", "generic"]   # tables a synthetic customer has verified (as after #20 and onboarding)
-USB = {"_coverage": ["device_control_write_events"], "host.name": "srv-01", "user.name": "u1", "event.time": "2026-10-17T00:00:00Z", "device.event_type": "connect", "device.class": "storage",
-       "reporting_control.action": "allowed", "device.files_written": 0}
-MAIL = {"_overrides": {"Q-0035": True}, "email.sender": "a@example.org", "email.subject": "invoice", "email.recipient": "u1@corp.example",
-        "email.url": "http://example.org/x", "file.sha256": "1" * 64, "event.time": "2026-10-17T00:00:00Z", "reporting_control.action": "quarantined"}
-REPORT = {"email.message_id": "<m1@example.org>", "email.sender": "notice@corp.example", "email.sender_domain": "corp.example", "email.recipient": "u1@corp.example",
-          "user.name": "u1", "email.url": "http://example.org/x", "event.time": "2026-10-17T00:00:00Z", "severity": "medium"}
-PSEXEC = {"host.name": "ws-07", "user.name": "admin1", "process.parent_name": "cmd.exe", "process.sha256": "7" * 64, "process.name": "psexec.exe",
-          "process.command_line": "psexec.exe -accepteula \\\\srv-02 cmd", "event.time": "2026-10-17T08:00:00Z", "severity": "medium"}
-LSASS = {"host.name": "ws-07", "user.name": "admin1", "process.path": "C:\\Tools\\procdump.exe", "process.sha256": "8" * 64, "process.guid": "{g-1}",
-         "target_process.path": "C:\\Windows\\System32\\lsass.exe", "process_access.rights": "0x1010", "event.time": "2026-10-17T08:15:00Z", "severity": "medium"}
-CLOSE = lambda kind, analyst=None: {"kind": kind, "analyst": analyst}
-API_PREVENTED = dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api("d" * 64, {"detectionStatus": "prevented"})})
-BLOCK_1117 = dict(AV, **PUA, **{"file.sha256": "e" * 64, "reporting_control.action_raw": "Block", "_raw": {"EventID": "1117", "Action Name": "Block"}, "_tables": EVENT_LOG})
-
-# (detection, name, alert, required outcome). A required outcome ending in "+not_checked" also requires the close to be marked
-# "not_checked: <question>"; any other close must not be marked. A required outcome starting with "not " must not be reached
-# (for example "not close:inherit": Q0 must not close). Alert keys starting with _ are harness inputs: _mode (shadow, recommend, auto; default
-# recommend), _api (the endpoint API's matches), _raw/_tables (the SIEM copy), _coverage (coverage reports present),
-# _context (context answers; None = unknown or source unavailable), _verified (tables a synthetic customer has verified),
-# _overrides (broker answers per question the clean room cannot give, for example the mailbox status), _closures (recorded closes
-# of the fingerprint, by kind: Q0 counts them through the human-evidence definition).
-REGRESSION = [
- ("D-0026", "no hash, high-risk class, detected (not blocked) must escalate",
-  dict(AV, **{"reporting_control.signature": "HackTool:Win32/Mimikatz", "reporting_control.category": "hacktool", "reporting_control.action_raw": "detected"}), "escalate"),
- ("D-0026", "no hash, high-risk class, blocked must escalate",
-  dict(AV, **{"reporting_control.signature": "HackTool:Win32/Mimikatz", "reporting_control.category": "hacktool", "reporting_control.action_raw": "blocked_pre_execution"}), "escalate"),
- ("D-0026", "Defender API detectionStatus blocked (remediated at run time), low-risk class: no close",
-  dict(AV, **PUA, **{"file.sha256": "a" * 64, "reporting_control.vendor_alert_id": "da-1", "_api": api("a" * 64, {"detectionStatus": "blocked"})}), "escalate"),
- ("D-0026", "Defender API quarantine only (no detection status), low-risk class: flag",
-  dict(AV, **PUA, **{"file.sha256": "b" * 64, "reporting_control.vendor_alert_id": "da-2", "_api": api("b" * 64, {"remediationStatus": "quarantined"})}), "flag"),
- ("D-0026", "any product, no API, SIEM copy quarantined only (ambiguous row), low-risk class: flag",
-  dict(AV, **{"file.sha256": "c" * 64, "reporting_control.signature": "Adware:Win32/X", "reporting_control.category": "adware",
-              "reporting_control.action_raw": "quarantined"}), "flag"),
- ("D-0026", "Defender API prevented, low-risk, unverified rows, Recommend: recommended close, marked not_checked",
-  dict(API_PREVENTED, _mode="recommend"), "close:mitigated_true_positive+not_checked"),
- ("D-0026", "Defender API prevented, low-risk, unverified rows, Shadow: close shown, marked not_checked",
-  dict(API_PREVENTED, _mode="shadow"), "close:mitigated_true_positive+not_checked"),
- ("D-0026", "Defender API prevented, low-risk, unverified rows, Auto: not closed (flag)",
-  dict(API_PREVENTED, _mode="auto"), "flag"),
- ("D-0026", "Defender API prevented, low-risk, rows verified for the customer, Auto: mitigated close",
-  dict(API_PREVENTED, _mode="auto", _verified=VERIFIED), "close:mitigated_true_positive"),
- ("D-0026", "C-06 source unavailable: the same verified Auto close flags (context_unknown)",
-  dict(API_PREVENTED, _mode="auto", _verified=VERIFIED, _context={"C-06": None}), "flag"),
- ("D-0026", "event 1117 Block (ambiguous), Shadow: flag", dict(BLOCK_1117, _mode="shadow"), "flag"),
- ("D-0026", "event 1117 Block (ambiguous), Recommend: flag", dict(BLOCK_1117, _mode="recommend"), "flag"),
- ("D-0026", "event 1117 Block (ambiguous), Auto, other rows verified: flag", dict(BLOCK_1117, _mode="auto", _verified=VERIFIED), "flag"),
- ("D-0026", "Defender API unavailable, SIEM event-log copy 1116 (detected): ran stands from the fallback, escalate",
-  dict(AV, **PUA, **{"file.sha256": "e" * 64, "reporting_control.action_raw": "detected", "_raw": {"EventID": "1116", "Action Name": "Not Applicable"},
-                     "_tables": EVENT_LOG}), "escalate"),
- ("D-0026", "no vendor alert ID, fallback match finds two Defender alerts, low-risk class: flag",
-  dict(AV, **PUA, **{"file.sha256": "f" * 64, "reporting_control.endpoint_device": "dev-1",
-                     "_api": api("f" * 64, {"detectionStatus": "prevented"}, {"detectionStatus": "prevented"})}), "flag"),
- ("D-0026", "no vendor alert ID, fallback match finds no Defender alert, low-risk class: flag",
-  dict(AV, **PUA, **{"file.sha256": "0" * 64, "reporting_control.endpoint_device": "dev-1", "_api": api("0" * 64)}), "flag"),
- ("D-0031", "email quarantined before delivery, Recommend: close (blocked by the control), marked not_checked",
-  dict(MAIL, **{"email.delivery_stage": "pre_delivery"}), "close:mitigated_true_positive+not_checked"),
- ("D-0031", "email quarantined after delivery (a purge of a delivered message): ambiguous, flag",
-  dict(MAIL, **{"email.delivery_stage": "post_delivery"}), "flag"),
- ("D-0031", "email quarantined with no delivery stage: ambiguous, flag", dict(MAIL), "flag"),
- ("D-0034", "removable media, C-08 unknown: flag (context_unknown), never escalate",
-  dict(USB, _context={"C-06": False}), "flag"),
- ("D-0034", "removable media, C-08 server: Q-0067 escalates",
-  dict(USB, _context={"C-06": False, "C-08": "server"}), "escalate"),
- ("D-0034", "removable media, C-08 workstation, Recommend: close (no data transferred), marked not_checked",
-  dict(USB, _context={"C-06": False, "C-08": "workstation"}), "close:benign_true_positive+not_checked"),
- ("D-0034", "removable media, C-08 workstation, unverified rows, Auto: flag",
-  dict(USB, _mode="auto", _context={"C-06": False, "C-08": "workstation"}), "flag"),
- ("D-0034", "removable media, C-08 workstation, rows verified, Auto: flag (capped at Recommend: no true-positive replay data, §5.2)",
-  dict(USB, _mode="auto", _verified=VERIFIED, _context={"C-06": False, "C-08": "workstation"}), "flag"),
- ("D-0034", "removable media, C-06 unavailable and C-08 workstation: flag (context_unknown)",
-  dict(USB, _context={"C-06": None, "C-08": "workstation"}), "flag"),
- # Round 6, §5.1: in Auto the outcome is the stricter of the trust rule and the flow with not_checked answers read as unknown.
- ("D-0006", "Auto: baseline yes from the fallback source (not_checked) would flag; read as unknown the flow reaches Q-0004 and escalates",
-  dict(PSEXEC, _mode="auto", _overrides={"Q-0001": False, "Q-0002": True, "Q-0003": 30, "Q-0004": False}, _not_checked=["Q-0003"]), "escalate"),
- ("D-0006", "the same in Recommend: the not_checked baseline yes flags (no Auto rule)",
-  dict(PSEXEC, _overrides={"Q-0001": False, "Q-0002": True, "Q-0003": 30, "Q-0004": False}, _not_checked=["Q-0003"]), "flag"),
- # Round 6, S7: the broker reads the evidence item for the alerted file, by hash, never the first item.
- ("D-0026", "Defender API: a benign sibling file prevented, the alerted file detected: ran, escalate",
-  dict(AV, **PUA, **{"file.sha256": "c1" * 32, "reporting_control.vendor_alert_id": "da-5", "_api": api("c1" * 32, [
-      {"type": "fileEvidence", "fileDetails": {"sha256": "c2" * 32}, "detectionStatus": "prevented", "remediationStatus": "prevented"},
-      {"type": "fileEvidence", "fileDetails": {"sha256": "c1" * 32}, "detectionStatus": "detected"}])}), "escalate"),
- ("D-0026", "Defender API: the only evidence item is for another file: unknown, flag",
-  dict(AV, **PUA, **{"file.sha256": "c3" * 32, "reporting_control.vendor_alert_id": "da-6", "_api": api("c3" * 32, [
-      {"type": "fileEvidence", "fileDetails": {"sha256": "c4" * 32}, "detectionStatus": "prevented"}])}), "flag"),
- # Round 6, B1: the customer's own domains never count as approved senders; an approved external sender never closes in Auto.
- ("D-0032", "user report, internal sender (own domain) on the approved list, DMARC pass, no URL hit: flag",
-  dict(REPORT, _overrides={"Q-0037": False, "Q-0071": True, "Q-0070": True, "Q-0034": False, "Q-0075": True}), "flag"),
- ("D-0032", "user report, approved external sender, DMARC pass, no URL hit, Recommend: close shown (never in Auto)",
-  dict(REPORT, **{"email.sender": "notice@payroll.example", "email.sender_domain": "payroll.example"},
-       _overrides={"Q-0037": False, "Q-0071": True, "Q-0070": True, "Q-0034": False, "Q-0075": False}), "close:false_positive"),
- ("D-0032", "user report, approved external sender alone, Auto: no close",
-  dict(REPORT, **{"email.sender": "notice@payroll.example", "email.sender_domain": "payroll.example"}, _mode="auto",
-       _overrides={"Q-0037": False, "Q-0071": True, "Q-0070": True, "Q-0034": False, "Q-0075": False}), "flag"),
- # B2: missing click records are not evidence when the message carried an attachment.
- ("D-0031", "delivered macro attachment, purged 2h later, zero clicks, no attachment-open telemetry: flag",
-  dict(MAIL, **{"email.delivery_stage": "post_delivery", "file.name": "invoice.docm"}, _overrides={"Q-0035": True, "Q-0036": True, "Q-0076": "none"}), "flag"),
- ("D-0031", "the same with attachment-open telemetry on every recipient host and no other alert there: close shown",
-  dict(MAIL, **{"email.delivery_stage": "post_delivery", "file.name": "invoice.docm"}, _coverage=["attachment_open_telemetry"],
-       _overrides={"Q-0035": True, "Q-0036": True, "Q-0076": "none"}), "close:mitigated_true_positive"),
- ("D-0031", "the same with telemetry, but another alert on a recipient's host: flag",
-  dict(MAIL, **{"email.delivery_stage": "post_delivery", "file.name": "invoice.docm"}, _coverage=["attachment_open_telemetry"],
-       _overrides={"Q-0035": True, "Q-0036": True, "Q-0076": "medium"}), "flag"),
- # B3: only human evidence makes a precedent; in Auto only an audited close does.
- ("D-0006", "two accepted recommendations by two analysts: Q0 does not fire",
-  dict(PSEXEC, _closures=[CLOSE("accepted_recommendation", "a1"), CLOSE("accepted_recommendation", "a2")]), "not close:inherit"),
- ("D-0006", "two Auto closes: Q0 does not fire",
-  dict(PSEXEC, _closures=[CLOSE("auto_close"), CLOSE("auto_close")]), "not close:inherit"),
- ("D-0006", "two manual closes in Shadow by two analysts, Recommend: Q0 fires",
-  dict(PSEXEC, _closures=[CLOSE("manual_shadow_close", "a1"), CLOSE("manual_shadow_close", "a2")]), "close:inherit"),
- ("D-0006", "two analyst overrides by two analysts, Auto: Q0 does not fire (Auto needs an audited close)",
-  dict(PSEXEC, _mode="auto", _closures=[CLOSE("analyst_override", "a1"), CLOSE("analyst_override", "a2")]), "not close:inherit"),
- ("D-0006", "one audited close, Auto: Q0 fires",
-  dict(PSEXEC, _mode="auto", _closures=[CLOSE("audited_close", "a1")]), "close:inherit"),
-]
-
-
-# Alert sequences on one entity (S1, S2): (name, [(detection, alert)], context, required outcome for every alert, after any
-# reopening). Each alert is triaged when it arrives; the entity guard runs on a fresh C-02 before each close is written, and
-# when the entity turns hot the closes already written on it inside the window (the look-back for the 24h rule) reopen as flags.
-AT = lambda t: {"event.time": f"2026-10-17T{t}:00Z"}
-SEQUENCES = [
- ("S1: 3 alerts from 2 detections within 4 minutes on one host, each closable alone: all flag",
-  [("D-0026", dict(API_PREVENTED, **AT("10:00"), **{"host.name": "ws-01"})), ("D-0026", dict(API_PREVENTED, **AT("10:02"), **{"host.name": "ws-01", "file.sha256": "9" * 64, "_api": api("9" * 64, {"detectionStatus": "prevented"})})),
-   ("D-0034", dict(USB, **AT("10:04"), **{"host.name": "ws-01"}))], {"C-06": False, "C-08": "workstation"}, "flag"),
- ("S1 control: the same two D-0026 alerts alone stay closable (the guard needs 3 alerts)",
-  [("D-0026", dict(API_PREVENTED, **AT("10:00"), **{"host.name": "ws-01"})), ("D-0026", dict(API_PREVENTED, **AT("10:02"), **{"host.name": "ws-01", "file.sha256": "9" * 64, "_api": api("9" * 64, {"detectionStatus": "prevented"})}))],
-  {"C-06": False, "C-08": "workstation"}, "close:mitigated_true_positive"),
- ("S2: PsExec and LSASS access on one host, both medium, 15 minutes apart, each closable alone: both flag",
-  [("D-0006", dict(PSEXEC, _overrides={"Q-0001": True})), ("D-0020", dict(LSASS, _overrides={"Q-0005": True}))], {"C-06": False}, "flag"),
- ("S2 control: the same two at low severity stay closable (the 24h rule counts medium and above)",
-  [("D-0006", dict(PSEXEC, severity="low", _overrides={"Q-0001": True})), ("D-0020", dict(LSASS, severity="low", _overrides={"Q-0005": True}))], {"C-06": False}, "close"),
-]
-
-
-def run_sequences(b, ctx, batches):
-    failures = []
-    eg = b["context_rules"]["entity_guard"]["hot_when"]["any"]
-    for name, seq, context, want in SEQUENCES:
-        if any(b["detections"][did]["family"] not in batches for did, _ in seq):
-            continue
-        timeline, results = [], []
-        for i, (did, alert) in enumerate(seq):
-            d = b["detections"][did]
-            n = derive(d, dict(alert, _idx=i, _detection=did))
-            timeline.append(n)
-            c = dict(ctx, alerts=timeline, timeline=list(timeline), conns=[], context=dict(context), coverage=alert.get("_coverage") or [],
-                     overrides=alert.get("_overrides") or {}, closures=alert.get("_closures") or [], not_checked=alert.get("_not_checked") or [], mode=alert.get("_mode", "recommend"), customer=None, today=TODAY)
-            out, trail = run_flow(b, d, n, c)
-            results.append([n, out, trail])
-            # the entity turned hot on this alert: reopen the closes already written on it (window rule: the grouping window; 24h rule: the look-back)
-            ans = context_answers(b, n, c, d)
-            window_hot = B.context_rule(b, {"any": eg[:2]}, ans) is not False
-            day_hot = B.context_rule(b, eg[2], ans) is not False
-            span = float(B.param_value(b, "triage_lookback_hours")) * 60 if day_hot else float(B.param_value(b, "entity_grouping_window_minutes"))
-            if window_hot or day_hot:
-                for r in results[:-1]:
-                    if r[1].startswith("close") and _entity(r[0]) == _entity(n) and _minutes(n["event.time"]) - _minutes(r[0]["event.time"]) <= span:
-                        r[1], r[2] = "flag", r[2] + [f"reopened: entity hot at {n['event.time']} (reason entity_hot)"]
-        ok = all(out == want or out.startswith(want + ":") or (want == "close" and out.startswith("close")) for _, out, _ in results)
-        print(f"  {'ok  ' if ok else 'FAIL'} sequence {name}")
-        for n, out, trail in results:
-            print(f"         {n['_detection']} {n['event.time']}: {out}  [{' > '.join(trail)}]")
-        if not ok:
-            failures.append(name)
-    return failures
-
+import yaml  # noqa: E402
 
 TODAY = "2026-10-17"
+COVERAGE = os.path.join(ROOT, "tests", "replay", "coverage.yaml")
+CASES = os.path.join(ROOT, "tests", "cases")
+
+
+def coverage():
+    return (yaml.safe_load(open(COVERAGE)) or {}).get("detections") or {}
 
 
 def synthetic_customer(b, tables):
@@ -686,87 +51,137 @@ def synthetic_customer(b, tables):
     return {"customer": "regression", "products": {t: "1.0" for t in tables}, "verifications": recs, "modes": {}}
 
 
-def run_regression(b, ctx, batches):
-    failures = []
-    import copy
-    for did, name, alert, want in REGRESSION:
+def load_cases(kind):
+    paths = glob.glob(os.path.join(CASES, "sequences" if kind == "sequences" else "D-*", "*.yaml"))
+    return sorted((yaml.safe_load(open(p)) for p in paths), key=lambda c: c["order"])
+
+
+def case_broker(b, case, alerts, context, timeline=None):
+    """The clean-room broker for one case, with the case's context as given."""
+    return CleanRoom(b, alerts=alerts, timeline=timeline, conns=[], context=dict(context or {}),
+                     coverage=case.get("coverage") or [], overrides=case.get("overrides") or {}, closures=case.get("closures") or [],
+                     not_checked=case.get("not_checked") or [], customer="regression" if case.get("verified") else None,
+                     today=TODAY, vuln_unknown=Counter())
+
+
+def with_customer(b, case):
+    if not case.get("verified"):
+        return b
+    bb = copy.deepcopy(b)
+    bb["customers"]["regression"] = synthetic_customer(bb, case["verified"])
+    return bb
+
+
+def run_regression(b, batches):
+    failures, n = [], 0
+    for case in load_cases("cases"):
+        did = case["detection"]
         if b["detections"][did]["family"] not in batches:
             continue
-        bb, customer = b, None
-        if alert.get("_verified"):
-            bb, customer = copy.deepcopy(b), "regression"
-            bb["customers"][customer] = synthetic_customer(bb, alert["_verified"])
-        n = derive(bb["detections"][did], dict(alert, _idx=0))
-        c = dict(ctx, alerts=[n], conns=[], context=dict(ctx.get("context") or {}, **(alert.get("_context") or {})), coverage=alert.get("_coverage") or [],
-                 overrides=alert.get("_overrides") or {}, closures=alert.get("_closures") or [], not_checked=alert.get("_not_checked") or [],
-                 mode=alert.get("_mode", "recommend"), customer=customer, today=TODAY)
-        out, trail = run_flow(bb, bb["detections"][did], n, c)
-        if want.startswith("not "):
-            ok = not out.startswith(want[4:])
-            print(f"  {'ok  ' if ok else 'FAIL'} {did}: {name} -> {out}  [{' > '.join(trail)}]")
-            if not ok:
-                failures.append(name)
-            continue
-        need_mark = want.endswith("+not_checked")
-        want = want.replace("+not_checked", "")
-        got = out if want.startswith("close:") and out.startswith(want) else out.split(":")[0]
-        ok = (got == want or (want.startswith("close:") and out.startswith(want))) and \
-            (not need_mark or any(t.startswith("not_checked:") for t in trail)) and \
-            (need_mark or not any(t.startswith("not_checked:") for t in trail))
-        print(f"  {'ok  ' if ok else 'FAIL'} {did}: {name} -> {out}  [{' > '.join(trail)}]")
+        n += 1
+        bb = with_customer(b, case)
+        alert = dict(case["alert"], _idx=0)
+        cr = case_broker(bb, case, [], dict({"C-06": False}, **(case.get("context") or {})))   # the clean room: C-06 no, plus the case's own
+        a = E.derive(bb["detections"][did], cr.register(alert))
+        cr.case["alerts"] = [a]
+        ctx = {"answerer": cr, "mode": case.get("mode", "recommend"), "customer": cr.case["customer"]}
+        out, trail = E.run_flow(bb, bb["detections"][did], a, ctx)
+        exp = case["expect"]
+        marked = any(t.startswith("not_checked:") for t in trail)
+        if "not" in exp:
+            ok = not out.startswith(exp["not"])
+        else:
+            want = exp["outcome"]
+            ok = (out == want or (want.startswith("close:") and out.startswith(want)) or (not want.startswith("close:") and out.split(":")[0] == want)) \
+                and marked == bool(exp.get("marked_not_checked"))
+        print(f"  {'ok  ' if ok else 'FAIL'} {did}: {case['name']} -> {out}  [{' > '.join(trail)}]")
         if not ok:
-            failures.append(name)
-    return failures
+            failures.append(case["name"])
+    return failures, n
+
+
+def run_sequences(b, batches):
+    """Alert sequences on one entity (S1, S2): each alert is triaged when it arrives; the entity guard runs on a fresh C-02
+    before each close is written, and when the entity turns hot the closes already written on it reopen as flags."""
+    failures, n = [], 0
+    for case in load_cases("sequences"):
+        if any(b["detections"][x["detection"]]["family"] not in batches for x in case["alerts"]):
+            continue
+        n += 1
+        timeline, results = [], []
+        for i, x in enumerate(case["alerts"]):
+            d = b["detections"][x["detection"]]
+            cr = case_broker(b, x, timeline, case.get("context"), timeline=None)
+            a = E.derive(d, cr.register(dict(x["alert"], _idx=i, _detection=x["detection"])))
+            timeline.append(a)
+            for earlier in timeline[:-1]:
+                cr.register(earlier)
+            cr.case.update(alerts=timeline, timeline=list(timeline))
+            ctx = {"answerer": cr, "mode": x.get("mode", "recommend"), "customer": None}
+            out, trail = E.run_flow(b, d, a, ctx)
+            results.append([a, out, trail])
+            E.reopen_on_hot(b, results, a, ctx, d)
+        want = case["expect"]["every_alert"]
+        ok = all(out == want or out.startswith(want + ":") or (want == "close" and out.startswith("close")) for _, out, _ in results)
+        print(f"  {'ok  ' if ok else 'FAIL'} sequence {case['name']}")
+        for a, out, trail in results:
+            print(f"         {a['_detection']} {a['event.time']}: {out}  [{' > '.join(trail)}]")
+        if not ok:
+            failures.append(case["name"])
+    return failures, n
 
 
 def main():
     strict = "--strict" in sys.argv
     batches = B.select_batches([a for a in sys.argv[1:] if not a.startswith("--")])
     b = B.load()
-    # Clean-room customer: no crown-jewel list entries (C-06 answered no) and no asset inventory (C-08 unknown: Q-0067 flags).
-    ctx = {"vuln_unknown": Counter(), "context": {"C-06": False}, "mode": "recommend", "customer": None, "today": TODAY}
-    rows, cannot, fails, mitigated = [], [], [], []
-    # The harness picks true-positive events by the source rule's logic, so it keys on the source rule ID from the intake
-    # rule map (escu:<rule file> or product_alert:<kind>); results are reported by D-ID.
-    rule_of = {d_id: sid for sid, d_id in B.source_ids(b, ("escu", "product_alert")).items()}
+    cov, rules = coverage(), FO.load()
+    lookups = os.path.join(DS.ESCU, "lookups", "csv")
+    vuln_unknown = Counter()
+    rows, cannot, fails, mitigated, gate_errors = [], [], [], [], []
+    pin = DS.check_pins()
+    if pin:
+        sys.exit(f"FAIL replay: {pin}")
     for did, d in sorted(b["detections"].items()):
         if B.batch_of("rule", d) not in batches:
             continue
-        sid = rule_of.get(did)
-        if sid in NOT_REPLAYABLE:
-            cannot.append((did, NOT_REPLAYABLE[sid]))
+        c = cov.get(did)
+        if not c:
+            gate_errors.append(f"{did}: not in tests/replay/coverage.yaml")
             continue
-        src = d.get("source") if isinstance(d.get("source"), dict) else {}
-        rules = VENDOR.get(sid) or ([src["path"]] if src.get("repo") not in (None, "internal") else [])
+        if not c.get("replayable"):
+            cannot.append((did, c.get("reason") or "no reason given"))
+            continue
         tests = []
-        for r in rules:
-            y = B._load(os.path.join(ESCU, r))
+        for r in c.get("tests_from") or []:
+            y = B._load(os.path.join(DS.ESCU, r))
             for t in y.get("tests") or []:
                 tests += t.get("attack_data", [])
-        if not tests:
-            cannot.append((did, "source rule has no test dataset"))
-            continue
-        evs, notes = [], []
+        evs = []
         for t in tests:
-            path, error = fetch(t["data"])
-            if not path:
-                notes.append(f"fetch failed: {error}")
+            try:
+                path = DS.fetch(t["data"])
+            except DS.FetchError as e:
+                gate_errors.append(f"{did}: download failed: {e}")
                 continue
-            norm = [normalise(e, t.get("sourcetype", "")) for e in events(path, t.get("sourcetype", ""))]
-            if not any(norm):
-                notes.append(f"{t.get('sourcetype')} not used by this flow's fields")
-            evs += [x for x in norm if x]
-        ctx["conns"] = [to_roles(x) for x in evs if x.get("_kind") == "conn"]
-        tp = [derive(d, to_roles(x)) for x in evs if P[sid](x)]
+            evs += [x for x in (DS.normalise(e, t.get("sourcetype", "")) for e in DS.events(path, t.get("sourcetype", ""))) if x]
+        fires = FO.predicate(rules[did], lookups) if did in rules else None
+        if fires is None:
+            gate_errors.append(f"{did}: replayable but has no tests/replay/fires_on rule")
+            continue
+        conns = [DS.to_roles(x) for x in evs if x.get("_kind") == "conn"]
+        tp = [E.derive(d, DS.to_roles(x)) for x in evs if fires(x)]
         for i, x in enumerate(tp):
             x["_idx"] = i
-        ctx["alerts"] = tp
         if not tp:
-            cannot.append((did, "no event in the datasets matches the source rule" + (f" ({'; '.join(sorted(set(notes)))})" if notes else "")))
+            gate_errors.append(f"{did}: replayable, but no event in its {len(tests)} datasets fires the source rule (0 true-positive events)")
             continue
+        cr = CleanRoom(b, alerts=tp, timeline=None, conns=conns, context={"C-06": False}, customer=None, today=TODAY, vuln_unknown=vuln_unknown)
+        for x in tp:
+            cr.register(x)
         outcomes = Counter()
         for n in tp:
-            out, trail = run_flow(b, d, n, ctx)
+            out, trail = E.run_flow(b, d, n, {"answerer": cr, "mode": "recommend", "customer": None})
             key = out.split(":")[0] if not out.startswith("close") else out
             outcomes[key] += 1
             if out.startswith("close:mitigated_true_positive"):
@@ -788,24 +203,26 @@ def main():
         print(f"\nFAIL: {len(fails)} true-positive events closed")
         for did, out, trail in fails[:20]:
             print(f"  {did}: {out}  [{' > '.join(trail)}]")
-    if ctx["vuln_unknown"]:
-        print("\nVulnerability step answered unknown (never closes): " + ", ".join(f"{k} {v}" for k, v in sorted(ctx["vuln_unknown"].items())))
+    if vuln_unknown:
+        print("\nVulnerability step answered unknown (never closes): " + ", ".join(f"{k} {v}" for k, v in sorted(vuln_unknown.items())))
     print("\nRegression cases:")
-    reg_fail = run_regression(b, ctx, batches)
+    reg_fail, n_cases = run_regression(b, batches)
     print("\nAlert sequences on one entity:")
-    reg_fail += run_sequences(b, ctx, batches)
-    n_reg = sum(1 for did, *_ in REGRESSION if b["detections"][did]["family"] in batches) + \
-        sum(1 for _, seq, *_ in SEQUENCES if all(b["detections"][did]["family"] in batches for did, _ in seq))
+    seq_fail, n_seq = run_sequences(b, batches)
+    reg_fail += seq_fail
+    n_reg = n_cases + n_seq
     # A detection without true-positive replay data must be capped at Recommend (no_tp_replay_data); a family run that
     # replays zero events passes only if every detection in it is so capped (round 6, §5.2).
-    uncapped = [did for did, _ in cannot if "no_tp_replay_data" not in B.auto_excluded(b["detections"][did])]
+    uncapped = [did for did, _ in cannot if "no_tp_replay_data" not in E.auto_excluded(b["detections"][did])]
     for did in uncapped:
         print(f"FAIL {did}: no true-positive replay data, but not capped at Recommend with auto_excluded_reason no_tp_replay_data")
+    for msg in gate_errors:
+        print(f"FAIL {msg}")
     if rows or uncapped or not cannot:
         B.require_loaded(f"replay ({', '.join(sorted(batches))})", detections=len(rows), events=sum(r[2] for r in rows))
     else:
         print(f"replay: 0 events, every one of the {len(cannot)} detections without replay data is capped at Recommend")
-    bad = fails or reg_fail or (strict and mitigated) or uncapped
+    bad = fails or reg_fail or (strict and mitigated) or uncapped or gate_errors
     print(f"\nreplay: {sum(r[2] for r in rows)} TP events in {len(rows)} detections, {n_reg - len(reg_fail)}/{n_reg} regression cases; "
           f"{len(fails)} benign/FP closes, {len(mitigated)} mitigated closes"
           f" -> {'FAIL' if bad else 'PASS'}{' (strict)' if strict else ''}")

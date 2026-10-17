@@ -285,6 +285,23 @@ CASES = [
      y("bank/broker/translations/generic.yaml", lambda d: next(r for r in d["classes"]["control_action"]["rows"] if r["id"] == "control_action.quarantined_pre_delivery").update(questions=["Q-0074", "Q-0062"])),
      "serves email questions only"),
     ("a question that looks into the alert window", "validate", y(q("Q-0073"), lambda d: d.update(text="Was the file's hash seen in the alert window on any other host?")), "windows look back only"),
+    # Round 7: one executor; test data out of code; replay never loses coverage silently.
+    ("vendor name in the executor", "validate", lambda root: open(os.path.join(root, "engine/executor.py"), "a").write("\n# as the CrowdStrike API returns it\n"), "neutral executor: vendor or product name"),
+    ("detection ID in the executor", "validate", lambda root: open(os.path.join(root, "engine/executor.py"), "a").write("\nSPECIAL = {'D-0026'}\n"), "neutral executor: detection, technique or question ID"),
+    ("the executor reads a file", "validate", lambda root: open(os.path.join(root, "engine/executor.py"), "a").write("\nimport yaml\n"), "neutral executor: file format"),
+    ("field name in the executor", "validate", lambda root: open(os.path.join(root, "engine/executor.py"), "a").write("\nKEY = 'process_guid'\n"), "neutral executor: schema field name"),
+    ("not replayable without a reason", "validate", y("tests/replay/coverage.yaml", lambda d: d["detections"]["D-0031"].pop("reason")), "not replayable needs a reason"),
+    ("not replayable but not capped", "validate",
+     lambda root: (edit_yaml(os.path.join(root, "tests/replay/coverage.yaml"), lambda d: d["detections"].update({"D-0006": {"replayable": False, "reason": "selftest"}}))),
+     "must be capped at Recommend"),
+    ("replayable without a fires_on rule", "validate", lambda root: os.remove(os.path.join(root, "tests/replay/fires_on/D-0006.yaml")), "needs a fires_on rule"),
+    ("replayable detection that replays zero events", "replay endpoint",
+     y("tests/replay/fires_on/D-0006.yaml", lambda d: d.update(fires_when={"field": "process_name", "op": "in", "value": ["no-such.exe"]})), "0 true-positive events"),
+    ("failed dataset download", "replay endpoint",
+     lambda root: (edit_text(os.path.join(root, "tests/replay/sources.lock"), 'commit: "aafa53ea228fbab8d9ac3e33c9275fab2136909d"', 'commit: "0000000000000000000000000000000000000000"')),
+     "download failed"),
+    ("regression case expectation lowered", "replay endpoint_malware",
+     y("tests/cases/D-0026/no-hash-high-risk-class-detected-not-blocked-must-escalate.yaml", lambda d: d.update(expect={"outcome": "close:mitigated_true_positive"})), "FAIL D-0026"),
 ]
 
 
@@ -300,7 +317,7 @@ def main():
     misses = 0
     with tempfile.TemporaryDirectory() as tmp:
         base = os.path.join(tmp, "base")
-        for d in ("bank", "tools", "docs"):
+        for d in ("bank", "tools", "docs", "engine", "tests"):
             shutil.copytree(os.path.join(ROOT, d), os.path.join(base, d), ignore=shutil.ignore_patterns("__pycache__"))
         if os.path.isdir(os.path.join(ROOT, "sources")):
             os.symlink(os.path.join(ROOT, "sources"), os.path.join(base, "sources"))

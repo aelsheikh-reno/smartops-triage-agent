@@ -27,6 +27,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bank as B  # noqa: E402
+from engine import executor as E  # noqa: E402
 
 OK = ("none", "low")
 def actor_identity(b, qid):
@@ -38,7 +39,7 @@ def actor_identity(b, qid):
 
 def check(b, d, profile="direct"):
     results = []
-    for path, outcome, guards in B.enumerate_paths(d["flow"]):
+    for path, outcome, guards in E.enumerate_paths(d["flow"]):
         if not outcome.startswith("close"):
             continue
         yes = B.yes_ratings(b, path, outcome, guards, profile)

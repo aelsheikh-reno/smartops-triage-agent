@@ -1,0 +1,17 @@
+# Aimed case for PR-0028: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0021
+name: d-0021-step2-sanctioned-parent
+reason: sanctioned console used to push a command that enables RDP on the host
+proof: PR-0028
+overrides:
+  Q-0013: true
+  Q-0014: 0
+alert:
+  host.name: ws-20
+  user.name: admin1
+  process.name: reg.exe
+  process.parent_name: MgmtAgent.exe
+  process.sha256: '1111111111111111111111111111111111111111111111111111111111111111'
+  process.command_line: reg add "HKLM\System\CurrentControlSet\Control\Terminal Server" /v fDenyTSConnections /t REG_DWORD /d 0 /f
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

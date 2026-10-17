@@ -44,6 +44,11 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 - Decisions are per alert; work, caching and the entity guard are per entity.
 - An entity the normalizer can't fill flags, with a fix ticket; never guess.
 - The promotion gate is the audited false-close rate, never agreement.
+- A close path is proven only by a reviewed record in `bank/triage/proofs/` that lists its current path ID, true-positive replay of at least `proof_min_tp_events` events (floor 5) with no close on the path, and every aimed case on the record passing. In Auto an unproven close flags. The floor proves an attack corpus, not path safety (rule of three: 5 events bound the miss rate only below about 60%).
+- Every proof record lists at least one aimed case in `tests/cases/<D-ID>/aimed/`, linked both ways: the cheapest attacker that satisfies the path group's yes answers. It must flag or escalate in every mode. If one closes, fix the bank raise-only (a guard, a rating, or a flag with `flag_suggests`); never change the case. A guard answer in an aimed case is the attacker's real value, never unknown.
+- A flag made from a close carries the close it would have been (`suggests`, `blocked_by`); every actor-identity flag declares one. Accepting a suggestion is never human evidence; a close the analyst writes on a flag counts only when no suggestion was shown or the analyst overrode it.
+- A guard-only context question (C-09) is read only by guards, never by Q0, the entity guard, priority, `closes_need_known` or a step.
+- A shared verification for one product version makes a row checked only with the customer's own sanity sample on that same version.
 - The falsifier can only reopen or flag. SOAR is read-only.
 - smartops-soc-app is read-only from this repo; reuse is by copying with the source commit cited.
 - Unbuilt items are labelled "(designed, not built)".

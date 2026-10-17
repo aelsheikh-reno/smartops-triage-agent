@@ -1,0 +1,22 @@
+detection: D-0022
+name: 'round 9 hole: D-0022 step 5, yes Q-0015+Q-0019: an attacker who satisfies these answers no longer closes'
+reason: Before round 9 this closed as close:benign_true_positive:prevalent_in_org (D-0022@v8:1:Q-0000=no > 2:Q-0001=no > 3:Q-0004=no > 4:Q-0019=yes > 5:Q-0015=yes). probable fleet-wide SYSTEM task from
+  a signed parent; fleet persistence or a tampered task target gives the same prevalence; verify the task target
+mode: recommend
+overrides:
+  Q-0001: false
+  Q-0004: false
+  Q-0019: true
+  Q-0015: 9
+alert:
+  host.name: ws-21
+  user.name: jdoe
+  process.name: schtasks.exe
+  process.parent_name: DeployAgent.exe
+  process.sha256: '4444444444444444444444444444444444444444444444444444444444444444'
+  process.command_line: schtasks /create /tn Maint /tr C:\ProgramData\Maint\m.exe /sc onstart /ru SYSTEM
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium
+expect:
+  outcome: flag
+order: 76

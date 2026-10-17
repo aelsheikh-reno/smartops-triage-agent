@@ -1,0 +1,12 @@
+# Attacker's-view draft for D-0006 close step 1, yes answers Q-0000 (round 9). A draft never counts as proof; only a human marks it reviewed.
+proofs:
+- id: PR-0006
+  paths:
+  - D-0006@v10:1:Q-0000=yes
+  attacker_position: The admin's session on a host where humans closed PsExec to the same target twice inside the validity window. The fingerprint holds host, user, parent name, the PsExec hash and the
+    target, not the remote command, so the attacker runs a different remote command to the same target.
+  why_unrealistic_or_guard: 'Guard on Q0 (round 9): Q-0014 answers no for the new command line and flags.'
+  residual_risk: An attacker who replays the admin's routine remote command unchanged and swaps the script it runs on the target.
+  aimed_cases:
+  - d-0006-step1-q0
+  status: draft

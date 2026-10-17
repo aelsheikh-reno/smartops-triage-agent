@@ -1,0 +1,18 @@
+# Aimed case for PR-0018: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0015
+name: d-0015-step2-sanctioned-parent
+reason: sanctioned console used to push a scheduled task whose target is the attacker's binary in a public folder
+proof: PR-0018
+overrides:
+  Q-0001: true
+  Q-0014: 0
+  Q-0045: 0
+alert:
+  host.name: ws-17
+  user.name: jdoe
+  process.name: schtasks.exe
+  process.parent_name: DeployAgent.exe
+  process.sha256: dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd
+  process.command_line: schtasks /create /tn Updater /tr C:\Users\Public\upd.exe /sc daily
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

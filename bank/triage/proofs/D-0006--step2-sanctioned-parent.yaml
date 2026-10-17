@@ -1,0 +1,14 @@
+# Attacker's-view draft for D-0006 close step 2, yes answers Q-0001 (round 9). A draft never counts as proof; only a human marks it reviewed.
+proofs:
+- id: PR-0007
+  paths:
+  - D-0006@v10:1:Q-0000=no > 2:Q-0001=yes
+  - D-0006@v10:1:Q-0000=unknown > 2:Q-0001=yes
+  attacker_position: Access to the customer's sanctioned deployment or management console (or a stolen console account), used to push a PsExec command that runs the attacker's script on a target to the
+    host. The parent then matches the sanctioned tool on hash or signer plus path, because it is the real tool.
+  why_unrealistic_or_guard: 'Guards on the sanctioned-tool step (round 9): Q-0014 (the same command line from the same parent binary baselined on the host) answers no for the attacker''s new command and
+    flags.'
+  residual_risk: An attacker who replays the tool's routine command unchanged and swaps what it runs or downloads, or who accepts flagged alerts for entity_baseline_min_days days while building the baseline.
+  aimed_cases:
+  - d-0006-step2-sanctioned-parent
+  status: draft

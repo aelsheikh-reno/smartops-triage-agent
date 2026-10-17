@@ -1,0 +1,23 @@
+# Aimed case for PR-0011: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0010
+name: d-0010-step2-precedent-and-sanctioned-tool
+reason: sanctioned console used to push a WMI command that runs the attacker's script
+proof: PR-0011
+closures:
+- kind: manual_shadow_close
+  analyst: a1
+- kind: manual_shadow_close
+  analyst: a2
+overrides:
+  Q-0013: true
+  Q-0014: 0
+  Q-0045: 0
+alert:
+  host.name: ws-14
+  user.name: admin1
+  process.name: cmd.exe
+  process.parent_name: WmiPrvSE.exe
+  process.sha256: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  process.command_line: cmd.exe /c C:\ProgramData\Mgmt\collect.cmd
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

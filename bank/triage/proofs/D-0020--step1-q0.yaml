@@ -1,0 +1,12 @@
+# Attacker's-view draft for D-0020 close step 1, yes answers Q-0000 (round 9). A draft never counts as proof; only a human marks it reviewed.
+proofs:
+- id: PR-0024
+  paths:
+  - D-0020@v9:1:Q-0000=yes
+  attacker_position: Admin rights on a host where humans closed LSASS access by a signed dump-capable tool at a fixed path twice inside the validity window. The attacker runs the same tool build from the
+    same path with the same access rights to write a memory dump of LSASS.
+  why_unrealistic_or_guard: 'Guard on Q0 (round 9): Q-0011 (signed by a trusted publisher and not on the dump-capable exclusion list) answers no for the dump tool and flags.'
+  residual_risk: An attacker who injects code into, or sideloads a module into, a listed accessor that is not dump-capable.
+  aimed_cases:
+  - d-0020-step1-q0
+  status: draft

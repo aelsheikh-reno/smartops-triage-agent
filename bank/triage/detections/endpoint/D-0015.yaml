@@ -16,6 +16,7 @@ explanations:
 - BE-0008
 - BE-0007
 - BE-0003
+q0_off_reason: 'The fingerprint is the whole command line, so a precedent can only be reused by replacing the task target, which no question here sees (aimed case, round 9).'
 fingerprint:
 - role:host.name
 - role:process.parent_name
@@ -39,23 +40,29 @@ flow:
   attacker_influence:
     rating: low
     reason: An attacker cannot freely reproduce the fingerprint's host.
-  on_yes: close:inherit:precedent_match
+  on_yes: next
   on_no: next
   on_unknown: next
-  guards:
-  - question: Q-0045
-    then: flag
-    rule:
-      gte:
-        param: alert_history_min_count
 - step: 2
   question: Q-0001
   on_yes: close:benign_true_positive:sanctioned_deployment_tool
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0014
+    when: ['no']
+    then: flag
+    rule: {gte: {param: entity_baseline_min_days}}
+  - question: Q-0045
+    then: flag
+    rule: {gte: {param: alert_history_min_count}}
 - step: 3
   question: Q-0004
   on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:approved_change
+      reason: 'probable approved change; who-did-it (the implementer on the change) is the only hard-to-fake evidence; verify the implementer'
   on_no: next
   on_unknown: next
 - step: 4
@@ -70,11 +77,15 @@ flow:
   rule:
     gte:
       param: org_prevalence_min_hosts
-  on_yes: close:benign_true_positive:prevalent_in_org
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:prevalent_in_org
+      reason: 'probable fleet-wide task from a signed parent; fleet persistence or a tampered task target gives the same prevalence; verify the task target'
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 8
+version: 9
 parameters:
   precedent_validity_hours: 72
 derived_from:

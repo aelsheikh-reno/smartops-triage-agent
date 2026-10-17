@@ -1,0 +1,17 @@
+# Aimed case for PR-0004: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0003
+name: d-0003-step2-sanctioned-backup
+reason: backup console used to create an unusual shadow copy
+proof: PR-0004
+overrides:
+  Q-0021: true
+  Q-0014: 0
+alert:
+  host.name: srv-db-02
+  user.name: svc-backup
+  process.name: vssadmin.exe
+  process.parent_name: BackupAgent.exe
+  process.sha256: '3333333333333333333333333333333333333333333333333333333333333333'
+  process.command_line: 'vssadmin create shadow /for=C:'
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

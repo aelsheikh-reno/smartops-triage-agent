@@ -127,7 +127,11 @@ flow:
   bind:
     entities:
     - derived:client_ip
-  on_yes: close:benign_true_positive:authorized_security_test
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:authorized_security_test
+      reason: 'probable approved change or test; the change record naming the source is the only hard-to-fake evidence; verify the implementer or tester owns this traffic'
   on_no: next
   on_unknown: next
 - step: 5
@@ -154,7 +158,7 @@ flow:
       gte:
         param: waf_distinct_signatures_min
 status: draft
-version: 5
+version: 6
 derived_from:
   library: bank
   rule: vendor:waf_alert

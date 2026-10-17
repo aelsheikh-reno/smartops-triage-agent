@@ -1,0 +1,6 @@
+# Raw lab logs and samples are never committed (tests/corpus/plan.yaml lab_case_format).
+raw/
+samples/
+*.evtx
+*.pcap
+*.pcapng

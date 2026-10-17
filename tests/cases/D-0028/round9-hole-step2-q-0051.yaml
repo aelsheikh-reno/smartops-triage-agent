@@ -1,0 +1,18 @@
+detection: D-0028
+name: 'round 9 hole: D-0028 step 2, yes Q-0051: an attacker who satisfies these answers no longer closes'
+reason: Before round 9 this closed as close:false_positive:tuned_signature (D-0028@v7:1:Q-0000=no > 2:Q-0051=yes). probable tuned signature; the real attack from the tuned source to the tuned target matches
+  the same tuning; verify the source still behaves as tuned
+mode: recommend
+overrides:
+  Q-0051: true
+alert:
+  src.ip: 10.20.5.9
+  dest.ip: 10.20.1.15
+  dest.port: '443'
+  reporting_control.signature_id: '2024001'
+  reporting_control.signature: ET EXPLOIT attempt
+  event.time: '2026-10-17T08:00:00Z'
+  severity: high
+expect:
+  outcome: flag
+order: 83

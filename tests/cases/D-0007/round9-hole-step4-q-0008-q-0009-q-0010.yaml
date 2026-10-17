@@ -1,0 +1,22 @@
+detection: D-0007
+name: 'round 9 hole: D-0007 step 4, yes Q-0008+Q-0009+Q-0010: an attacker who satisfies these answers no longer closes'
+reason: Before round 9 this closed as close:benign_true_positive:sanctioned_rmm_baselined (D-0007@v7:1:Q-0000=no > 2:Q-0008=yes > 3:Q-0009=yes > 4:Q-0010=yes). probable sanctioned remote-access use; a session
+  by a stolen remote-access account is the same process event; verify who held the session
+mode: recommend
+overrides:
+  Q-0008: true
+  Q-0009: true
+  Q-0010: 5
+alert:
+  host.name: ws-24
+  user.name: jdoe
+  process.name: RemoteAgent.exe
+  process.parent_name: services.exe
+  process.sha256: '7777777777777777777777777777777777777777777777777777777777777777'
+  process.path: C:\Program Files\RemoteAgent\RemoteAgent.exe
+  process.command_line: '"C:\Program Files\RemoteAgent\RemoteAgent.exe" --session'
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium
+expect:
+  outcome: flag
+order: 49

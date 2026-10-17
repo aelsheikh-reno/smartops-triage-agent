@@ -1,0 +1,23 @@
+# Aimed case for PR-0030: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0022
+name: d-0022-step2-precedent-and-sanctioned-parent
+reason: sanctioned console used to push a SYSTEM scheduled task that runs the attacker's binary
+proof: PR-0030
+closures:
+- kind: manual_shadow_close
+  analyst: a1
+- kind: manual_shadow_close
+  analyst: a2
+overrides:
+  Q-0001: true
+  Q-0014: 0
+  Q-0045: 0
+alert:
+  host.name: ws-21
+  user.name: jdoe
+  process.name: schtasks.exe
+  process.parent_name: DeployAgent.exe
+  process.sha256: '4444444444444444444444444444444444444444444444444444444444444444'
+  process.command_line: schtasks /create /tn Maint /tr C:\ProgramData\Maint\m.exe /sc onstart /ru SYSTEM
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

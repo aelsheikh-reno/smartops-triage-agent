@@ -1,0 +1,12 @@
+# Attacker's-view draft for D-0027 close step 1, yes answers Q-0000 (round 9). A draft never counts as proof; only a human marks it reviewed.
+proofs:
+- id: PR-0034
+  paths:
+  - D-0027@v6:1:Q-0000=yes
+  attacker_position: An external source that repeats the denied traffic humans closed twice inside the validity window (same destination, port and rule; the source address can even be spoofed for denied
+    traffic), while it also has an allowed or established connection to another destination.
+  why_unrealistic_or_guard: 'Existing Q0 guard: Q-0042 (every connection from the source in the last 24 hours denied) answers no and flags.'
+  residual_risk: A source whose successful traffic goes through a path the firewall does not log.
+  aimed_cases:
+  - d-0027-step1-q0
+  status: draft

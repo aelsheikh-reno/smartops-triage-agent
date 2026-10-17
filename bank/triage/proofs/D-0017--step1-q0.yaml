@@ -1,0 +1,13 @@
+# Attacker's-view draft for D-0017 close step 1, yes answers Q-0000 (round 9). A draft never counts as proof; only a human marks it reviewed.
+proofs:
+- id: PR-0020
+  paths:
+  - D-0017@v7:1:Q-0000=yes
+  attacker_position: Code execution as the user on a host where humans closed CertUtil downloads from an approved host twice inside the validity window. The fingerprint holds only the parent name and the
+    FIRST URL host, so the attacker launches CertUtil from a process with the same parent name, puts the approved URL first and its own URL second.
+  why_unrealistic_or_guard: 'Guards on Q0 (round 9): Q-0017 (every URL host on the customer''s approved download host list) answers no for the attacker''s second host and flags; Q-0014 (the same command
+    line from the same parent binary baselined on the host) answers no for the new command line and flags.'
+  residual_risk: 'An attacker who controls content on an approved download host and replays the host''s routine command (supply chain; also the residual of Q-0017, #27).'
+  aimed_cases:
+  - d-0017-step1-q0
+  status: draft

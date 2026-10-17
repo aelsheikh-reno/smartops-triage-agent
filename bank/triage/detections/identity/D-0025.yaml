@@ -15,6 +15,7 @@ explanations:
 - BE-0017
 - BE-0001
 - BE-0003
+q0_off_reason: 'Re-creating an account with the same name gives the same fingerprint for a new account, which no question here sees (aimed case, round 9).'
 fingerprint:
 - role:host.name
 - role:actor.name
@@ -38,18 +39,16 @@ flow:
   attacker_influence:
     rating: low
     reason: An attacker cannot freely reproduce the fingerprint's host, acting account, user.
-  on_yes: close:inherit:precedent_match
+  on_yes: next
   on_no: next
   on_unknown: next
-  guards:
-  - question: Q-0045
-    then: flag
-    rule:
-      gte:
-        param: alert_history_min_count
 - step: 2
   question: Q-0020
   on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:provisioning_service_account
+      reason: 'probable provisioning; who-did-it (the provisioning service account) is the only hard-to-fake evidence; verify the provisioning request'
   on_no: next
   on_unknown: next
 - step: 3
@@ -64,10 +63,14 @@ flow:
   bind:
     user: role:actor.name
   on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:approved_change
+      reason: 'probable approved change; who-did-it (the implementer on the change) is the only hard-to-fake evidence; verify the implementer'
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 7
+version: 8
 parameters:
   precedent_validity_hours: 72
 derived_from:

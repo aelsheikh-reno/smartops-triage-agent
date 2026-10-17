@@ -1,0 +1,23 @@
+# Aimed case for PR-0009: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0009
+name: d-0009-step2-precedent-and-sanctioned-parent
+reason: sanctioned console used to push PowerShell with an execution-policy bypass and the attacker's script
+proof: PR-0009
+closures:
+- kind: manual_shadow_close
+  analyst: a1
+- kind: manual_shadow_close
+  analyst: a2
+overrides:
+  Q-0001: true
+  Q-0014: 0
+  Q-0045: 0
+alert:
+  host.name: ws-13
+  user.name: jdoe
+  process.name: powershell.exe
+  process.parent_name: DeployAgent.exe
+  process.sha256: '9999999999999999999999999999999999999999999999999999999999999999'
+  process.command_line: powershell.exe -ExecutionPolicy Bypass -NoProfile -File C:\ProgramData\Deploy\task.ps1
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

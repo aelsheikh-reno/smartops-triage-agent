@@ -6,7 +6,8 @@ what the clean room cannot know: context answers, coverage reports, broker answe
 closes (for C-04), fallback-source answers (not_checked), and a synthetic customer's verifications.
 
 This is a test harness, not bank content: it names products and translation tables. It implements the answerer interface
-of engine/executor.py: ask(request) -> [{"at": ..., "answer": {...}}].
+of engine/executor.py: ask(request) -> [{"at": ..., "answer": {...}}]. It answers at the request's sent_at, which is the
+fixed time the caller passed to the executor (tools/replay.py NOW); the clean room has no clock of its own.
 """
 import ipaddress
 import itertools

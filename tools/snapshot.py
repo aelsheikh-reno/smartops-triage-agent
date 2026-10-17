@@ -19,6 +19,7 @@ from engine import executor as E  # noqa: E402
 import equivalence as EQ  # noqa: E402
 from tests.replay.clean_room import CleanRoom  # noqa: E402
 
+NOW = "2026-10-17T00:00:00Z"   # the executor's clock (required): the same fixed time the replay gate uses
 MODES = {"shadow": ("shadow", True), "recommend": ("recommend", True), "auto": ("auto", True), "auto_checked": ("auto", False)}
 
 
@@ -41,7 +42,7 @@ def main():
     replay_txt, gates_txt, out_json = sys.argv[1:4]
     b = B.load()
     out = {"paths": {}}
-    real = E.answer
+    real = E._answer
     try:
         for lvl, d in B.flows(b):
             for path, o, guards in E.enumerate_paths(d["flow"]):
@@ -49,16 +50,16 @@ def main():
                 fixed = {st["step"]: a for st, a in path}
                 res = {}
                 for m, (mode, nc) in MODES.items():
-                    E.answer = scripted(fixed, nc)
+                    E._answer = scripted(fixed, nc)
                     n = {"_idx": 0, "event.time": "2026-10-17T00:00:00Z"}
                     cr = CleanRoom(b, alerts=[n], timeline=[n], conns=[], context={"C-06": False}, customer=None, today="2026-10-17",
                                    closures=[], vuln_unknown=Counter())
                     E.derive(d, cr.register(n))
-                    r, trail = E.run_flow(b, d, n, {"answerer": cr, "mode": mode, "customer": None})
+                    r, trail = E.run_flow(b, d, n, {"answerer": cr, "mode": mode, "customer": None}, NOW)
                     res[m] = r + (" +marked" if any(t.startswith("not_checked:") or t.startswith("auto_excluded:") for t in trail) else "")
                 out["paths"][pid] = res
     finally:
-        E.answer = real
+        E._answer = real
     rep = open(replay_txt).read()
     out["tp"] = {m.group(1): {"tp_events": int(m.group(3)), "outcomes": m.group(4).strip()}
                  for m in (re.match(r"^(D-\d{4})\s+(\d+)\s+(\d+)\s+(.*)$", line) for line in rep.splitlines()) if m}

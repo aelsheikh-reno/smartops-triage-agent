@@ -35,6 +35,7 @@ from tests.replay.clean_room import CleanRoom  # noqa: E402
 import yaml  # noqa: E402
 
 TODAY = "2026-10-17"
+NOW = "2026-10-17T00:00:00Z"   # the executor's clock for every replayed run (fixed, so replays are reproducible)
 COVERAGE = os.path.join(ROOT, "tests", "replay", "coverage.yaml")
 CASES = os.path.join(ROOT, "tests", "cases")
 
@@ -85,7 +86,7 @@ def run_regression(b, batches):
         a = E.derive(bb["detections"][did], cr.register(alert))
         cr.case["alerts"] = [a]
         ctx = {"answerer": cr, "mode": case.get("mode", "recommend"), "customer": cr.case["customer"]}
-        out, trail = E.run_flow(bb, bb["detections"][did], a, ctx)
+        out, trail = E.run_flow(bb, bb["detections"][did], a, ctx, NOW)
         exp = case["expect"]
         marked = any(t.startswith("not_checked:") for t in trail)
         if "not" in exp:
@@ -118,9 +119,9 @@ def run_sequences(b, batches):
                 cr.register(earlier)
             cr.case.update(alerts=timeline, timeline=list(timeline))
             ctx = {"answerer": cr, "mode": x.get("mode", "recommend"), "customer": None}
-            out, trail = E.run_flow(b, d, a, ctx)
+            out, trail = E.run_flow(b, d, a, ctx, NOW)
             results.append([a, out, trail])
-            E.reopen_on_hot(b, results, a, ctx, d)
+            E.reopen_on_hot(b, results, a, ctx, d, NOW)
         want = case["expect"]["every_alert"]
         ok = all(out == want or out.startswith(want + ":") or (want == "close" and out.startswith("close")) for _, out, _ in results)
         print(f"  {'ok  ' if ok else 'FAIL'} sequence {case['name']}")
@@ -181,7 +182,7 @@ def main():
             cr.register(x)
         outcomes = Counter()
         for n in tp:
-            out, trail = E.run_flow(b, d, n, {"answerer": cr, "mode": "recommend", "customer": None})
+            out, trail = E.run_flow(b, d, n, {"answerer": cr, "mode": "recommend", "customer": None}, NOW)
             key = out.split(":")[0] if not out.startswith("close") else out
             outcomes[key] += 1
             if out.startswith("close:mitigated_true_positive"):

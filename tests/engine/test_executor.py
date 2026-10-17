@@ -25,7 +25,8 @@ def bank(flow, extra_questions=(), **detection):
                        "min_alerts": {"default": 3}},
         "overlays": {},
         "context_rules": {"q0": {"question": "P0", "yes_when": {"all": [{"C-04.audited": {"gte": 1}}, {"C-06": False}]}},
-                          "entity_guard": {"hot_when": {"any": [{"C-01": True}, {"C-02.alerts": {"gte": {"param": "min_alerts"}}}, {"C-02.day": {"gte": 99}}]}}},
+                          "closes_need_known": [{"question": "C-06", "reason": "context_unknown"}],
+                          "entity_guard": {"entity_class": {"question": "C-08", "classes": ["server", "workstation"]}, "hot_when": {"any": [{"C-01": True}, {"C-02.alerts": {"gte": {"param": "min_alerts"}}}, {"C-02.day": {"gte": 99}}]}}},
         "evidence": {"human_evidence": {"counts": {"manual_shadow_close": "", "analyst_override": "", "audited_close": ""},
                                         "never": {"accepted_recommendation": "", "auto_close": "", "precedent_match": ""}}},
         "severity": {"scale": ["informational", "low", "medium", "high", "critical"]},
@@ -67,7 +68,7 @@ def reply(request, value, status=None, trust="checked", **override):
 def run(flow, script, mode="recommend", context=None, **detection):
     b, d = bank(flow, **detection)
     n = E.derive(d, {"alert_id": "a-1", "entity": "h-1", "host.name": "h-1", "event.time": T0})
-    return E.run_flow(b, d, n, {"answerer": Scripted(dict({"P0": False}, **script), context), "mode": mode, "customer": None})
+    return E.run_flow(b, d, n, {"answerer": Scripted(dict({"P0": False}, **script), context), "mode": mode, "customer": None}, T0)
 
 
 Q0 = step("P0", "close:inherit:precedent_match")
@@ -95,9 +96,9 @@ class Routing(unittest.TestCase):
         b, d = bank(flow)
         n = E.derive(d, {"alert_id": "a-1", "entity": "h-1", "event.time": T0})
         audited = {"C-04": {"audited": 1}}
-        self.assertEqual(E.run_flow(b, d, n, {"answerer": Scripted({}, audited), "mode": "recommend"})[0], "close:inherit:precedent_match")
-        self.assertEqual(E.run_flow(b, d, n, {"answerer": Scripted({}, dict(audited, **{"C-06": True})), "mode": "recommend"})[0], "escalate")
-        self.assertEqual(E.run_flow(b, d, n, {"answerer": Scripted({}), "mode": "recommend"})[0], "escalate")
+        self.assertEqual(E.run_flow(b, d, n, {"answerer": Scripted({}, audited), "mode": "recommend"}, T0)[0], "close:inherit:precedent_match")
+        self.assertEqual(E.run_flow(b, d, n, {"answerer": Scripted({}, dict(audited, **{"C-06": True})), "mode": "recommend"}, T0)[0], "escalate")
+        self.assertEqual(E.run_flow(b, d, n, {"answerer": Scripted({}), "mode": "recommend"}, T0)[0], "escalate")
 
 
 class Guards(unittest.TestCase):
@@ -237,11 +238,59 @@ class Envelope(unittest.TestCase):
         b, d = bank(flow)
         n = E.derive(d, {"alert_id": "a-1", "entity": "h-1", "event.time": T0})
         sc = Scripted({"X-1": True})
-        E.run_flow(b, d, n, {"answerer": sc, "mode": "recommend"})
+        E.run_flow(b, d, n, {"answerer": sc, "mode": "recommend"}, T0)
         for r in sc.requests:
             self.assertFalse(E.envelope_missing(r, "request"), r)
         self.assertTrue(all(("run_id" in r) != ("entity_window_id" in r) for r in sc.requests))
         self.assertTrue(any("entity_window_id" in r for r in sc.requests) and any("run_id" in r for r in sc.requests))
+
+
+class Clock(unittest.TestCase):
+    def setUp(self):
+        self.b, self.d = bank([Q0, step("X-1", "flag", "flag", "flag")])
+        self.n = E.derive(self.d, {"alert_id": "a-1", "entity": "h-1", "event.time": T0})
+
+    def test_a_call_without_a_clock_fails(self):
+        with self.assertRaises(TypeError):
+            E.run_flow(self.b, self.d, self.n, {"answerer": Scripted({"X-1": True}), "mode": "recommend"})
+        with self.assertRaises(TypeError):
+            E.context_answers(self.b, self.n, {"answerer": Scripted({})}, self.d)
+        with self.assertRaises(TypeError):
+            E.reopen_on_hot(self.b, [[self.n, "flag", []]], self.n, {"answerer": Scripted({})}, self.d)
+
+    def test_a_missing_or_malformed_clock_fails(self):
+        for bad in (None, "", "yesterday"):
+            with self.assertRaises((TypeError, ValueError)):
+                E.run_flow(self.b, self.d, self.n, {"answerer": Scripted({"X-1": True}), "mode": "recommend"}, bad)
+
+    def test_requests_are_sent_at_the_given_time(self):
+        sc = Scripted({"X-1": True})
+        E.run_flow(self.b, self.d, self.n, {"answerer": sc, "mode": "recommend"}, "2026-10-18T09:30:00Z")
+        self.assertTrue(sc.requests and all(r["sent_at"] == "2026-10-18T09:30:00Z" for r in sc.requests))
+        self.assertTrue(all(r["deadline"] == "2026-10-18T09:30:10Z" for r in sc.requests))
+
+
+class ContextRulesFromTheBank(unittest.TestCase):
+    def test_close_needs_the_answers_the_rules_list(self):
+        flow = [Q0, step("X-1", "close:benign_true_positive:a", "flag", "flag")]
+        b, d = bank(flow)
+        b["context_rules"]["closes_need_known"] = [{"question": "C-01", "reason": "context_unknown"}]
+        n = E.derive(d, {"alert_id": "a-1", "entity": "h-1", "event.time": T0})
+        sc = Scripted({"P0": False, "X-1": True}, {"C-06": None})
+        self.assertEqual(E.run_flow(b, d, n, {"answerer": sc, "mode": "recommend"}, T0)[0], "close:benign_true_positive:a")
+        sc = Scripted({"P0": False, "X-1": True}, {"C-01": None})
+        out, trail = E.run_flow(b, d, n, {"answerer": sc, "mode": "recommend"}, T0)
+        self.assertEqual((out, trail[-1]), ("flag", "context_unknown C-01 -> flag"))
+
+    def test_entity_class_question_and_classes_come_from_the_rules(self):
+        b, d = bank([Q0])
+        b["parameters"]["min_alerts"]["by_entity_class"] = {"server": 9}
+        n = E.derive(d, {"alert_id": "a-1", "entity": "h-1", "event.time": T0})
+        ans = E.context_answers(b, n, {"answerer": Scripted({}, {"C-08": "server"})}, d, T0)
+        self.assertEqual(ans["_entity_class"], "server")
+        b["context_rules"]["entity_guard"]["entity_class"] = {"question": "C-01", "classes": ["server"]}
+        ans = E.context_answers(b, n, {"answerer": Scripted({}, {"C-01": "server", "C-08": "laptop"})}, d, T0)
+        self.assertEqual(ans["_entity_class"], "server")
 
 
 class StaticWalks(unittest.TestCase):

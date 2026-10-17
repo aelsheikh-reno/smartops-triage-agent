@@ -151,7 +151,7 @@ def neutrality_hits(path):
 
 # The executor (engine/) is held to the same neutrality as the triage layer, plus: no detection or technique IDs, no file
 # formats (it reads the bank as loaded dictionaries and never opens or parses a file), and no schema field names anywhere.
-ENGINE_DETECTION_ID = re.compile(r"\b(D-\d{4}|T\d{4}(\.\d{3})?|Q-\d{4})\b")   # context question IDs are contract vocabulary
+ENGINE_DETECTION_ID = re.compile(r"\b(D-\d{4}|T\d{4}(\.\d{3})?|Q-\d{4}|C-\d{2})\b")   # detection, technique, question or context question
 ENGINE_FILE_FORMAT = re.compile(r"^\s*(import|from)\s+(yaml|json|csv|xml|configparser|tomllib|glob|pathlib)\b|\bopen\(", re.M)
 
 
@@ -161,7 +161,7 @@ def engine_hits(path):
     out = []
     for kind, fn in (("vendor or product name", vendors.find), ("rule library name", vendors.find_library),
                      ("reference to the broker's internals", lambda t: (BROKER_REF.search(t) or [None])[0]),
-                     ("detection, technique or question ID", lambda t: (ENGINE_DETECTION_ID.search(t) or [None])[0]),
+                     ("detection, technique, question or context-question ID", lambda t: (ENGINE_DETECTION_ID.search(t) or [None])[0]),
                      ("file format", lambda t: (ENGINE_FILE_FORMAT.search(t) or [None])[0])):
         hit = fn(text)
         if hit:
@@ -561,6 +561,25 @@ def main():
         err("bank/intake/severity-map.yaml", "needs the Splunk ES mapping (version 1 SIEM)")
     if (b["reason_codes"].get("severity_unmapped") or {}).get("disposition") != "flag":
         err("bank/triage/reason_codes.yaml", "severity_unmapped must exist with disposition flag")
+    # the executor names no context question: the entity class and the answers every close needs are declared here
+    ec = (cr.get("entity_guard") or {}).get("entity_class") or {}
+    ec_q = ec.get("question")
+    if ec_q not in b["context_questions"]:
+        err("bank/triage/context_rules.yaml entity_guard", "entity_class.question must name a context question (the one that gives the asset class)")
+    else:
+        enum = (b["contract"]["questions"].get(ec_q) or {}).get("answer", {}).get("values") or []
+        if not ec.get("classes") or set(ec["classes"]) - set(enum) or "unknown" in ec["classes"]:
+            err("bank/triage/context_rules.yaml entity_guard", f"entity_class.classes must be known answers of {ec_q} (never unknown)")
+        for pname, p_ in params.items():
+            extra = set((p_.get("by_entity_class") or {})) - set(ec.get("classes") or [])
+            if extra:
+                err(f"parameters {pname}", f"by_entity_class names {sorted(extra)}, not entity classes in context_rules entity_guard.entity_class")
+    needs = cr.get("closes_need_known")
+    if not isinstance(needs, list) or not needs:
+        err("bank/triage/context_rules.yaml", "closes_need_known must list the context questions every close needs (at least the crown-jewel one)")
+    for nd in needs or []:
+        if nd.get("question") not in b["context_questions"] or (b["reason_codes"].get(nd.get("reason")) or {}).get("disposition") != "flag":
+            err("bank/triage/context_rules.yaml closes_need_known", f"{nd}: needs a context question and a flag reason code")
     if "CF-0030" not in b["facts"] or not {"owner", "approved_by", "expiry"} <= set(b["facts"]["CF-0030"].get("fields") or []):
         err("bank/facts", "routine (entity, detection) pairs need CF-0030 with owner, approved_by and expiry")
     em = b["reason_codes"].get("entity_missing")

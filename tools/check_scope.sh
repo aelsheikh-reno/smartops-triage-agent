@@ -6,6 +6,7 @@
 #   - modifies or deletes anything in engine/, bank/contract/ or the gate code in tools/, or
 #   - lowers an existing expected outcome in tests/cases/ (escalate > flag > close; a deleted case counts as lowered).
 # A change with no bank/ files is not a bank PR and passes.
+# One-time exemptions live in tools/scope_exemptions.yaml; they apply only while that file is new in the change (see there).
 set -u
 cd "$(dirname "$0")/.."
 base="${BASE:-$(git merge-base HEAD origin/main 2>/dev/null)}"
@@ -22,12 +23,29 @@ import yaml
 base = os.environ["BASE_COMMIT"]
 rows = [l.split("\t") for l in os.environ["CHANGED"].splitlines() if l.strip()]
 bad = []
+EXEMPTIONS = "tools/scope_exemptions.yaml"
+exempt, bank_ok = set(), set()
+at_base_exempt = subprocess.run(["git", "cat-file", "-e", f"{base}:{EXEMPTIONS}"], capture_output=True).returncode == 0
+if os.path.exists(EXEMPTIONS) and not at_base_exempt:
+    for e in (yaml.safe_load(open(EXEMPTIONS)) or {}).get("exemptions") or []:
+        exempt |= set(e.get("protected_paths") or [])
+        bank_ok |= set(e.get("bank_files") or [])
+        print(f"check_scope: one-time exemption for PR #{e.get('pr')}: {e.get('why', '').strip()[:120]}")
+elif at_base_exempt:
+    print(f"check_scope: {EXEMPTIONS} already exists on the base: its exemptions no longer apply")
+bank_changed = {paths[-1] for status, *paths in rows if paths[-1].startswith("bank/")}
+if exempt and bank_changed - bank_ok:
+    print(f"check_scope: bank files outside the exemption changed ({sorted(bank_changed - bank_ok)}): the exemption does not apply")
+    exempt = set()
 for status, *paths in rows:
     path = paths[-1]
     old = paths[0]
     for p in {old, path}:
         protected = p.startswith(("engine/", "bank/contract/")) or (p.startswith("tools/") and not p.startswith("tools/__pycache__"))
         if protected and status[0] in "MDR":
+            if p in exempt:
+                print(f"check_scope: exempt {p} ({status})")
+                continue
             bad.append(f"{p}: a bank PR may not change the engine, the contract or the gates ({status})")
 
 RANK = {"close": 0, "flag": 1, "escalate": 2}

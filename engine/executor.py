@@ -20,6 +20,10 @@ answer (answer, status, trust, measurement_id, provenance) only by the envelope'
 
 The answerer is any object with ask(request) -> [event], each event {"at": <RFC3339>, "answer": {...}} or
 {"at": <RFC3339>, "defer": {...}} in time order (tests/replay/clean_room.py is the clean-room one).
+The current time is a required argument of every public function that sends requests (run_flow, context_answers,
+reopen_on_hot): an RFC3339 time; there is no default clock. Which context answers a close needs, and which context
+question gives the entity class, come from the bank's context rules (closes_need_known, entity_guard.entity_class); the
+executor names no context question.
 (designed, not built: the runtime that hosts this executor and a live Tool Broker answerer.)
 """
 import re
@@ -33,7 +37,6 @@ TRUST = ("checked", "not_checked")
 ENVELOPE_REQUEST = ("request_id", "question_id", "scope_profile", "deadline")
 ENVELOPE_ANSWER = ("request_id", "measurement_id", "answer", "status", "trust", "provenance")
 REF = re.compile(r"\b(role|entity|derived|alert|bind):([A-Za-z_][A-Za-z0-9_.]*)")
-RUN_CLOCK = "2026-10-17T00:00:00Z"   # the executor's clock when the caller gives none (requests are sent at this time)
 
 
 # ---------- outcomes and guards ----------
@@ -148,7 +151,7 @@ def answer_type(b, qid):
 
 def param_value(b, name, detection=None, customer=None, entity_class=None):
     """Resolve a parameter by precedence: customer + detection > customer > detection > global.
-    A parameter with by_entity_class takes the entity's class value (C-08) at the global level."""
+    A parameter with by_entity_class takes the entity's class value (the context rules' entity_class) at the global level."""
     ov = (b["overlays"].get(customer) or {}).get("overrides") or [] if customer else []
     did = (detection or {}).get("id")
     for want_det in (True, False):
@@ -203,7 +206,7 @@ def severity_rank(b, level):
 
 
 def context_rule(b, rule, answers):
-    """Evaluate a Triage-side rule over cached context answers ({"C-06": False, "C-08": "workstation", "C-02": {...}}), in three
+    """Evaluate a Triage-side rule over cached context answers ({<context question>: answer, ...}), in three
     values: True, False, or None when the result depends on a context answer that is unknown (missing, or None for source
     unavailable). None makes the step or guard answer unknown, which flags (context_unknown); missing context never escalates.
     answers may also hold _mode (shadow, recommend, auto), _severity (this alert's normalized severity), _detection and
@@ -267,7 +270,7 @@ def q0(b, answers):
 
 
 def human_evidence(b, closures, analysts_distinct=True):
-    """C-04's components from a list of recorded closes ({kind, analyst, ...}), by the one definition in
+    """The precedent counts (audited, independent_human) from a list of recorded closes ({kind, analyst, ...}), by the one definition in
     bank/contract/evidence.yaml: audited closes, and independent human closes (manual closes in Shadow and analyst
     overrides, by distinct analysts). Kinds the definition lists under never (accepted recommendations, Auto closes,
     precedent matches) are not counted."""
@@ -382,7 +385,7 @@ def _send(b, ctx, n, qid, item, window=False, inputs=None):
     run = ctx.get("run_id") or f"run-{n.get('alert_id', id(n))}"
     owner = f"ew-{ref_value('alert:entity', n)}" if window else run
     step = item.get("step", "g") if item else 0
-    sent = ctx.get("clock") or RUN_CLOCK
+    sent = ctx["_now"]
     request = {"request_id": f"{owner}:{step}:{qid}:{ctx['_seq']}", key: owner, "question_id": qid, "scope_profile": "triage",
                "deadline": _iso(_ts(sent) + float(param_value(b, "question_timeout_seconds", ctx.get("_detection"), ctx.get("customer")))),
                "sent_at": sent, "alert_id": n.get("alert_id"), "bind": dict((item or {}).get("bind") or {}), "inputs": inputs or {}}
@@ -391,22 +394,32 @@ def _send(b, ctx, n, qid, item, window=False, inputs=None):
     return status, msg
 
 
-def context_answers(b, n, ctx, d=None):
-    """The context answers for one alert, asked fresh through the envelope (nothing here is cached, so a new alert on the
-    entity is always counted: S1), plus what the context rules read about this run (_mode, _severity, _detection,
-    _customer, _entity_class). An answer whose status is not answered is None (unknown or source unavailable)."""
+def _clock(ctx, now):
+    """The caller's current time, required: an RFC3339 time (there is no default clock)."""
+    _ts(now)   # raises on a missing or malformed time
+    ctx["_now"] = now
+
+
+def context_answers(b, n, ctx, d, now):
+    """The context answers for one alert at time now, asked fresh through the envelope (nothing here is cached, so a new
+    alert on the entity is always counted: S1), plus what the context rules read about this run (_mode, _severity,
+    _detection, _customer, _entity_class). An answer whose status is not answered is None (unknown or source unavailable).
+    The entity class comes from the context question the rules name (entity_guard.entity_class), and is asked first so
+    that windows and thresholds set per class travel with the other requests."""
+    _clock(ctx, now)
     ans = {}
-    c08 = _ask_context(b, ctx, n, "C-08", d, {})
-    cls = c08 if c08 in ("server", "workstation", "network", "other") else None
+    ec = b["context_rules"]["entity_guard"]["entity_class"]
+    cls_answer = _ask_context(b, ctx, n, ec["question"], d, {})
+    cls = cls_answer if cls_answer in ec["classes"] else None
     for cid in sorted(b["context_questions"]):
-        if cid == "C-08":
-            ans[cid] = c08
+        if cid == ec["question"]:
+            ans[cid] = cls_answer
             continue
         inputs = {k: param_value(b, v["param"], d, ctx.get("customer"), cls) if isinstance(v, dict) and "param" in v else v
                   for k, v in (b["context_questions"][cid].get("inputs") or {}).items()}
         ans[cid] = _ask_context(b, ctx, n, cid, d, inputs)
     ans.update(_mode=ctx.get("mode", "recommend"), _severity=ref_value("alert:severity", n), _detection=d, _customer=ctx.get("customer"),
-               _entity_class=ans.get("C-08"))
+               _entity_class=cls_answer)
     return ans
 
 
@@ -415,16 +428,16 @@ def _ask_context(b, ctx, n, cid, d, inputs):
     return msg["answer"] if status == "answered" else None
 
 
-def answer(b, q, item, n, ctx, d):
+def _answer(b, q, item, n, ctx, d):
     """The Triage side of one question: the broker's answer, status and trust, turned into yes / no / unknown by the step's rule.
     Q0 and context-rule questions are answered here from the context answers (no broker call of their own). Records
     (question, yes/no/unknown, trust, provenance) in ctx["answers"]; the triage side reads only the trust and status.
     source_unavailable and sources_disagree answer unknown and are recorded, so no close rests on them (run_flow)."""
     trust, prov = "checked", None
     if q["id"] == b["context_rules"]["q0"]["question"]:
-        value = q0(b, context_answers(b, n, ctx, d=ctx.get("_detection")))
+        value = q0(b, context_answers(b, n, ctx, ctx.get("_detection"), ctx["_now"]))
     elif q.get("context_rule"):
-        value = context_rule(b, q["context_rule"], context_answers(b, n, ctx, d=ctx.get("_detection")))
+        value = context_rule(b, q["context_rule"], context_answers(b, n, ctx, ctx.get("_detection"), ctx["_now"]))
     else:
         status, msg = _send(b, ctx, n, q["id"], item)
         value = msg["answer"] if status == "answered" else None
@@ -440,18 +453,20 @@ def answer(b, q, item, n, ctx, d):
 
 
 # ---------- one alert through one flow ----------
-def run_flow(b, d, n, ctx):
-    """One alert through one flow in ctx["mode"] (shadow, recommend or auto; default recommend), asking ctx["answerer"].
+def run_flow(b, d, n, ctx, now):
+    """One alert through one flow at time now (RFC3339, required) in ctx["mode"] (shadow, recommend or auto; default
+    recommend), asking ctx["answerer"].
     The Auto rule, in triage terms: a not_checked answer may support a close in Shadow and Recommend (the close is marked
     "not_checked: <question>" in the explanation and decision log), never in Auto (the close becomes a flag). An answer of
     unknown supports nothing. The provenance in brackets is the broker's, shown here for the gate report only."""
+    _clock(ctx, now)
     ctx["answers"], ctx["_closing_step"], ctx["_detection"], ctx["_no_close"] = [], None, d, []
     out, trail = _run_flow(b, d, n, ctx)
     if out.startswith("close") and ctx["_no_close"]:
         return "flag", trail + [f"{', '.join(ctx['_no_close'])}: never supports a close -> flag"]
     if out.startswith("close"):
-        # S1: the entity guard is re-evaluated on a fresh C-02 immediately before the close is written.
-        hot = entity_hot(b, context_answers(b, n, ctx, d))
+        # S1: the entity guard is re-evaluated on fresh context answers immediately before the close is written.
+        hot = entity_hot(b, context_answers(b, n, ctx, d, now))
         if hot is not False:
             return "flag", trail + [f"entity guard {'hot' if hot else 'unknown'} at write time -> flag"]
     if out.startswith("close"):
@@ -483,7 +498,7 @@ def _run_flow(b, d, n, ctx):
     trail = []
     for st in d["flow"]:
         q = b["questions"][st["question"]]
-        a = answer(b, q, st, n, ctx, d)
+        a = _answer(b, q, st, n, ctx, d)
         out = st["on_" + a]
         trail.append(f"{st['question']}={a}")
         if out != "next":
@@ -491,7 +506,7 @@ def _run_flow(b, d, n, ctx):
             for gd in st.get("guards") or []:
                 if not guard_applies(gd, out) or (gd.get("if_entry_type") and n.get("_matched_entry_type") not in gd["if_entry_type"]):
                     continue
-                results.append((gd, answer(b, b["questions"][gd["question"]], gd, n, ctx, d)))
+                results.append((gd, _answer(b, b["questions"][gd["question"]], gd, n, ctx, d)))
             raised = raise_outcome(out, results)
             if raised != out:
                 trail.append("guards " + ",".join(f"{g['question']}={a}" for g, a in results) + f" -> {raised}")
@@ -503,10 +518,12 @@ def _run_flow(b, d, n, ctx):
 
 
 def context_unknown(b, n, out, trail, ctx):
-    """Every close depends on C-06 (Q0 needs a known non-crown-jewel; no auto-close on crown jewels): if C-06 is unknown or
-    its source unavailable, the close becomes a flag with reason context_unknown. Missing context never escalates."""
-    if out.startswith("close") and _ask_context(b, ctx, n, "C-06", ctx.get("_detection"), {}) is None:
-        return "flag", trail + ["context_unknown C-06 -> flag"]
+    """A close stands only when every context question the rules list under closes_need_known is answered; if one is
+    unknown or its source unavailable, the close becomes a flag with that rule's reason. Missing context never escalates."""
+    if out.startswith("close"):
+        for need in b["context_rules"].get("closes_need_known") or []:
+            if _ask_context(b, ctx, n, need["question"], ctx.get("_detection"), {}) is None:
+                return "flag", trail + [f"{need['reason']} {need['question']} -> flag"]
     return out, trail
 
 
@@ -518,12 +535,12 @@ def _minutes(t):
         return 0.0
 
 
-def reopen_on_hot(b, results, n, ctx, d):
+def reopen_on_hot(b, results, n, ctx, d, now):
     """S1, S2: after alert n (the last of results, [[alert, outcome, trail], ...] in arrival order) is triaged, if the entity
     is hot, the closes already written on it reopen as flags with reason entity_hot: inside the grouping window for the
     window rule (or an open escalation), inside the look-back for the 24h rule. Raise-only."""
     eg = b["context_rules"]["entity_guard"]["hot_when"]["any"]
-    ans = context_answers(b, n, ctx, d)
+    ans = context_answers(b, n, ctx, d, now)
     window_hot = context_rule(b, {"any": eg[:2]}, ans) is not False
     day_hot = context_rule(b, eg[2], ans) is not False
     span = float(param_value(b, "triage_lookback_hours")) * 60 if day_hot else float(param_value(b, "entity_grouping_window_minutes"))

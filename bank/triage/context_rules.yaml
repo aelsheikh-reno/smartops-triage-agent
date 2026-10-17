@@ -7,6 +7,9 @@ entity_guard:
   runs: once per entity per grouping window, before Q0; again on fresh C-02 immediately before any close on the entity is written
   reads: [C-01, C-02, C-08]
   per_entity_class: "entity_guard_min_alerts, entity_guard_min_detections and entity_grouping_window_minutes take the value for the entity's class (C-08: server, workstation, network, other); an unknown class uses the global defaults (never the strictest class)."
+  entity_class:   # declarative: the executor reads the class from this context question; a parameter with by_entity_class takes that class's value
+    question: C-08
+    classes: [server, workstation, network, other]   # any other answer (unknown, or no answer) uses the global defaults
   hot_when:
     any:
     - C-01: true
@@ -54,3 +57,8 @@ q0067:
     - C-06: true
     - {C-08: {in: [server]}}
   when_not_answered: 'If the answer depends on an unknown C-06 or C-08, Q-0067 answers unknown and its guard flags (context_unknown); it never escalates. A known crown jewel or a known server answers yes even if the other is unknown.'
+
+closes_need_known:   # declarative: a close stands only when each of these context questions is answered; otherwise it flags
+- question: C-06
+  reason: context_unknown
+  why: Every close depends on C-06. Q0 needs a known non-crown-jewel, and no close is written on a crown jewel; an unknown or unavailable answer flags, it never escalates.

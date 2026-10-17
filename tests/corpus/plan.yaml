@@ -1,0 +1,850 @@
+note: 'Attack-corpus plan for the Reno lab (round 9). For every detection: the ATT&CK techniques (ATT&CK v20 IDs, as in the bank), the Atomic Red Team tests that should fire it, public datasets with their
+  licence, the data it needs, and whether the lab can produce it today. docs/testing/attack-corpus-plan.md is rendered from this file. Raw lab logs and samples are never committed.'
+sources:
+  atomic-red-team:
+    repo: redcanaryco/atomic-red-team
+    commit: 388942adbd9641f4dfdcf079d7efe9a75ec0ac43
+    license: MIT
+  splunk/attack_data:
+    license: Apache-2.0
+    pinned_in: tests/replay/sources.lock
+  OTRF/Security-Datasets:
+    repo: OTRF/Security-Datasets
+    license: MIT
+  sbousseaden/EVTX-ATTACK-SAMPLES:
+    repo: sbousseaden/EVTX-ATTACK-SAMPLES
+    license: GPL-3.0
+    note: copyleft; legal review before use
+lab:
+  has:
+  - Splunk ES
+  - Sysmon and Windows event logs through the universal forwarder
+  - FortiGate (traffic, IPS, web filter)
+  - Atomic Red Team
+  - Cribl (replays samples)
+  - Windows Defender Antivirus on the Windows hosts (built in)
+  lacks:
+  - EDR
+  - email gateway
+  - DLP product
+  - WAF
+  status_values:
+    now: the lab can produce real alerts today
+    now_custom: the lab can produce it today with a lab script (no Atomic Red Team test fits)
+    now_if_domain: the lab can produce it once it has a domain controller
+    now_if_office: the lab can produce it once a host has Office with macros allowed
+    partial_no_edr: part of the data today; the EDR side is blocked by the missing EDR
+    blocked_no_edr: blocked by the missing EDR; Cribl-synthesised vendor alerts until then
+    blocked_no_email_gateway: blocked by the missing email gateway; Cribl-synthesised vendor alerts until then
+    cribl_synth: no product in the lab; Cribl-synthesised vendor alerts
+data_needed_values:
+  sysmon: Sysmon (process creation with command line, registry, process access, driver load)
+  windows_security: Windows Security log
+  windows_system: Windows System log
+  powershell_script_block: PowerShell script-block log
+  fortigate_traffic: FortiGate traffic log
+  fortigate_ips: FortiGate IPS log
+  fortigate_web_filter: FortiGate web-filter log
+  edr_alert: EDR alert and its API
+  windows_defender_av_events: Windows Defender Antivirus event log
+  email_gateway: email gateway alert
+  dlp: DLP alert
+  device_control: device-control alert
+  waf: WAF alert
+lab_case_format:
+  where: tests/corpus/cases/<D-ID>/<lab run ID>.yaml (one normalized alert per file, after anonymisation)
+  required:
+  - detection
+  - source
+  - lab_run_id
+  - anonymisation_done
+  - license
+  - alert
+  - expect
+  fields:
+    detection: D-ID
+    source: lab (a Reno lab run), cribl_synth (a Cribl-synthesised vendor alert, with the sample it was built from), or a public dataset (repo and path)
+    lab_run_id: 'the lab run that produced it: date, lab host set and Atomic Red Team test GUID (for example 2026-11-02-lab1-873106b7)'
+    anonymisation_done: true only after host names, user names, IP addresses, domains and any customer-like data are replaced with neutral values; the method used goes in anonymisation_method
+    anonymisation_method: how it was anonymised (for example the lab's fixed replacement table)
+    license: 'the licence the case is under: internal for lab runs, the dataset''s licence for public samples'
+    alert: the normalized alert the normalizer produced (roles only, no raw vendor event)
+    expect: outcome, at least flag (a true positive never closes)
+  never_committed: raw lab logs, packet captures, EVTX files, malware or driver samples and Cribl source samples; only the anonymised normalized case is committed (tests/corpus/.gitignore keeps raw/ and
+    samples/ out)
+detections:
+- id: D-0001
+  name: Add or Set Antivirus Exclusion via MpPreference
+  family: endpoint
+  techniques:
+  - T1685
+  atomic_tests:
+  - test: T1685-26
+    name: Tamper with Windows Defender Evade Scanning -Folder
+    guid: 0b19f4ee-de90-4059-88cb-63c800c683ed
+  - test: T1685-27
+    name: Tamper with Windows Defender Evade Scanning -Extension
+    guid: 315f4be6-2240-4552-b3e1-d1047f5eecea
+  - test: T1685-28
+    name: Tamper with Windows Defender Evade Scanning -Process
+    guid: a123ce6a-3916-45d6-ba9c-7d4081315c27
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1562.001/defender_exclusion_sysmon/sysmon.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  - powershell_script_block
+  lab: now
+  note: Defender exclusion cmdlets; Sysmon process creation with command line
+- id: D-0002
+  name: BITSAdmin Download File
+  family: endpoint
+  techniques:
+  - T1197
+  - T1105
+  atomic_tests:
+  - test: T1197-1
+    name: Bitsadmin Download (cmd)
+    guid: 3c73d728-75fb-4180-a12f-6712864d7421
+  - test: T1197-3
+    name: Persist, Download, & Execute
+    guid: 62a06ec5-5754-47d2-bcfc-123d8314c6ae
+  - test: T1105-9
+    name: Windows - BITSAdmin BITS Download
+    guid: a1921cd3-9a2d-47d5-a891-f1d0f2a7a31b
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1197/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: attack_techniques/T1197/atomic_red_team/crowdstrike_falcon.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  lab: now
+- id: D-0003
+  name: Creation of Shadow Copy
+  family: endpoint
+  techniques:
+  - T1003.003
+  atomic_tests:
+  - test: T1003.003-1
+    name: Create Volume Shadow Copy with vssadmin
+    guid: dcebead7-6c28-4b4b-bf3c-79deb1b1fc7f
+  - test: T1003.003-4
+    name: Create Volume Shadow Copy with WMI
+    guid: 224f7de0-8f0a-4a94-b5d8-989b036c86da
+  - test: T1003.003-7
+    name: Create Volume Shadow Copy with Powershell
+    guid: 542bb97e-da53-436b-8e43-e0a7d31a6c24
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1003.003/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: attack_techniques/T1003.003/atomic_red_team/crowdstrike_falcon.log
+    license: Apache-2.0
+  - source: OTRF/Security-Datasets
+    path: atomic/windows/credential_access/host/
+    license: MIT
+    note: pick the datasets for the techniques above
+  - source: sbousseaden/EVTX-ATTACK-SAMPLES
+    license: GPL-3.0
+    note: 'copyleft: legal review before any sample is used or derived from'
+  data_needed:
+  - sysmon
+  lab: now
+- id: D-0004
+  name: Deleting Shadow Copies
+  family: endpoint
+  techniques:
+  - T1490
+  atomic_tests:
+  - test: T1490-1
+    name: Windows - Delete Volume Shadow Copies
+    guid: 43819286-91a9-4369-90ed-d31fb4da2c01
+  - test: T1490-2
+    name: Windows - Delete Volume Shadow Copies via WMI
+    guid: 6a3ff8dd-f49c-4272-a658-11c2fe58bd88
+  - test: T1490-5
+    name: Windows - Delete Volume Shadow Copies via WMI with PowerShell
+    guid: 39a295ca-7059-4a88-86f6-09556c1211e7
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1490/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  lab: now
+  note: 'destructive: run on a snapshot VM and revert'
+- id: D-0005
+  name: Detect MSHTA Url in Command Line
+  family: endpoint
+  techniques:
+  - T1218.005
+  atomic_tests:
+  - test: T1218.005-1
+    name: Mshta executes JavaScript Scheme Fetch Remote Payload With GetObject
+    guid: 1483fab9-4f52-4217-a9ce-daa9d7747cae
+  - test: T1218.005-2
+    name: Mshta executes VBScript to execute malicious command
+    guid: 906865c3-e05f-4acc-85c4-fbc185455095
+  - test: T1059.001-8
+    name: Powershell invoke mshta.exe download
+    guid: 8a2ad40b-12c7-4b25-8521-2737b0a415af
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1218.005/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: cisco_network_visibility_module/cisco_nvm_flowdata/nvm_flowdata.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  lab: now
+- id: D-0006
+  name: Detect PsExec With accepteula Flag
+  family: endpoint
+  techniques:
+  - T1021.002
+  atomic_tests:
+  - test: T1021.002-3
+    name: Copy and Execute File with PsExec
+    guid: 0eb03d41-79e4-4393-8e57-6344856be1cf
+  - test: T1569.002-2
+    name: Use PsExec to execute a command on a remote host
+    guid: 873106b7-cfed-454b-8680-fa9f6400431c
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1021.002/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  - source: OTRF/Security-Datasets
+    path: atomic/windows/lateral_movement/host/
+    license: MIT
+    note: pick the datasets for the techniques above
+  - source: sbousseaden/EVTX-ATTACK-SAMPLES
+    license: GPL-3.0
+    note: 'copyleft: legal review before any sample is used or derived from'
+  data_needed:
+  - sysmon
+  - windows_security
+  lab: now
+  note: needs two lab hosts and PsExec on the attacker host
+- id: D-0007
+  name: Detect Remote Access Software Usage Process
+  family: endpoint
+  techniques:
+  - T1219
+  atomic_tests:
+  - test: T1219-2
+    name: AnyDesk Files Detected Test on Windows
+    guid: 6b8b7391-5c0a-4f8c-baee-78d8ce0ce330
+  - test: T1219-5
+    name: ScreenConnect Application Download and Install on Windows
+    guid: 4a18cc4e-416f-4966-9a9d-75731c4684c0
+  - test: T1219-8
+    name: NetSupport - RAT Execution
+    guid: ecca999b-e0c8-40e8-8416-ad320b146a75
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1219/screenconnect/screenconnect_sysmon.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: attack_techniques/T1219/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  lab: now
+  note: installs remote-access tools; needs internet egress through the FortiGate
+- id: D-0008
+  name: Detect SharpHound Usage
+  family: endpoint
+  techniques:
+  - T1069.001
+  - T1069.002
+  - T1087.001
+  - T1087.002
+  - T1482
+  atomic_tests:
+  - test: T1059.001-2
+    name: Run BloodHound from local disk
+    guid: a21bb23e-e677-4ee7-af90-6931b57b6350
+  - test: T1069.001-4
+    name: SharpHound3 - LocalAdmin
+    guid: e03ada14-0980-4107-aff1-7783b2b59bb1
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1059.001/sharphound/windows-sysmon.log
+    license: Apache-2.0
+  - source: OTRF/Security-Datasets
+    path: atomic/windows/discovery/host/
+    license: MIT
+    note: pick the datasets for the techniques above
+  data_needed:
+  - sysmon
+  - powershell_script_block
+  lab: now_if_domain
+  note: needs a lab domain controller for SharpHound to enumerate
+- id: D-0009
+  name: Malicious PowerShell Process - Execution Policy Bypass
+  family: endpoint
+  techniques:
+  - T1059.001
+  atomic_tests:
+  - test: T1047-7
+    name: Create a Process using WMI Query and an Encoded Command
+    guid: 7db7a7f9-9531-4840-9b30-46220135441c
+  - test: T1059.001-6
+    name: Powershell MsXml COM object - with prompt
+    guid: 388a7340-dbc1-4c9d-8e59-b75ad8c6d5da
+  - test: T1059.001-7
+    name: Powershell XML requests
+    guid: 4396927f-e503-427b-b023-31049b9b09a6
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1059.001/encoded_powershell/windows-sysmon.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  - powershell_script_block
+  lab: now
+- id: D-0010
+  name: Process Execution via WMI
+  family: endpoint
+  techniques:
+  - T1047
+  atomic_tests:
+  - test: T1047-5
+    name: WMI Execute Local Process
+    guid: b3bdfc91-b33e-4c6d-a5c8-d64bee0276b3
+  - test: T1047-6
+    name: WMI Execute Remote Process
+    guid: 9c8ef159-c666-472f-9874-90c8d60d136b
+  - test: T1047-9
+    name: WMI Execute rundll32
+    guid: 00738d2a-4651-4d76-adf2-c43a41dfb243
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1047/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  - source: OTRF/Security-Datasets
+    path: atomic/windows/lateral_movement/host/
+    license: MIT
+    note: pick the datasets for the techniques above
+  data_needed:
+  - sysmon
+  lab: now
+  note: T1047-6 needs a second host
+- id: D-0011
+  name: Registry Keys Used For Persistence
+  family: endpoint
+  techniques:
+  - T1547.001
+  atomic_tests:
+  - test: T1547.001-1
+    name: Reg Key Run
+    guid: e55be3fd-3521-4610-9d1a-e210e42dcf05
+  - test: T1547.001-2
+    name: Reg Key RunOnce
+    guid: 554cbd88-cde1-4b56-8168-0be552eed9eb
+  - test: T1547.001-3
+    name: PowerShell Registry RunOnce
+    guid: eb44f842-0457-4ddc-9b92-c4caa144ac42
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1547.001/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  - source: OTRF/Security-Datasets
+    path: atomic/windows/persistence/host/
+    license: MIT
+    note: pick the datasets for the techniques above
+  - source: sbousseaden/EVTX-ATTACK-SAMPLES
+    license: GPL-3.0
+    note: 'copyleft: legal review before any sample is used or derived from'
+  data_needed:
+  - sysmon
+  lab: now
+  note: Sysmon registry events (event 13) must be enabled for Run keys
+- id: D-0012
+  name: Remote Process Instantiation via WinRM and PowerShell
+  family: endpoint
+  techniques:
+  - T1021.006
+  atomic_tests:
+  - test: T1021.006-2
+    name: Remote Code Execution with PS Credentials Using Invoke-Command
+    guid: 5295bd61-bd7e-4744-9d52-85962a4cf2d6
+  - test: T1059.001-12
+    name: PowerShell Session Creation and Use
+    guid: 7c1acec2-78fa-4305-a3e0-db2a54cddecd
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1021.006/lateral_movement_psh/windows-sysmon.log
+    license: Apache-2.0
+  - source: OTRF/Security-Datasets
+    path: atomic/windows/lateral_movement/host/
+    license: MIT
+    note: pick the datasets for the techniques above
+  data_needed:
+  - sysmon
+  - powershell_script_block
+  lab: now
+  note: needs WinRM enabled between two lab hosts
+- id: D-0013
+  name: Suspicious Regsvr32 Register Suspicious Path
+  family: endpoint
+  techniques:
+  - T1218.010
+  atomic_tests:
+  - test: T1218.010-1
+    name: Regsvr32 local COM scriptlet execution
+    guid: 449aa403-6aba-47ce-8a37-247d21ef0306
+  - test: T1218.010-3
+    name: Regsvr32 local DLL execution
+    guid: 08ffca73-9a3d-471a-aeb0-68b4aa3ab37b
+  - test: T1218.010-5
+    name: Regsvr32 Silent DLL Install Call DllRegisterServer
+    guid: 9d71c492-ea2e-4c08-af16-c6994cdf029f
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1218.010/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  lab: now
+- id: D-0014
+  name: Suspicious Rundll32 no Command Line Arguments
+  family: endpoint
+  techniques:
+  - T1218.011
+  atomic_tests: []
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1218.011/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  lab: now_custom
+  note: no Atomic Red Team test starts rundll32 with no arguments; a lab script must start rundll32.exe with no arguments from a parent process (the shape of a command-and-control spawn-to)
+- id: D-0015
+  name: Suspicious Scheduled Task from Public Directory
+  family: endpoint
+  techniques:
+  - T1053.005
+  atomic_tests:
+  - test: T1053.005-13
+    name: Turla Topinambour Dropper and Scheduled Task Persistence
+    guid: 1a73e89e-a5de-404d-9784-5c2aa0b38a29
+  - test: T1053.005-14
+    name: Turla KopiLuwak Scheduled Task for JavaScript Stager
+    guid: 6731e8a0-5aeb-4180-8a90-4f8852e56de6
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1053.005/schtasks/windows-sysmon.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  lab: now
+  note: 'plus a lab script: schtasks /create with a task target under C:\Users\Public'
+- id: D-0016
+  name: Windows Event Log Cleared
+  family: endpoint
+  techniques:
+  - T1685.005
+  atomic_tests:
+  - test: T1685.005-1
+    name: Clear Logs
+    guid: e6abb60e-26b8-41da-8aae-0c35174b0967
+  - test: T1685.005-2
+    name: Delete System Logs Using Clear-EventLog
+    guid: b13e9306-3351-4b4b-a6e8-477358b0b498
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1070.001/windows_event_log_cleared/windows-security.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: attack_techniques/T1070.001/windows_event_log_cleared/windows-system.log
+    license: Apache-2.0
+  - source: OTRF/Security-Datasets
+    path: atomic/windows/defense_evasion/host/
+    license: MIT
+    note: pick the datasets for the techniques above
+  - source: sbousseaden/EVTX-ATTACK-SAMPLES
+    license: GPL-3.0
+    note: 'copyleft: legal review before any sample is used or derived from'
+  data_needed:
+  - windows_security
+  - windows_system
+  lab: now
+  note: 'anti-forensic: run on a snapshot VM; the forwarder must have sent the cleared log first'
+- id: D-0017
+  name: Windows File Download Via CertUtil
+  family: endpoint
+  techniques:
+  - T1105
+  atomic_tests:
+  - test: T1105-7
+    name: certutil download (urlcache)
+    guid: dd3b61dd-7bbc-48cd-ab51-49ad1a776df0
+  - test: T1105-8
+    name: certutil download (verifyctl)
+    guid: ffd492e3-0455-4518-9fb1-46527c9f241b
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1105/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: cisco_network_visibility_module/cisco_nvm_flowdata/nvm_flowdata.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  lab: now
+- id: D-0018
+  name: Windows File Download Via PowerShell
+  family: endpoint
+  techniques:
+  - T1059.001
+  - T1105
+  atomic_tests:
+  - test: T1059.001-9
+    name: Powershell Invoke-DownloadCradle
+    guid: cc50fa2a-a4be-42af-a88f-e347ba0bf4d7
+  - test: T1059.001-3
+    name: Run Bloodhound from Memory using Download Cradle
+    guid: bf8c1441-4674-4dab-8e4e-39d93d08f9b7
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1059.001/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: cisco_network_visibility_module/cisco_nvm_flowdata/nvm_flowdata.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  - powershell_script_block
+  lab: now
+- id: D-0019
+  name: Windows Office Product Spawned Uncommon Process
+  family: endpoint
+  techniques:
+  - T1566.001
+  atomic_tests:
+  - test: T1053.005-5
+    name: Task Scheduler via VBA
+    guid: ecd3fa21-7792-41a2-8726-2c5c673414d3
+  - test: T1059.005-2
+    name: Encoded VBS code execution
+    guid: e8209d5f-e42d-45e6-9c2f-633ac4f1eefa
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1566.001/macro/windows-sysmon_macros.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: windows-sysmon.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: malware/icedid/phish_icedid/windows-sysmon.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: attack_techniques/T1566.002/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: malware/trickbot/spear_phish/windows-sysmon.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  lab: now_if_office
+  note: needs an Office install with macros allowed on a lab host
+- id: D-0020
+  name: Windows Possible Credential Dumping
+  family: endpoint
+  techniques:
+  - T1003.001
+  atomic_tests:
+  - test: T1003.001-1
+    name: Dump LSASS.exe Memory using ProcDump
+    guid: 0be2230c-9ab3-4ac2-8826-3199b9a0ebf8
+  - test: T1003.001-2
+    name: Dump LSASS.exe Memory using comsvcs.dll
+    guid: 2536dee2-12fb-459a-8c37-971844fa73be
+  - test: T1003.001-9
+    name: Create Mini Dump of LSASS.exe using ProcDump
+    guid: 7cede33f-0acd-44ef-9774-15511300b24b
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1003.001/atomic_red_team/windows-sysmon_creddump.log
+    license: Apache-2.0
+  - source: OTRF/Security-Datasets
+    path: atomic/windows/credential_access/host/
+    license: MIT
+    note: pick the datasets for the techniques above
+  - source: sbousseaden/EVTX-ATTACK-SAMPLES
+    license: GPL-3.0
+    note: 'copyleft: legal review before any sample is used or derived from'
+  data_needed:
+  - sysmon
+  lab: now
+  note: Sysmon process-access events (event 10) on lsass.exe must be enabled
+- id: D-0021
+  name: Windows Remote Services Rdp Enable
+  family: endpoint
+  techniques:
+  - T1021.001
+  atomic_tests:
+  - test: T1112-70
+    name: Enable RDP via Registry (fDenyTSConnections)
+    guid: 16bdbe52-371c-4ccf-b708-79fba61f1db4
+  datasets:
+  - source: splunk/attack_data
+    path: malware/azorult/sysmon.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  lab: now
+- id: D-0022
+  name: Windows Schtasks Create Run As System
+  family: endpoint
+  techniques:
+  - T1053.005
+  atomic_tests:
+  - test: T1053.005-1
+    name: Scheduled Task Startup Script
+    guid: fec27f65-db86-4c2d-b66c-61945aee87c2
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1053.005/schtask_system/windows-sysmon.log
+    license: Apache-2.0
+  data_needed:
+  - sysmon
+  lab: now
+- id: D-0023
+  name: Windows Service Creation on Remote Endpoint
+  family: endpoint
+  techniques:
+  - T1543.003
+  atomic_tests:
+  - test: T1543.003-5
+    name: Remote Service Installation CMD
+    guid: fb4151a2-db33-4f8c-b7f8-78ea8790f961
+  - test: T1569.002-2
+    name: Use PsExec to execute a command on a remote host
+    guid: 873106b7-cfed-454b-8680-fa9f6400431c
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1543.003/lateral_movement/windows-sysmon.log
+    license: Apache-2.0
+  - source: OTRF/Security-Datasets
+    path: atomic/windows/lateral_movement/host/
+    license: MIT
+    note: pick the datasets for the techniques above
+  data_needed:
+  - sysmon
+  - windows_system
+  lab: now
+  note: needs two lab hosts
+- id: D-0024
+  name: Windows Vulnerable Driver Installed
+  family: endpoint
+  techniques:
+  - T1543.003
+  atomic_tests:
+  - test: T1068-1
+    name: Scattered Spider BYOVD (CVE-2015-2291 for Intel Ethernet Diagnostics Driver)
+    guid: 1c9ef3e6-bde6-402c-83bc-d89ea8bfd372
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1014/windows-system.log
+    license: Apache-2.0
+  data_needed:
+  - windows_system
+  - sysmon
+  lab: now
+  note: 'bring-your-own-vulnerable-driver test: isolated snapshot VM only; the driver sample must be obtained under its own terms'
+- id: D-0025
+  name: Detect New Local Admin account
+  family: identity
+  techniques:
+  - T1136.001
+  atomic_tests:
+  - test: T1136.001-8
+    name: Create a new Windows admin user
+    guid: fda74566-a604-4581-a4cc-fbbe21d66559
+  - test: T1078.003-1
+    name: Create local account with admin privileges
+    guid: a524ce99-86de-4db6-b4f9-e08f35a47a15
+  datasets:
+  - source: splunk/attack_data
+    path: attack_techniques/T1136.001/atomic_red_team/windows-security.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: attack_techniques/T1136.001/atomic_red_team/windows-system.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: attack_techniques/T1136.001/atomic_red_team/windows-sysmon.log
+    license: Apache-2.0
+  - source: sbousseaden/EVTX-ATTACK-SAMPLES
+    license: GPL-3.0
+    note: 'copyleft: legal review before any sample is used or derived from'
+  data_needed:
+  - windows_security
+  lab: now
+- id: D-0026
+  name: Antivirus or EDR malware detection
+  family: endpoint_malware
+  techniques:
+  - T1204.002
+  atomic_tests:
+  - test: T1027.013-1
+    name: Decode Eicar File and Write to File
+    guid: 7693ccaa-8d64-4043-92a5-a2eb70359535
+  - test: T1027.013-2
+    name: Decrypt Eicar File and Write to File
+    guid: b404caaa-12ce-43c7-9214-62a531c044f7
+  datasets:
+  - source: splunk/attack_data
+    path: emerging_threats/ShieldBreak/defender_kernel_object.log
+    license: Apache-2.0
+  data_needed:
+  - edr_alert
+  - windows_defender_av_events
+  lab: partial_no_edr
+  note: Windows Defender Antivirus events reach Splunk through the forwarder (a fallback source, so every answer is not_checked); the EDR alert and its API (run status, evidence) need an EDR
+- id: D-0027
+  name: Firewall deny or port-scan alert
+  family: network
+  techniques:
+  - T1046
+  - T1595.001
+  atomic_tests:
+  - test: T1046-3
+    name: Port Scan NMap for Windows
+    guid: d696a3cb-d7a8-4976-8eb5-5af4abf2e3df
+  - test: T1046-10
+    name: Port-Scanning /24 Subnet with PowerShell
+    guid: 05df2a79-dba6-4088-a804-9ca0802ca8e4
+  datasets:
+  - source: splunk/attack_data
+    path: cisco_secure_firewall_threat_defense/connection_event/connection_events.log
+    license: Apache-2.0
+  data_needed:
+  - fortigate_traffic
+  lab: now
+  note: scan from a lab host through a FortiGate deny policy
+- id: D-0028
+  name: IDS or IPS signature alert
+  family: network
+  techniques:
+  - T1190
+  - T1595
+  atomic_tests:
+  - test: T1046-6
+    name: WinPwn - MS17-10
+    guid: 97585b04-5be2-40e9-8c31-82157b8af2d6
+  - test: T1046-3
+    name: Port Scan NMap for Windows
+    guid: d696a3cb-d7a8-4976-8eb5-5af4abf2e3df
+  datasets:
+  - source: splunk/attack_data
+    path: cisco_secure_firewall_threat_defense/lumma_stealer/lumma_stealer_events.log
+    license: Apache-2.0
+  - source: splunk/attack_data
+    path: cisco_secure_firewall_threat_defense/intrusion_event/intrusion_events.log
+    license: Apache-2.0
+  data_needed:
+  - fortigate_ips
+  lab: now
+  note: FortiGate IPS sensor on the lab policy; vulnerability-scan scripts trigger exploit-class signatures
+- id: D-0029
+  name: Web proxy or URL-filter block
+  family: network
+  techniques:
+  - T1071.001
+  - T1189
+  atomic_tests:
+  - test: T1071.001-1
+    name: Malicious User Agents - Powershell
+    guid: 81c13829-f6c9-45b8-85a6-053366d55297
+  - test: T1071.001-2
+    name: Malicious User Agents - CMD
+    guid: dc3488b0-08c7-4fea-b585-905c83b48180
+  datasets: []
+  data_needed:
+  - fortigate_web_filter
+  lab: now
+  note: FortiGate web filter on the lab policy; browse to a blocked category from a lab host
+- id: D-0030
+  name: Web application firewall alert
+  family: network
+  techniques:
+  - T1190
+  atomic_tests: []
+  datasets: []
+  data_needed:
+  - waf
+  lab: cribl_synth
+  note: 'no WAF in the lab; synthesise WAF vendor alerts with Cribl from public samples (a FortiGate WAF profile may stand in: unverified)'
+- id: D-0031
+  name: Email gateway threat alert
+  family: email
+  techniques:
+  - T1566.001
+  - T1566.002
+  atomic_tests: []
+  datasets: []
+  data_needed:
+  - email_gateway
+  lab: blocked_no_email_gateway
+  note: no email gateway in the lab; synthesise gateway alerts with Cribl
+- id: D-0032
+  name: User-reported phishing email
+  family: email
+  techniques:
+  - T1566
+  atomic_tests: []
+  datasets: []
+  data_needed:
+  - email_gateway
+  lab: blocked_no_email_gateway
+  note: no mail platform with a report button in the lab; synthesise user-report events with Cribl
+- id: D-0033
+  name: DLP policy match
+  family: data_protection
+  techniques:
+  - T1048
+  - T1567
+  atomic_tests:
+  - test: T1048.003-4
+    name: Exfiltration Over Alternative Protocol - HTTP
+    guid: 6aa58451-1121-4490-a8e9-1dada3f1c68c
+  datasets: []
+  data_needed:
+  - dlp
+  lab: cribl_synth
+  note: 'no DLP product in the lab; synthesise DLP alerts with Cribl (a FortiGate DLP sensor may stand in: unverified)'
+- id: D-0034
+  name: Removable media (device control) alert
+  family: data_protection
+  techniques:
+  - T1052.001
+  - T1091
+  atomic_tests: []
+  datasets: []
+  data_needed:
+  - device_control
+  - edr_alert
+  lab: blocked_no_edr
+  note: device control comes from an EDR; synthesise device-control alerts with Cribl
+- id: D-0035
+  name: Removable media file write (device control) alert
+  family: data_protection
+  techniques:
+  - T1052.001
+  - T1091
+  atomic_tests: []
+  datasets: []
+  data_needed:
+  - device_control
+  - edr_alert
+  lab: blocked_no_edr
+  note: device control comes from an EDR; synthesise device-control alerts with Cribl

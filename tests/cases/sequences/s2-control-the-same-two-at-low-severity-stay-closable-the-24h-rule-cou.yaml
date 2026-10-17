@@ -1,5 +1,6 @@
 name: 'S2 control: the same two at low severity stay closable (the 24h rule counts medium and above)'
-reason: 'S2 control: the same two at low severity stay closable (the 24h rule counts medium and above)'
+reason: 'S2 control: the same two at low severity stay closable (the 24h rule counts medium and above). Raised in round 9: without a host baseline (Q-0014) and with a dump-capable LSASS accessor (Q-0011),
+  both now flag; the round 9 control case keeps the original check.'
 context:
   C-06: false
 alerts:
@@ -29,5 +30,5 @@ alerts:
   overrides:
     Q-0005: true
 expect:
-  every_alert: close
+  every_alert: flag
 order: 4

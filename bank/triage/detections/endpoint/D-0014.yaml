@@ -14,6 +14,7 @@ explanations:
 - BE-0018
 - BE-0007
 - BE-0008
+q0_off_reason: 'Code injected into the precedent''s parent spawns the same rundll32 from the same path, which no question here sees (aimed case, round 9).'
 fingerprint:
 - role:host.name
 - role:process.parent_name
@@ -37,15 +38,9 @@ flow:
   attacker_influence:
     rating: low
     reason: An attacker cannot freely reproduce the fingerprint's host.
-  on_yes: close:inherit:precedent_match
+  on_yes: next
   on_no: next
   on_unknown: next
-  guards:
-  - question: Q-0045
-    then: flag
-    rule:
-      gte:
-        param: alert_history_min_count
 - step: 2
   question: Q-0019
   bind:
@@ -58,7 +53,11 @@ flow:
   rule:
     gte:
       param: entity_baseline_min_days
-  on_yes: close:benign_true_positive:activity_baselined_on_host
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:activity_baselined_on_host
+      reason: 'probable routine rundll32 from a signed parent; code injected into that parent spawns the same command; verify the parent process and what rundll32 loaded'
   on_no: next
   on_unknown: next
 - step: 4
@@ -66,11 +65,15 @@ flow:
   rule:
     gte:
       param: org_prevalence_min_hosts
-  on_yes: close:benign_true_positive:prevalent_in_org
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:prevalent_in_org
+      reason: 'probable fleet-wide rundll32 from a signed parent; code injected into that parent spawns the same command; verify the parent process and what rundll32 loaded'
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 6
+version: 7
 parameters:
   precedent_validity_hours: 72
 derived_from:

@@ -49,7 +49,11 @@ flow:
         param: alert_history_min_count
 - step: 2
   question: Q-0026
-  on_yes: close:benign_true_positive:authorized_security_test
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:authorized_security_test
+      reason: 'probable authorized security test; who-did-it (the engagement covers this host or user) is the only hard-to-fake evidence; verify the tester and the engagement scope'
   on_no: next
   on_unknown: next
 - step: 3
@@ -70,10 +74,14 @@ flow:
 - step: 5
   question: Q-0004
   on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:approved_change
+      reason: 'probable approved change; who-did-it (the implementer on the change) is the only hard-to-fake evidence; verify the implementer'
   on_no: escalate
   on_unknown: flag
 derived_from:
   source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
   license: MITRE ATT&CK Terms of Use
 status: draft
-version: 6
+version: 7

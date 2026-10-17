@@ -1,0 +1,21 @@
+# Aimed case for PR-0003: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0003
+name: d-0003-step1-q0
+reason: shadow-copy precedent reused from a binary named like the backup agent
+proof: PR-0003
+closures:
+- kind: manual_shadow_close
+  analyst: a1
+- kind: manual_shadow_close
+  analyst: a2
+overrides:
+  Q-0014: 0
+alert:
+  host.name: srv-db-02
+  user.name: svc-backup
+  process.name: vssadmin.exe
+  process.parent_name: BackupAgent.exe
+  process.sha256: '3333333333333333333333333333333333333333333333333333333333333333'
+  process.command_line: 'vssadmin create shadow /for=C:'
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

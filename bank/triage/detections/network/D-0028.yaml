@@ -39,7 +39,7 @@ fingerprint_influence:
     rating: high
     reason: Triggered by traffic the initiator crafts.
 status: draft
-version: 7
+version: 8
 flow:
 - step: 1
   question: Q-0000
@@ -81,28 +81,23 @@ flow:
         param: blocked_action_values
 - step: 2
   question: Q-0051
-  on_yes: close:false_positive:tuned_signature
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:false_positive:tuned_signature
+      reason: 'probable tuned signature; the real attack from the tuned source to the tuned target matches the same tuning; verify the source still behaves as tuned'
   on_no: next
   on_unknown: next
   guards: []
 - step: 3
   question: Q-0031
-  on_yes: close:benign_true_positive:approved_scanner_activity
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:approved_scanner_activity
+      reason: 'probable approved scan; a compromised scanner during its scan job is the same traffic; verify the scan job and the targets'
   on_no: next
   on_unknown: next
-  guards:
-  - question: Q-0052
-    when:
-    - 'no'
-    then: flag
-    if_entry_type:
-    - scanner
-  - question: Q-0055
-    when:
-    - 'no'
-    then: flag
-    if_entry_type:
-    - tester
 - step: 4
   question: Q-0027
   rule:

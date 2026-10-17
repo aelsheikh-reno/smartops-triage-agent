@@ -1,11 +1,11 @@
 id: CF-0010
 name: approved_download_domains
-description: Internal domains and approved external domains that tools may download from (internal repos, PKI/CRL endpoints, vendor update CDNs). Domains, not tools, so the hash rule does not apply.
+description: 'The customer''s approved download hosts: the hosts the customer approved for tools to download from (named internal repositories, PKI/CRL endpoints, named vendor update hosts). Not every internal host (#27), and never a shared hosting or file-sharing domain whose content any tenant controls. Hosts, not tools, so the hash rule does not apply.'
 fields:
 - domain
 - scope
 - owner
-match_rule: exact domain or subdomain of a listed domain; IP literals never match
+match_rule: exact host, or a subdomain only where the entry says so; IP literals never match; being inside the internal networks (CF-0031) is not a match
 collected_by: customer
 supply_effort: low
 supply_effort_reason: Static domain list.
@@ -13,4 +13,4 @@ example:
   domain: pki.corp.local
   scope: internal
   owner: PKI team
-version: 2
+version: 3

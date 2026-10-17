@@ -1,0 +1,22 @@
+detection: D-0014
+name: 'round 9 hole: D-0014 step 4, yes Q-0015+Q-0019: an attacker who satisfies these answers no longer closes'
+reason: Before round 9 this closed as close:benign_true_positive:prevalent_in_org (D-0014@v6:1:Q-0000=no > 2:Q-0019=yes > 3:Q-0014=no > 4:Q-0015=yes). probable fleet-wide rundll32 from a signed parent;
+  code injected into that parent spawns the same command; verify the parent process and what rundll32 loaded
+mode: recommend
+overrides:
+  Q-0019: true
+  Q-0014: 0
+  Q-0015: 9
+alert:
+  host.name: ws-27
+  user.name: jdoe
+  process.name: rundll32.exe
+  process.parent_name: Updater.exe
+  process.path: C:\Windows\System32\rundll32.exe
+  process.sha256: '4444444444444444444444444444444444444444444444444444444444444444'
+  process.command_line: rundll32.exe
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium
+expect:
+  outcome: flag
+order: 65

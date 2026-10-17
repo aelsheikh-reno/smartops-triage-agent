@@ -17,6 +17,7 @@ intent: Detects SharpHound (BloodHound collector) execution by process or origin
 fp_quality: none
 explanations:
 - BE-0016
+q0_off_reason: 'The precedent fingerprint is a public attack tool''s hash, user and host: anyone running the same public build as that user matches it (aimed case, round 9).'
 fingerprint:
 - role:host.name
 - role:user.name
@@ -40,22 +41,20 @@ flow:
   attacker_influence:
     rating: low
     reason: An attacker cannot freely reproduce the fingerprint's host, user, process hash.
-  on_yes: close:inherit:precedent_match
+  on_yes: next
   on_no: next
   on_unknown: next
-  guards:
-  - question: Q-0045
-    then: flag
-    rule:
-      gte:
-        param: alert_history_min_count
 - step: 2
   question: Q-0026
-  on_yes: close:benign_true_positive:authorized_security_test
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:authorized_security_test
+      reason: 'probable authorized security test; who-did-it (the engagement covers this host or user) is the only hard-to-fake evidence; verify the tester and the engagement scope'
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 6
+version: 7
 parameters:
   precedent_validity_hours: 72
 derived_from:

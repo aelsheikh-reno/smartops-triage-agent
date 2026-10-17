@@ -1,0 +1,21 @@
+# Aimed case for PR-0031: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0023
+name: d-0023-step1-q0
+reason: remote service-creation precedent reused with the attacker's binary
+proof: PR-0031
+closures:
+- kind: manual_shadow_close
+  analyst: a1
+- kind: manual_shadow_close
+  analyst: a2
+overrides:
+  Q-0014: 0
+alert:
+  host.name: ws-22
+  user.name: admin1
+  process.name: sc.exe
+  process.parent_name: DeployAgent.exe
+  process.sha256: '6666666666666666666666666666666666666666666666666666666666666666'
+  process.command_line: sc.exe \\srv-04 create upd binPath= C:\ProgramData\upd.exe start= auto
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

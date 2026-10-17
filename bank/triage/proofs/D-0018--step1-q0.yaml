@@ -1,0 +1,13 @@
+# Attacker's-view draft for D-0018 close step 1, yes answers Q-0000 (round 9). A draft never counts as proof; only a human marks it reviewed.
+proofs:
+- id: PR-0022
+  paths:
+  - D-0018@v7:1:Q-0000=yes
+  attacker_position: Code execution as the user on a host where humans closed PowerShell downloads from an approved host twice inside the validity window. The attacker keeps the approved URL as the only
+    URL and appends its own code after the download (expand and run), so every URL host is approved.
+  why_unrealistic_or_guard: 'Guard on Q0 (round 9): Q-0014 answers no for the new command line and flags. Q-0017 (also a round 9 guard) answers yes here, so the baseline guard is the one that catches this
+    attacker.'
+  residual_risk: 'An attacker who controls content on an approved download host and replays the host''s routine command (supply chain; also the residual of Q-0017, #27).'
+  aimed_cases:
+  - d-0018-step1-q0
+  status: draft

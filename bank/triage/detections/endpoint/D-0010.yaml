@@ -16,6 +16,7 @@ explanations:
 - BE-0007
 - BE-0001
 - BE-0003
+q0_off_reason: 'The fingerprint is the whole command line, so a precedent can only be reused by tampering with what it runs, which no question here sees (aimed case, round 9).'
 fingerprint:
 - role:host.name
 - role:process.sha256
@@ -39,15 +40,9 @@ flow:
   attacker_influence:
     rating: low
     reason: An attacker cannot freely reproduce the fingerprint's host, process hash.
-  on_yes: close:inherit:precedent_match
+  on_yes: next
   on_no: next
   on_unknown: next
-  guards:
-  - question: Q-0045
-    then: flag
-    rule:
-      gte:
-        param: alert_history_min_count
 - step: 2
   question: Q-0013
   bind:
@@ -55,6 +50,14 @@ flow:
   on_yes: close:benign_true_positive:sanctioned_management_tool
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0014
+    when: ['no']
+    then: flag
+    rule: {gte: {param: entity_baseline_min_days}}
+  - question: Q-0045
+    then: flag
+    rule: {gte: {param: alert_history_min_count}}
 - step: 3
   question: Q-0002
   on_yes: next
@@ -73,10 +76,14 @@ flow:
 - step: 5
   question: Q-0004
   on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:approved_change
+      reason: 'probable approved change; who-did-it (the implementer on the change) is the only hard-to-fake evidence; verify the implementer'
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 9
+version: 10
 parameters:
   precedent_validity_hours: 72
 derived_from:

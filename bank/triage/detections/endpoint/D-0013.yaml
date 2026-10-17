@@ -17,6 +17,7 @@ explanations:
 - BE-0018
 - BE-0008
 - BE-0003
+q0_off_reason: 'The fingerprint is the whole command line, so a precedent can only be reused by replacing the registered module, which no question here sees (aimed case, round 9).'
 fingerprint:
 - role:host.name
 - role:process.command_line
@@ -36,15 +37,9 @@ flow:
   attacker_influence:
     rating: low
     reason: An attacker cannot freely reproduce the fingerprint's host.
-  on_yes: close:inherit:precedent_match
+  on_yes: next
   on_no: next
   on_unknown: next
-  guards:
-  - question: Q-0045
-    then: flag
-    rule:
-      gte:
-        param: alert_history_min_count
 - step: 2
   question: Q-0019
   bind:
@@ -57,16 +52,24 @@ flow:
   rule:
     gte:
       param: org_prevalence_min_hosts
-  on_yes: close:benign_true_positive:prevalent_in_org
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:prevalent_in_org
+      reason: 'probable fleet-wide registration of a signed module; fleet persistence or a sideloaded signed module looks the same; verify the module and its path'
   on_no: next
   on_unknown: next
 - step: 4
   question: Q-0004
-  on_yes: close:benign_true_positive:approved_change
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:approved_change
+      reason: 'probable approved change; who-did-it is the only hard-to-fake evidence besides a signer an attacker can borrow; verify the implementer and the module'
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 6
+version: 7
 parameters:
   precedent_validity_hours: 72
 derived_from:

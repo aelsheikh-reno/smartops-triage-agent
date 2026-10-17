@@ -1,0 +1,13 @@
+# Attacker's-view draft for D-0010 close step 2, yes answers Q-0000, Q-0013 (round 9). A draft never counts as proof; only a human marks it reviewed.
+proofs:
+- id: PR-0011
+  paths:
+  - D-0010@v10:1:Q-0000=yes > 2:Q-0013=yes
+  attacker_position: Access to the customer's sanctioned deployment or management console (or a stolen console account), used to push a WMI command that runs the attacker's script to the host. The parent
+    then matches the sanctioned tool on hash or signer plus path, because it is the real tool. A precedent also exists; Q0 is off for this detection since round 9.
+  why_unrealistic_or_guard: 'Guards on the sanctioned-tool step (round 9): Q-0014 (the same command line from the same parent binary baselined on the host) answers no for the attacker''s new command and
+    flags.'
+  residual_risk: An attacker who replays the tool's routine command unchanged and swaps what it runs or downloads, or who accepts flagged alerts for entity_baseline_min_days days while building the baseline.
+  aimed_cases:
+  - d-0010-step2-precedent-and-sanctioned-tool
+  status: draft

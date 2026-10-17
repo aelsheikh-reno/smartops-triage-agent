@@ -15,6 +15,7 @@ explanations:
 - BE-0006
 - BE-0007
 - BE-0003
+q0_off_reason: 'A session through the customer''s own remote-access tool by a stolen account is the same process event as the benign sessions humans closed (aimed case, round 9).'
 fingerprint:
 - role:host.name
 - role:process.name
@@ -38,15 +39,9 @@ flow:
   attacker_influence:
     rating: low
     reason: An attacker cannot freely reproduce the fingerprint's host, process hash.
-  on_yes: close:inherit:precedent_match
+  on_yes: next
   on_no: next
   on_unknown: next
-  guards:
-  - question: Q-0045
-    then: flag
-    rule:
-      gte:
-        param: alert_history_min_count
 - step: 2
   question: Q-0008
   on_yes: next
@@ -62,16 +57,24 @@ flow:
   rule:
     gte:
       param: entity_baseline_min_days
-  on_yes: close:benign_true_positive:sanctioned_rmm_baselined
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:sanctioned_rmm_baselined
+      reason: 'probable sanctioned remote-access use; a session by a stolen remote-access account is the same process event; verify who held the session'
   on_no: next
   on_unknown: next
 - step: 5
   question: Q-0004
-  on_yes: close:benign_true_positive:approved_change
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:approved_change
+      reason: 'probable approved change; who-did-it is the only hard-to-fake evidence and the remote-access process event is the same for an attacker session; verify the implementer and the session'
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 7
+version: 8
 parameters:
   precedent_validity_hours: 72
 derived_from:

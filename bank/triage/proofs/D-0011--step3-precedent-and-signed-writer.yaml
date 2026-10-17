@@ -1,0 +1,13 @@
+# Attacker's-view draft for D-0011 close step 3, yes answers Q-0000, Q-0019 (round 9). A draft never counts as proof; only a human marks it reviewed.
+proofs:
+- id: PR-0015
+  paths:
+  - D-0011@v9:1:Q-0000=yes > 2:Q-0013=no > 3:Q-0019=yes
+  - D-0011@v9:1:Q-0000=yes > 2:Q-0013=unknown > 3:Q-0019=yes
+  attacker_position: Code execution as the user, writing the Run key through a validly signed binary that is not on the excluded list (a signed installer or vendor utility that writes arbitrary values),
+    so Q-0019 answers yes. A precedent also exists; Q0 is off for this detection since round 9.
+  why_unrealistic_or_guard: 'Guard on the signed-writer step (round 9): Q-0018 answers no for a value written on one host and flags.'
+  residual_risk: An attacker who makes the value prevalent across the fleet for weeks, or who replaces the binary a prevalent value points to.
+  aimed_cases:
+  - d-0011-step3-precedent-and-signed-writer
+  status: draft

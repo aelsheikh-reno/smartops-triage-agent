@@ -1,0 +1,12 @@
+# Attacker's-view draft for D-0021 close step 1, yes answers Q-0000 (round 9). A draft never counts as proof; only a human marks it reviewed.
+proofs:
+- id: PR-0027
+  paths:
+  - D-0021@v8:1:Q-0000=yes
+  attacker_position: Admin rights on a host where humans closed RDP enabling by the same system binary twice inside the validity window. The attacker enables RDP with its own command (a different method
+    or extra options).
+  why_unrealistic_or_guard: 'Guard on Q0 (round 9): Q-0014 answers no for the new command line and flags.'
+  residual_risk: An attacker who replays the routine RDP-enabling command unchanged; RDP is then enabled exactly as the routine already enables it, and the logon that follows is a separate alert.
+  aimed_cases:
+  - d-0021-step1-q0
+  status: draft

@@ -1,0 +1,16 @@
+# Aimed case for PR-0035: the cheapest attacker position that satisfies the path group's yes answers. It must flag or escalate in every mode, never close.
+detection: D-0027
+name: d-0027-step3-approved-infrastructure
+reason: compromised infrastructure source
+proof: PR-0035
+overrides:
+  Q-0031: false
+  Q-0056: true
+  Q-0042: false
+alert:
+  src.ip: 203.0.113.45
+  dest.ip: 10.20.1.15
+  dest.port: '445'
+  network.rule: deny-smb-inbound
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium

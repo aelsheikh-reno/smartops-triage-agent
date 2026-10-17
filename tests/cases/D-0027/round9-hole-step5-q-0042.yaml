@@ -1,0 +1,20 @@
+detection: D-0027
+name: 'round 9 hole: D-0027 step 5, yes Q-0042: an attacker who satisfies these answers no longer closes'
+reason: Before round 9 this closed as close:mitigated_true_positive:denied_no_successful_connection (D-0027@v5:1:Q-0000=no > 2:Q-0031=no > 3:Q-0056=no > 4:Q-0055=no > 5:Q-0042=yes). probably stopped; every
+  logged connection from the source was denied, but traffic on an unlogged path is not visible here; confirm the source reached nothing
+mode: recommend
+overrides:
+  Q-0031: false
+  Q-0056: false
+  Q-0055: false
+  Q-0042: true
+alert:
+  src.ip: 203.0.113.45
+  dest.ip: 10.20.1.15
+  dest.port: '445'
+  network.rule: deny-smb-inbound
+  event.time: '2026-10-17T08:00:00Z'
+  severity: medium
+expect:
+  outcome: flag
+order: 82

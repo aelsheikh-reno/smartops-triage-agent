@@ -17,5 +17,7 @@ alert:
   event.time: '2026-10-17T08:00:00Z'
   severity: medium
 expect:
-  outcome: close:inherit
+  outcome: flag
+  suggests: close:inherit
+  blocked_by: guard
 order: 38

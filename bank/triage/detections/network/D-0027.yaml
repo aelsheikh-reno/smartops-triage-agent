@@ -68,22 +68,13 @@ flow:
     then: flag
 - step: 2
   question: Q-0031
-  on_yes: close:benign_true_positive:approved_scanner_activity
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:approved_scanner_activity
+      reason: 'probable approved scan; a compromised scanner during its scan job is the same traffic; verify the scan job and the targets'
   on_no: next
   on_unknown: next
-  guards:
-  - question: Q-0052
-    when:
-    - 'no'
-    then: flag
-    if_entry_type:
-    - scanner
-  - question: Q-0055
-    when:
-    - 'no'
-    then: flag
-    if_entry_type:
-    - tester
 - step: 3
   question: Q-0056
   on_yes: close:benign_true_positive:approved_infrastructure
@@ -103,21 +94,28 @@ flow:
         param: alert_history_min_count
 - step: 4
   question: Q-0055
-  on_yes: close:benign_true_positive:approved_change
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:benign_true_positive:approved_change
+      reason: 'probable approved change or test; the change record naming the source is the only hard-to-fake evidence; verify the implementer or tester owns this traffic'
   on_no: next
   on_unknown: next
 - step: 5
   question: Q-0042
-  on_yes: close:mitigated_true_positive:denied_no_successful_connection
+  on_yes: flag
+  flag_suggests:
+    on_yes:
+      suggests: close:mitigated_true_positive:denied_no_successful_connection
+      reason: 'probably stopped; every logged connection from the source was denied, but traffic on an unlogged path is not visible here; confirm the source reached nothing'
   on_no: flag
   on_unknown: flag
   guards:
-  - question: Q-0050
-    then: flag
   - question: Q-0032
     then: escalate
+    applies_to: [flag]
 status: draft
-version: 5
+version: 6
 derived_from:
   library: bank
   rule: vendor:firewall_deny

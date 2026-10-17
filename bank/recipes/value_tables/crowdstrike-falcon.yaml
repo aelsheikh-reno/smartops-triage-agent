@@ -3,14 +3,19 @@
 # match: {<raw property>: <value or list>} compares case-insensitively; {pattern: <regex>} searches the class's role values joined by a space.
 # May name products: it is recipe data, not bank logic, and never enters the runtime bundle. Each row is verified or not;
 # a detection family whose classes have unverified rows for a customer's product is capped at Recommend for that customer.
+# source: edr_api (the product's own API: authoritative for endpoint.run_status), siem_copy (the product's alert as copied into the
+# SIEM: fallback only; an unverified fallback row can only raise), or alert (values read from the normalized alert itself).
 vendor: CrowdStrike
 product: Falcon
-feed: Detection events, PatternDispositionDescription
-source:
+source: edr_api
+answers: endpoint.run_status
+feed: 'CrowdStrike API: detection details (PatternDispositionDescription), found by the vendor alert (detection) ID or a bounded device + file hash + time match'
+references:
 - docs/normalization.md (recalled from public event references; not checked)
+- 'issue #9 (verify against the API)'
 license: internal
 classes:
-  av_execution_state:
+  run_status:
     reads:
     - PatternDispositionDescription
     rows:

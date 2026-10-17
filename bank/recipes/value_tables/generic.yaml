@@ -3,11 +3,14 @@
 # match: {<raw property>: <value or list>} compares case-insensitively; {pattern: <regex>} searches the class's role values joined by a space.
 # May name products: it is recipe data, not bank logic, and never enters the runtime bundle. Each row is verified or not;
 # a detection family whose classes have unverified rows for a customer's product is capped at Recommend for that customer.
+# source: edr_api (the product's own API: authoritative for endpoint.run_status), siem_copy (the product's alert as copied into the
+# SIEM: fallback only; an unverified fallback row can only raise), or alert (values read from the normalized alert itself).
 vendor: any
 product: any
+source: alert
 scope: generic
 feed: 'Vendor-neutral rows: normalized names and bank-authored patterns that apply to any product. Product tables take precedence; onboarding confirms each product''s wording.'
-source:
+references:
 - bank parameters before the migration (av_*_pattern, usb_*_event_values, browser_user_agent_pattern, web_success_status_pattern)
 - bank/use_cases.yaml triage_hints
 license: internal
@@ -32,38 +35,6 @@ classes:
       value: low_risk
       verified: false
     default: other
-  av_execution_state:
-    reads:
-    - reporting_control.action_raw
-    rows:
-    - match:
-        value:
-        - blocked_pre_execution
-        - deleted_pre_execution
-      value: pre_execution
-      verified: false
-    - match:
-        value:
-        - quarantined_post_execution
-        - cleaned_post_execution
-        - pending_reboot
-        - pending reboot
-        - partially_remediated
-        - partially remediated
-        - remediation_failed
-        - remediation failed
-        - quarantined
-        - cleaned
-      value: unknown
-      verified: false
-      note: 'Post-execution or unfinished remediation: the bank refuses to judge, so it flags.'
-    - match:
-        value:
-        - detected
-        - allowed
-      value: ran
-      verified: false
-    default: unknown
   control_action:
     reads:
     - reporting_control.action_raw
@@ -485,13 +456,3 @@ classes:
       value: storage
       verified: false
     default: other
-  address_zone:
-    reads:
-    - src.ip
-    rows:
-    - match:
-        cidr_param: internal_networks
-      value: internal
-      verified: true
-      note: The customer's internal ranges (parameter internal_networks).
-    default: external

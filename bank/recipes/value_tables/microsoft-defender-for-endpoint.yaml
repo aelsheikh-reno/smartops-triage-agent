@@ -3,15 +3,19 @@
 # match: {<raw property>: <value or list>} compares case-insensitively; {pattern: <regex>} searches the class's role values joined by a space.
 # May name products: it is recipe data, not bank logic, and never enters the runtime bundle. Each row is verified or not;
 # a detection family whose classes have unverified rows for a customer's product is capped at Recommend for that customer.
+# source: edr_api (the product's own API: authoritative for endpoint.run_status), siem_copy (the product's alert as copied into the
+# SIEM: fallback only; an unverified fallback row can only raise), or alert (values read from the normalized alert itself).
 vendor: Microsoft
 product: Defender for Endpoint
-feed: 'Graph security alert evidence (alertEvidence: detectionStatus, remediationStatus)'
-source:
+source: edr_api
+answers: endpoint.run_status
+feed: 'Defender API: alert evidence via the Graph security API (detectionStatus, remediationStatus), found by the vendor alert ID or a bounded device + file hash + time match'
+references:
 - https://learn.microsoft.com/en-us/graph/api/resources/security-alertevidence?view=graph-rest-1.0
 - docs/assumptions.md A4
 license: public documentation, values only
 classes:
-  av_execution_state:
+  run_status:
     reads:
     - detectionStatus
     - remediationStatus

@@ -3,14 +3,19 @@
 # match: {<raw property>: <value or list>} compares case-insensitively; {pattern: <regex>} searches the class's role values joined by a space.
 # May name products: it is recipe data, not bank logic, and never enters the runtime bundle. Each row is verified or not;
 # a detection family whose classes have unverified rows for a customer's product is capped at Recommend for that customer.
+# source: edr_api (the product's own API: authoritative for endpoint.run_status), siem_copy (the product's alert as copied into the
+# SIEM: fallback only; an unverified fallback row can only raise), or alert (values read from the normalized alert itself).
 vendor: Microsoft
 product: Defender Antivirus
-feed: Windows event log, events 1116 (detection) and 1117 (action taken), Action Name
-source:
+source: siem_copy
+answers: endpoint.run_status
+fallback_for: microsoft-defender-for-endpoint
+feed: 'Windows event log, events 1116 (detection) and 1117 (action taken), Action Name. The SIEM''s copy of the endpoint''s events: a fallback, used only when the Defender API is unavailable or not granted.'
+references:
 - docs/normalization.md (previous mapping, checked against the replay dataset)
 license: internal
 classes:
-  av_execution_state:
+  run_status:
     reads:
     - EventID
     - Action Name

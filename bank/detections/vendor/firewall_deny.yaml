@@ -67,9 +67,6 @@ flow:
         param: alert_history_min_count
   - question: Q-0050
     then: flag
-    rule:
-      'yes':
-      - internal
   - question: Q-0042
     when:
     - 'no'
@@ -110,9 +107,6 @@ flow:
   guards:
   - question: Q-0050
     then: flag
-    rule:
-      'yes':
-      - internal
   - question: Q-0032
     then: escalate
 source:
@@ -121,4 +115,4 @@ source:
   title: Firewall deny or port-scan alert
 license: internal
 status: draft
-version: 3
+version: 4

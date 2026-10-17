@@ -84,6 +84,8 @@ For vendor alerts (AV/EDR, IDS/IPS, WAF, email gateway, DLP, proxy, firewall, de
 | `reporting_control.action_raw` | string | per detection | added for triage | As the product sent it; the value table translates it (§10). |
 | `reporting_control.signature` | string | per detection | added for triage | Detection or signature name. |
 | `reporting_control.signature_id` | string | no | added for triage | |
+| `reporting_control.vendor_alert_id` | string | yes for vendor alerts | added for triage | The reporting product's own alert ID (for Defender, the alert ID in its security API). The broker uses it to find the product's alert through the product's API, the authoritative source (§9). Missing: the broker falls back to device, file hash and a bounded time window; no match or several matches answer unknown. |
+| `reporting_control.endpoint_device` | string | yes for endpoint vendor alerts | added for triage | The reporting product's own device (agent) ID, for the fallback match. |
 | `reporting_control.category` | string | per detection | added for triage | Normalized category or class. |
 | `reporting_control.delivery` | string | yes for vendor alerts | added for triage | `direct_api` or `forwarded`. Forwarded alerts rate medium for attacker influence and cannot close on their own (§14). |
 

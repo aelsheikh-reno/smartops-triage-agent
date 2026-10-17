@@ -49,7 +49,7 @@ source:
   title: IDS or IPS signature alert
 license: internal
 status: draft
-version: 5
+version: 6
 auto_requires:
 - vendor_mapping_verified
 flow:
@@ -72,9 +72,6 @@ flow:
         param: alert_history_min_count
   - question: Q-0050
     then: flag
-    rule:
-      'yes':
-      - internal
   - question: Q-0046
     then: flag
     bind:
@@ -134,9 +131,6 @@ flow:
         param: ids_exploit_class_values
   - question: Q-0050
     then: flag
-    rule:
-      'yes':
-      - internal
   - question: Q-0046
     then: flag
     bind:
@@ -154,9 +148,6 @@ flow:
   guards:
   - question: Q-0050
     then: flag
-    rule:
-      'yes':
-      - internal
   - question: Q-0046
     then: flag
     bind:

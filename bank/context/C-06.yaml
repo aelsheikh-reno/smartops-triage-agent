@@ -14,6 +14,7 @@ attacker_influence:
   rating: none
   reason: The customer's crown-jewel list.
 when_not_answered: 'The asset is treated as a crown jewel for the window: no close on it.'
+unanswered_value: true
 source:
 - docs/intake/context-questions.md
 - docs/design-decisions.md §5

@@ -1,12 +1,15 @@
 id: Q-0015
-text: Has the same normalized command line, from the same parent binary, run on at least the customer's minimum number of hosts in every week of the lookback before the alert window?
+text: Has the same normalized command line, from the same parent binary, run on at least the customer's minimum number of hosts in at least the customer's minimum number of the weeks examined before the
+  alert window?
 tests: BE-0008
 capability:
   name: org.prevalence
   inputs:
     pattern: normalized command line role:process.command_line from the binary of entity:parent_process
-    lookback_weeks:
-      param: org_prevalence_lookback_weeks
+    of_weeks:
+      param: org_prevalence_of_weeks
+    min_weeks:
+      param: org_prevalence_min_weeks
 attacker_influence:
   rating: high
   reason: The command line is attacker-chosen; a fleet-wide routine command can be reused or its script tampered with.
@@ -18,5 +21,5 @@ license:
 text_origin: original
 legal_review: false
 status: draft
-version: 3
+version: 4
 kind: triage

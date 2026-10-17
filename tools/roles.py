@@ -24,7 +24,9 @@ ROLES = {
     "target_process": ["path"],
     "process_access": ["granted_access", "call_trace"],
     "registry": ["path", "value_name", "value_data"],
-    "reporting_control": ["action", "action_raw", "signature", "signature_id", "category", "severity", "delivery"],
+    # vendor_alert_id / endpoint_device: the reporting product's own alert ID and device (agent) ID, which the Tool Broker
+    # uses to find the alert in the vendor's API (the authoritative source); missing -> a bounded fallback match
+    "reporting_control": ["action", "action_raw", "signature", "signature_id", "category", "severity", "delivery", "vendor_alert_id", "endpoint_device"],
     "email": ["message_id", "sender", "sender_domain", "recipient", "subject", "url", "indicator_count"],
     "web": ["url", "user_agent", "method", "status", "category", "app", "forwarded_for"],
     "network": ["transport", "rule"],

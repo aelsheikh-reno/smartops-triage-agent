@@ -25,11 +25,26 @@ Every broker question, context or triage, must:
 | `source_unavailable` | Down, timed out, or failing its recipe tests. Never "no hit". | Never closes; the alert flags (§9). |
 | `sources_disagree` | Two sources gave different answers. | Never closes; the alert flags (§9). |
 
+## Source authority
+The SIEM alert only starts triage. For each capability the broker answers from the authoritative source set at onboarding, usually the tool's own API. The SIEM is authoritative only for alert history and log searches. Each capability in `bank/capabilities.yaml` declares `source_authority: {authoritative, fallback}`; `validate` rejects a capability whose authoritative source is the SIEM outside alert history and log searches, and names the endpoint API when one exists.
+- A fallback source is used only when the authoritative one is unavailable or not granted. Its unverified answers can only raise scrutiny: an unverified fallback row may answer "ran" (escalate) but never "stopped" (close).
+- Endpoint answers come from the endpoint product's API. Example, Q-0049 (was the file stopped before it ran?) on Defender: the broker finds the Defender alert by the vendor alert ID the normalizer filled; if that is missing, by device, file hash and a bounded time window (`edr_alert_match_window_minutes`). No match or several matches answer unknown. The run-status value table belongs to the Defender API recipe. The SIEM's copy of the alert (for example event log 1117 "Block") is used only when the API is unavailable or not granted, and answers unknown unless the matching row is verified pre_execution; none is verified today. CrowdStrike and every other endpoint product work the same way (rows unverified; lab tests #20 and #9).
+- Without read-only endpoint API access (a Phase 0 check), the detections that need endpoint answers are capped at Recommend.
+
+## Classification: vendor meaning or customer policy
+Two different things turn a raw value into an answer, and they live in different places:
+- **What a vendor's value means** (Defender's `prevented` means the file did not run; event 1116 means detected) lives in value tables under `bank/recipes/value_tables/`, one per source and product, each row verified or not. Unverified rows cap the family at Recommend.
+- **What the customer accepts** (which categories are low risk, which device classes are allowed, their address ranges) lives on the Triage side, in bounded parameters with a direction tag (`reduces_scrutiny_when`) or in the customer's context lists. A change that reduces scrutiny needs human approval.
+
+`validate` rejects a customer-policy key (`param`, `cidr_param`, `policy`, and similar) inside a value table, and a vendor-meaning mapping (a dict default, `map`, `rows`, `match` or `pattern`) inside a parameter.
+
+Statistic settings are not thresholds. `org.prevalence` returns the k-th lowest weekly distinct-host count over `of_weeks` weeks, with k = of_weeks − min_weeks + 1 (default 4 and 3, so k = 2). `of_weeks` and `min_weeks` are recipe statistic settings (`category: recipe_statistic`, bounded); the threshold `org_prevalence_min_hosts` stays with the Triage agent. "k-th lowest ≥ N" is exactly "at least min_weeks of the of_weeks weeks have ≥ N hosts" (`tools/test_prevalence.py` checks every case over 4 weeks, quiet weeks included, N 1–10).
+
 ## How to sort a question
 
 | Kind | Test | Examples |
 |---|---|---|
-| Context question | Nearly every detection needs it; it is about the entity, not the detection's logic; it can only raise scrutiny or set priority. Asked once per entity per window. | C-01 to C-07 (`docs/intake/context-questions.md`) |
+| Context question | Nearly every detection needs it; it is about the entity, not the detection's logic; it can only raise scrutiny or set priority. Asked once per entity per window. | C-01 to C-08 (`docs/intake/context-questions.md`) |
 | Triage question | Specific to a detection's flow; asked only when the flow reaches it; it may lead to a close. | "Is the parent binary a sanctioned deployment tool, by hash or signer plus path?" |
 | Not a broker question | Free-form enrichment, threat-intel narratives, rule intent. | "Summarize what OpenCTI knows about this hash"; "What was this rule meant to detect?" |
 
@@ -65,7 +80,7 @@ The Detection Engineer's own reads (running a rule over 30 days, sampling its al
 
 ## Where the bank used to break these rules
 Fixed by the bank migration (PR "Bank migration: roles, typed answers, parameters, context questions", #12); `validate` now rejects each of these:
-- **Thresholds in questions.** `alert.history` passes `min_count`, `org.prevalence` passes `min_hosts`, `min_weeks` and `of_weeks`, and `entity.baseline` passes `min_days` to the broker (rule 4). They should ask for the count and apply the parameter on the Triage side.
+- **Thresholds in questions.** `alert.history` passes `min_count`, `org.prevalence` passes `min_hosts` (`min_weeks` and `of_weeks` are now recipe statistic settings, not thresholds: see Classification), and `entity.baseline` passes `min_days` to the broker (rule 4). They should ask for the count and apply the parameter on the Triage side.
 - **Answer type.** `bank/capabilities.yaml` returns `answer: yes | no | unknown` from the broker. It should return the typed measurement with `status` and `provenance` (rule 3).
 - **No context/triage tag**, and no C-xx questions.
 - **No scope profiles.** `bank/capabilities.yaml` `scope` also says "±24h alert window"; the triage profile is look-back only (§3).

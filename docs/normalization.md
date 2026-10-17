@@ -17,22 +17,24 @@ vendor alerts are normalized" records which products each customer runs and veri
 carry the cap. Generic rows (vendor `any`) do not cap a family; onboarding still confirms each product's
 wording against them.
 
-## Whether the file ran (`av_execution_state`: pre_execution, ran, unknown)
+## Whether the file ran (`endpoint.run_status`: pre_execution, ran, unknown)
 
 Only `pre_execution` may close, and only for low-risk classes. `ran` escalates; `unknown` flags.
 
-| Table | Raw value | Class value | Verified |
+This is no longer an alert class: the answer comes from the endpoint product's API, the authoritative source (`docs/broker-questions.md`, Source authority). The broker finds the product's alert by the vendor alert ID, else by device, file hash and a bounded window; no match or several answer unknown. The SIEM's copy of the alert is a fallback only (tables with `source: siem_copy`), used when the API is unavailable or not granted; it answers unknown unless the matching row is verified pre_execution, and none is today.
+
+| Table (source) | Raw value | Class value | Verified |
 |---|---|---|---|
-| Microsoft Defender for Endpoint (Graph alert evidence) | `detectionStatus` prevented, `remediationStatus` prevented | pre_execution | false (#20) |
+| Microsoft Defender for Endpoint (API: Graph alert evidence; `edr_api`) | `detectionStatus` prevented, `remediationStatus` prevented | pre_execution | false (#20) |
 | | `detectionStatus` blocked ("remediated at run time"), `remediationStatus` blocked ("blocked while executing"), `detectionStatus` detected | ran | false (#20) |
 | | quarantine alone, or anything else | unknown | default |
-| Microsoft Defender Antivirus (event log) | 1116 (detection, no action) | ran | false |
+| Microsoft Defender Antivirus (event log in the SIEM; `siem_copy`, fallback) | 1116 (detection, no action) | ran | false |
 | | 1117 Quarantine, Remove, Clean | unknown | false |
 | | 1117 Block | unknown | false. Changed in the bank migration: it was mapped to blocked before execution, but the event does not say whether the file ran |
-| CrowdStrike Falcon | Prevention, process blocked from execution | pre_execution | false |
+| CrowdStrike Falcon (API; `edr_api`; a matching `siem_copy` table is the fallback) | Prevention, process blocked from execution | pre_execution | false |
 | | Prevention, process killed; Detection, standard detection | ran | false |
 | | Quarantine, file quarantined | unknown | false |
-| Any product (generic) | blocked_pre_execution, deleted_pre_execution | pre_execution | false |
+| Any product (generic SIEM copy; `siem_copy`, fallback) | blocked_pre_execution, deleted_pre_execution | pre_execution | false |
 | | post-execution quarantine or cleaning, pending reboot, partial or failed remediation | unknown | false |
 
 Microsoft's definitions are quoted in `docs/assumptions.md` A4. Which property carries them per evidence
@@ -59,5 +61,5 @@ Onboarding adds each product's category names to its own table; a category that 
 ## Other classes
 
 `control_action` (what the control did), `severity`, `http_status_class`, `user_agent_class`,
-`device_event`, `device_class` and `address_zone` (from the customer's `internal_networks`) have generic
-rows only. Products whose wording differs get their own table at onboarding.
+`device_event` and `device_class` have generic
+rows only. `address_zone` is gone: the customer's address ranges are customer context (list CF-0031, Q-0050), not a vendor's meaning, so they never sit in a value table. Products whose wording differs get their own table at onboarding.

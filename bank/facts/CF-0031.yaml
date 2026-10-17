@@ -1,0 +1,22 @@
+id: CF-0031
+name: internal_networks
+description: The customer's internal address ranges (CIDR). Internal sources never close on denied, blocked or patched; they flag or escalate.
+fields:
+- cidr
+- owner
+- reason
+collected_by: customer
+match_rule: the address falls inside a listed range
+supply_effort: low
+supply_effort_reason: Network teams keep this list; the private ranges are a sensible default until they confirm it.
+default_entries:
+- 10.0.0.0/8
+- 172.16.0.0/12
+- 192.168.0.0/16
+- 100.64.0.0/10
+- fc00::/7
+example:
+  cidr: 10.0.0.0/8
+  owner: network team
+  reason: corporate LAN
+version: 1

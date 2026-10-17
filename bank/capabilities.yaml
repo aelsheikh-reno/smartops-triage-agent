@@ -67,20 +67,42 @@ scope:   # enforced by the Tool Broker per caller (docs/design-decisions.md §4)
   access: read-only, except list.propose_update (a proposal) and the SIEM write-back actions on the broker's fixed allowlist
   timeout_seconds: 10
   max_calls_per_alert: 6
-  budget_note: 'includes Q0 and every step and guard on the worst path; context questions are asked once per entity and do not count; alert.class, alert.measure (source: alert) and internal hash or signer
-    resolution do not count; exceeding it flags the alert'
+  budget_note: 'includes Q0 and every step and guard on the worst path; context questions are asked once per entity and do not count; alert.class, alert.measure (source: alert), lookups in the platform
+    context store (cached per entity) and internal hash or signer resolution do not count; exceeding it flags the alert'
+source_authority:
+  principle: The SIEM alert only starts triage. For each capability the Tool Broker answers from the authoritative source set at onboarding, usually the tool's own API; the SIEM is the authoritative source
+    only for alert history and log searches. A fallback source is used only when the authoritative one is unavailable or not granted, and its unverified answers can only raise scrutiny.
+  sources:
+    siem: 'the SIEM: authoritative only for alert history and log searches'
+    edr_api: the endpoint product's own API (for example its alert evidence)
+    siem_copy: 'the endpoint or vendor product''s alert as copied into the SIEM: a fallback only'
+    alert: the normalized alert that started triage (no tool call)
+    context_store: the customer's context lists and facts, on premises
+    case_memory: case memory and closures, on premises
+    asset_inventory: the customer's asset inventory (CMDB)
+    identity_provider: the customer's directory or identity provider
+    threat_intel: the customer's threat-intelligence sources
+    itsm: the customer's change and ticketing system
+    vuln_scanner: the customer's vulnerability scanner
+    email_security_api: the email security product's own API
+    derived: computed by the Triage agent from cached context answers
+  siem_authoritative_only_for:
+  - entity.alerts
+  - entity.max_severity
+  - alert.history
+  - entity.baseline
+  - org.prevalence
+  - traffic.denied_only
+classification_principle:
+  vendor_meaning: 'What a vendor''s value says happened lives in the broker''s vendor value tables (bank/recipes/value_tables/), per source: verified per row, the same for every customer. A value table
+    never holds a customer''s policy or context.'
+  customer_policy: 'Which categories, destinations or classes this customer accepts lives in Triage-side parameters (bank/parameters.yaml): bounded, with a scrutiny direction, and a reduce-scrutiny change
+    needs approval. A parameter never maps a vendor''s raw values.'
+  customer_context: Facts about the customer's environment (its address ranges, asset classes, approved tools) live in context lists with owners (bank/facts/), read through the broker.
+  enforced_by: validate rejects a parameter reference or policy key inside a value table, and a raw-value mapping (map, rows, match or pattern keys, or a dict default) inside a parameter.
 
 # Classes of alert values (alert.class). Value tables under bank/recipes/value_tables/ map each product's raw values to these.
 alert_classes:
-  av_execution_state:
-    reads:
-    - reporting_control.action_raw
-    values:
-    - pre_execution
-    - ran
-    - unknown
-    default: unknown
-    description: Whether the file was stopped before it ran. Post-execution remediation, quarantine without timing, pending reboot and partial remediation map to unknown.
   av_risk_class:
     reads:
     - reporting_control.category
@@ -230,14 +252,6 @@ alert_classes:
     - network adapter
     - other
     description: Normalized device class.
-  address_zone:
-    reads:
-    - src.ip
-    values:
-    - internal
-    - external
-    default: external
-    description: Whether the address is inside the customer's internal networks (parameter internal_networks, read by the recipe).
 
 capabilities:
 - name: precedent.check
@@ -256,6 +270,24 @@ capabilities:
   rating_floor: per_detection
   escalate_only: false
   notes: 'No broker call of its own: it reads cached context answers. It still counts as one call against the budget, as Q0 always has.'
+  source_authority:
+    authoritative: derived
+    fallback: []
+- name: context.rule
+  kind: derived
+  group: triage
+  inputs:
+  - reads
+  answer:
+    type: bool
+  yes_means: The question's context_rule holds over the cached context answers it reads (for example C-06 or C-08). An unanswered context question takes its when_not_answered value, which always raises.
+  no_means: The rule does not hold.
+  rating_floor: none
+  escalate_only: false
+  source_authority:
+    authoritative: derived
+    fallback: []
+  notes: No broker call of its own; counted against the call budget like Q0, conservatively.
 - name: case.open
   kind: lookup
   group: context
@@ -266,6 +298,10 @@ capabilities:
   measures: Whether the entity has an open escalation or case.
   rating_floor: none
   escalate_only: false
+  source_authority:
+    authoritative: case_memory
+    fallback:
+    - siem
 - name: entity.alerts
   kind: lookup
   group: context
@@ -282,6 +318,9 @@ capabilities:
     alerts of high or critical severity, which always count.
   rating_floor: none
   escalate_only: false
+  source_authority:
+    authoritative: siem
+    fallback: []
 - name: entity.max_severity
   kind: lookup
   group: context
@@ -300,6 +339,9 @@ capabilities:
   measures: The highest severity of any other alert on the entity in the look-back (none when there is none).
   rating_floor: none
   escalate_only: false
+  source_authority:
+    authoritative: siem
+    fallback: []
 - name: asset.priority
   kind: lookup
   group: context
@@ -315,26 +357,58 @@ capabilities:
   measures: The asset's priority in the customer's asset data.
   rating_floor: low
   escalate_only: false
+  source_authority:
+    authoritative: asset_inventory
+    fallback:
+    - siem
 - name: asset.crown_jewel
   kind: lookup
   group: context
   inputs:
   - entity
+  - list
   answer:
     type: bool
   measures: Whether the asset is on the customer's crown-jewel list.
   rating_floor: none
   escalate_only: false
+  source_authority:
+    authoritative: context_store
+    fallback: []
 - name: identity.privileged
   kind: lookup
   group: context
   inputs:
   - user
+  - list
   answer:
     type: bool
   measures: Whether the account is privileged in the customer's identity data.
   rating_floor: low
   escalate_only: false
+  source_authority:
+    authoritative: identity_provider
+    fallback: []
+- name: asset.class
+  kind: lookup
+  group: context
+  inputs:
+  - entity
+  answer:
+    type: enum
+    values:
+    - server
+    - workstation
+    - network
+    - other
+    - unknown
+  measures: The asset's class in the customer's asset data.
+  rating_floor: low
+  escalate_only: false
+  source_authority:
+    authoritative: asset_inventory
+    fallback:
+    - siem
 - name: case.precedent
   kind: lookup
   group: context
@@ -351,6 +425,9 @@ capabilities:
     analyst closes (distinct analysts) there were. A close with reason precedent_match never counts. A mitigated_true_positive close counts only when current_action shows this alert was also stopped.'
   rating_floor: per_detection
   escalate_only: false
+  source_authority:
+    authoritative: case_memory
+    fallback: []
 - name: list.lookup
   kind: lookup
   group: triage
@@ -366,6 +443,9 @@ capabilities:
   no_means: No entry matches.
   rating_floor: none
   escalate_only: false
+  source_authority:
+    authoritative: context_store
+    fallback: []
 - name: file.hash
   kind: attribute
   group: triage
@@ -379,6 +459,10 @@ capabilities:
   rating_floor: low
   escalate_only: false
   notes: Used directly when a question needs only a hash comparison; also resolved inside list.lookup.
+  source_authority:
+    authoritative: edr_api
+    fallback:
+    - siem
 - name: file.signer
   kind: attribute
   group: triage
@@ -391,6 +475,10 @@ capabilities:
   no_means: The signature is missing, invalid, from an untrusted publisher, or the binary is excluded.
   rating_floor: low
   escalate_only: false
+  source_authority:
+    authoritative: edr_api
+    fallback:
+    - siem
 - name: file.reputation
   kind: reputation
   group: triage
@@ -403,6 +491,9 @@ capabilities:
   no_means: No source marks it. Not benign evidence.
   rating_floor: low
   escalate_only: true
+  source_authority:
+    authoritative: threat_intel
+    fallback: []
 - name: ip.reputation
   kind: reputation
   group: triage
@@ -414,6 +505,9 @@ capabilities:
   no_means: No source marks it. Not benign evidence.
   rating_floor: low
   escalate_only: true
+  source_authority:
+    authoritative: threat_intel
+    fallback: []
 - name: identity.groups
   kind: lookup
   group: triage
@@ -426,6 +520,9 @@ capabilities:
   no_means: It is not.
   rating_floor: low
   escalate_only: false
+  source_authority:
+    authoritative: identity_provider
+    fallback: []
 - name: identity.risk
   kind: anomaly
   group: triage
@@ -437,6 +534,9 @@ capabilities:
   no_means: No risk signal. Not benign evidence.
   rating_floor: low
   escalate_only: true
+  source_authority:
+    authoritative: identity_provider
+    fallback: []
 - name: entity.baseline
   kind: baseline
   group: triage
@@ -450,22 +550,36 @@ capabilities:
   rating_floor: high
   escalate_only: false
   notes: Behaviors that name a binary compare by hash, or signer plus path. Command lines are normalized (GUIDs, hex, numbers, temp names, user profile names masked).
+  source_authority:
+    authoritative: siem
+    fallback:
+    - edr_api
 - name: org.prevalence
   kind: baseline
   group: triage
   inputs:
   - pattern
-  - lookback_weeks
+  - of_weeks
+  - min_weeks
   - window (optional)
   - exclude_list (optional)
   answer:
     type: count
-  measures: 'With lookback_weeks: the smallest weekly count of distinct hosts showing the pattern across the lookback weeks before the alert window (so a yes needs the pattern on enough hosts in every week).
-    With window alert_window: distinct hosts showing it inside the alert window. Hosts in exclude_list (a context list''s host scopes, by asset ID) are not counted.'
+  measures: 'With of_weeks and min_weeks: the k-th lowest weekly count of distinct hosts showing the pattern over the of_weeks weeks before the alert window, with k = of_weeks - min_weeks + 1 (default 4
+    and 3, so the 2nd lowest). It is at least N exactly when at least min_weeks of the of_weeks weeks reach N hosts, so the Triage agent compares it with org_prevalence_min_hosts and no threshold reaches
+    the broker. of_weeks and min_weeks set the statistic, not a threshold. With window alert_window: distinct hosts showing it inside the alert window. Hosts in exclude_list (a context list''s host scopes,
+    by asset ID) are not counted.'
   rating_floor: none
   escalate_only: false
-  notes: 'window and exclude_list were added so one question can ask whether a file seen on approved analysis hosts also appeared anywhere else, without a new capability. The old min_weeks (3 of 4 weeks)
-    is replaced by every week of the lookback: stricter, and no threshold reaches the broker.'
+  notes: window and exclude_list let one question ask whether a file seen on approved analysis hosts also appeared anywhere else. Equivalence of the k-th lowest statistic with the weeks rule is proven by
+    tools/test_prevalence.py.
+  source_authority:
+    authoritative: siem
+    fallback:
+    - edr_api
+  statistic_inputs:
+  - of_weeks
+  - min_weeks
 - name: change.window
   kind: lookup
   group: triage
@@ -484,6 +598,9 @@ capabilities:
   notes: Group membership is resolved by the server, as identity.groups would. For alerts with no user (network alerts), yes requires the change to name the entity explicitly as a source or target of the
     change.
   requires_independent_approver: true
+  source_authority:
+    authoritative: itsm
+    fallback: []
 - name: alert.class
   kind: alert
   group: triage
@@ -499,6 +616,9 @@ capabilities:
   rating_floor: none
   escalate_only: false
   notes: 'The normalized alert is a broker source (source: alert): no tool call, no call budget. The Triage agent sees only the class value, never a field name or raw value.'
+  source_authority:
+    authoritative: alert
+    fallback: []
 - name: alert.measure
   kind: alert
   group: triage
@@ -511,6 +631,35 @@ capabilities:
   rating_floor: none
   escalate_only: false
   notes: 'Source: alert. No tool call, no call budget.'
+  source_authority:
+    authoritative: alert
+    fallback: []
+- name: endpoint.run_status
+  kind: lookup
+  group: triage
+  inputs:
+  - vendor_alert_id (optional)
+  - endpoint_device (optional)
+  - file (optional, for the fallback match)
+  - at_time
+  - match_window_minutes
+  answer:
+    type: enum
+    values:
+    - pre_execution
+    - ran
+    - unknown
+  measures: Whether the detected file was stopped before it ran, from the endpoint product's own record of the alert. The broker finds the vendor's alert by vendor_alert_id; if that is missing, by endpoint_device
+    (or host), file hash and a time window of match_window_minutes around at_time. No match, or more than one, answers unknown. The vendor's run-status values map through its API value table (bank/recipes/value_tables/,
+    source edr_api).
+  rating_floor: low
+  escalate_only: false
+  notes: 'The SIEM''s copy of the alert (for example an endpoint event log) is a fallback only, used when the API is unavailable or not granted: an unverified fallback row can only raise (ran stays ran),
+    and pre_execution from the fallback counts only from a verified row; otherwise unknown.'
+  source_authority:
+    authoritative: edr_api
+    fallback:
+    - siem_copy
 - name: url.reputation
   kind: reputation
   group: triage
@@ -523,6 +672,9 @@ capabilities:
   rating_floor: low
   escalate_only: true
   notes: Added because file.reputation and ip.reputation cannot take URLs or domains, which drive proxy and email alerts.
+  source_authority:
+    authoritative: threat_intel
+    fallback: []
 - name: vuln.not_applicable
   kind: lookup
   group: triage
@@ -537,6 +689,9 @@ capabilities:
   rating_floor: low
   escalate_only: false
   notes: Unknown when the signature maps to no vulnerability or no recent data exists. Added because no existing capability reads vulnerability-management data, the main benign check for exploit signatures.
+  source_authority:
+    authoritative: vuln_scanner
+    fallback: []
 - name: email.message_status
   kind: lookup
   group: triage
@@ -549,6 +704,10 @@ capabilities:
   rating_floor: low
   escalate_only: false
   notes: Added because no existing capability reads mailbox or mail-security state.
+  source_authority:
+    authoritative: email_security_api
+    fallback:
+    - siem_copy
 - name: email.no_interaction
   kind: lookup
   group: triage
@@ -561,6 +720,10 @@ capabilities:
   rating_floor: low
   escalate_only: false
   notes: Unknown when click or open records are not collected. Added for the same reason as email.message_status.
+  source_authority:
+    authoritative: email_security_api
+    fallback:
+    - siem_copy
 - name: traffic.denied_only
   kind: lookup
   group: triage
@@ -575,6 +738,9 @@ capabilities:
   rating_floor: low
   escalate_only: false
   notes: Added because no existing capability summarises allowed versus denied sessions for an address.
+  source_authority:
+    authoritative: siem
+    fallback: []
 - name: alert.history
   kind: lookup
   group: triage
@@ -588,6 +754,9 @@ capabilities:
   escalate_only: false
   notes: Existing alerts only, inside the fixed triage window; never raw logs, so it stays within the triage boundary. Added because case.precedent reads closed cases, entity.baseline and org.prevalence
     read behaviour before the window, and none counts alerts already fired in the window.
+  source_authority:
+    authoritative: siem
+    fallback: []
 - name: scan.job_active
   kind: lookup
   group: triage
@@ -602,6 +771,9 @@ capabilities:
   rating_floor: none
   escalate_only: false
   notes: Added because the approved-scanner list says who may scan and when, not what a scanner was scanning; only the scanner's own job records show that.
+  source_authority:
+    authoritative: vuln_scanner
+    fallback: []
 - name: email.auth
   kind: lookup
   group: triage
@@ -614,6 +786,10 @@ capabilities:
   rating_floor: low
   escalate_only: false
   notes: Added because no existing capability reads sender-authentication results, and sender addresses alone are attacker-chosen.
+  source_authority:
+    authoritative: email_security_api
+    fallback:
+    - siem_copy
 - name: list.propose_update
   kind: write
   group: write
@@ -634,3 +810,6 @@ capabilities:
     reduce_scrutiny: human approval required, with an owner and an expiry (allowlist additions)
     increase_scrutiny: may be applied automatically (watchlist additions, removing an allowlist entry); removing an allowlist entry must notify the fact's owner
     enforcement: human approval required (blocks, isolation)
+  source_authority:
+    authoritative: context_store
+    fallback: []

@@ -1,5 +1,7 @@
 # SmartOps Triage Agent
 
+**Version 1 scope.** Version 1 builds and tests one SIEM adapter: Splunk ES. All lab tests and the first pilots run on Splunk. The design stays vendor-agnostic: nothing outside the Splunk adapter and Splunk recipes may depend on Splunk.
+
 Agents (see `docs/design-decisions.md` §7):
 - **Triage agent** (every alert): runs the fixed flow and applies thresholds; a local model writes the explanation and reviews closes (raise-only).
 - **Tool Broker** (every question): the only way out to any tool, for every agent and model, and the only path for SIEM write-back; routes each question to a domain specialist and returns a typed answer with status and provenance.
@@ -18,14 +20,14 @@ Design, workflows and question bank for the SmartOps triage agent. The question 
 | `docs/design-decisions.md` | Settled design: triage method, boundaries, bank structure, storage, operating modes |
 | `docs/build-question-bank-prompt.md` | Brief for building the bank in a Claude Code session |
 | `docs/intake/normalized-alert-v1.md` | The SIEM-agnostic alert every normalizer produces, field by field |
-| `docs/intake/context-questions.md` | The context questions C-01…C-07, asked once per entity through the Tool Broker |
+| `docs/intake/context-questions.md` | The context questions C-01…C-08, asked once per entity through the Tool Broker |
 | `docs/broker-questions.md` | What may be asked of the Tool Broker, and which bank questions are context or triage |
 | `docs/reuse-map.md` | What is ported from smartops-soc-app (file and commit), and what is not |
 | `docs/assumptions.md` | Assumptions register: what the design depends on and how each is tested |
 | `docs/pilot-terms.md` | Proposed pilot terms |
 | `bank/` | The question bank (YAML, built from the brief) |
 | `bank/recipes/value_tables/` | Vendor value tables: each product's raw alert values mapped to the bank's alert classes, each row verified or not (recipe data, never in the runtime bundle) |
-| `bank/context/`, `bank/context_rules.yaml` | Context questions C-01…C-07 and how the entity guard, Q0 and priority use them |
+| `bank/context/`, `bank/context_rules.yaml` | Context questions C-01…C-08 and how the entity guard, Q0 and priority use them |
 | `tools/` | Validation (`validate.py`, with the role registry `roles.py` and the field-name list `field_names.py`), close-path gate, strict true-positive replay, gate self-test, SQL loader and context-fact ranking; `gates.sh` runs them all |
 
 Workflow pages: `docs/workflows/triage-workflow.html` (alert-level) and `docs/workflows/onboarding-workflow.html` (customer onboarding). The repo files are the source of truth. Earlier published copies on claude.ai may be out of date:

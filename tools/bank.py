@@ -179,8 +179,9 @@ LOCAL_KINDS = {"alert"}   # answered from the normalized alert (source: alert): 
 
 
 def is_local(b, qid):
+    """No call budget: answered from the normalized alert, or from the platform's own context store (cached per entity, like context questions)."""
     cap = b["capability_by_name"].get(b["questions"][qid]["capability"]["name"], {})
-    return cap.get("kind") in LOCAL_KINDS
+    return cap.get("kind") in LOCAL_KINDS or (cap.get("source_authority") or {}).get("authoritative") == "context_store"
 
 
 def guard_requires_yes(g):
@@ -292,8 +293,9 @@ def answer_type(b, qid):
     return b["capability_by_name"][q["capability"]["name"]]["answer"]["type"]
 
 
-def param_value(b, name, detection=None, customer=None):
-    """Resolve a parameter by precedence: customer + detection > customer > detection > global."""
+def param_value(b, name, detection=None, customer=None, entity_class=None):
+    """Resolve a parameter by precedence: customer + detection > customer > detection > global.
+    A parameter with by_entity_class takes the entity's class value (C-08) at the global level."""
     ov = (b["overlays"].get(customer) or {}).get("overrides") or [] if customer else []
     did = (detection or {}).get("id")
     for want_det in (True, False):
@@ -302,7 +304,10 @@ def param_value(b, name, detection=None, customer=None):
                 return o["value"]
     if detection and name in (detection.get("parameters") or {}):
         return detection["parameters"][name]
-    return b["parameters"][name]["default"]
+    p = b["parameters"][name]
+    if entity_class and entity_class in (p.get("by_entity_class") or {}):
+        return p["by_entity_class"][entity_class]
+    return p["default"]
 
 
 def _vals(b, v, detection):
@@ -337,17 +342,34 @@ def apply_rule(b, rule, value, atype, detection=None):
     raise ValueError(atype)
 
 
-def classify(b, cls, values, product_tables=(), params=None):
+def context_rule(b, rule, answers):
+    """Evaluate a Triage-side rule over cached context answers ({"C-06": False, "C-08": "workstation"}).
+    A context question with no answer takes its unanswered_value, which always raises scrutiny."""
+    if "any" in rule:
+        return any(context_rule(b, r, answers) for r in rule["any"])
+    if "all" in rule:
+        return all(context_rule(b, r, answers) for r in rule["all"])
+    (cid, want), = rule.items()
+    got = answers.get(cid, b["context_questions"][cid].get("unanswered_value"))
+    if isinstance(want, dict) and "in" in want:
+        return got in want["in"]
+    return got == want
+
+
+def classify(b, cls, values, product_tables=(), answers=None):
     """Map raw alert values to an alert-class value through value tables. A product table that defines the class
     is authoritative (no row matched gives the class default); otherwise the generic table applies.
     values: ordered dict of the raw properties or role values the class reads ("value" in a row means the first one).
     Returns (class value, matching row with its table, or None)."""
-    import ipaddress
-    params = params or {}
     first = str(next(iter(values.values()), "") or "")
     joined = " ".join(str(v or "") for v in values.values()).strip()
-    default = b["capabilities"]["alert_classes"][cls]["default"]
-    for tname in [t for t in product_tables if t in b["value_tables"]] + ["generic"]:
+    if answers:
+        default = "unknown"
+        generic = [t for t, d in b["value_tables"].items() if d.get("scope") == "generic" and d.get("answers") == answers]
+    else:
+        default = b["capabilities"]["alert_classes"][cls]["default"]
+        generic = ["generic"]
+    for tname in [t for t in product_tables if t in b["value_tables"]] + generic:
         spec = (b["value_tables"][tname].get("classes") or {}).get(cls)
         if not spec:
             continue
@@ -355,12 +377,6 @@ def classify(b, cls, values, product_tables=(), params=None):
             m, ok = r["match"], True
             if "pattern" in m:
                 ok = bool(joined) and re.search(m["pattern"], joined, re.I) is not None
-            elif "cidr_param" in m:
-                try:
-                    ip = ipaddress.ip_address(first)
-                    ok = any(ip in ipaddress.ip_network(c) for c in params.get(m["cidr_param"], []))
-                except ValueError:
-                    ok = False
             else:
                 for k, want in m.items():
                     got = (first if k == "value" else str(values.get(k, "") or "")).lower()
@@ -370,3 +386,31 @@ def classify(b, cls, values, product_tables=(), params=None):
                 return r["value"], dict(r, table=tname)
         return spec.get("default", default), None
     return default, None
+
+
+def kth_lowest_weekly_hosts(weekly_hosts, of_weeks, min_weeks):
+    """org.prevalence statistic: the k-th lowest weekly distinct-host count over the last of_weeks weeks, k = of_weeks - min_weeks + 1.
+    It is >= N exactly when at least min_weeks of the of_weeks weeks reach N hosts (tools/test_prevalence.py)."""
+    weeks = sorted(weekly_hosts[-of_weeks:])
+    if len(weeks) < of_weeks or not 1 <= min_weeks <= of_weeks:
+        return None
+    return weeks[of_weeks - min_weeks]
+
+
+def run_status(b, api, siem_copy):
+    """endpoint.run_status as the Tool Broker answers it.
+    api: None when the endpoint API is unavailable or not granted; otherwise {"tables": [...], "matches": [raw evidence dicts]}
+         (an empty or multiple match list answers unknown). siem_copy: {"tables": [...], "raw": {...}} or None.
+    Returns (value, source). The API is authoritative; the SIEM copy is a fallback whose unverified rows can only raise:
+    pre_execution from the fallback counts only from a verified row, otherwise unknown."""
+    if api is not None:
+        if len(api.get("matches") or []) != 1:
+            return "unknown", "edr_api"
+        v, _ = classify(b, "run_status", api["matches"][0], api.get("tables") or [], answers="endpoint.run_status")
+        return v, "edr_api"
+    if siem_copy:
+        v, row = classify(b, "run_status", siem_copy.get("raw") or {}, siem_copy.get("tables") or [], answers="endpoint.run_status")
+        if v == "pre_execution" and not (row and row.get("verified")):
+            return "unknown", "siem_copy"
+        return v, "siem_copy"
+    return None, None

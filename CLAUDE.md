@@ -2,13 +2,15 @@
 
 This repo holds the SmartOps triage agent's design notes and question bank. The question bank is the current focus.
 
+**Version 1 scope.** Version 1 builds and tests one SIEM adapter: Splunk ES. All lab tests and the first pilots run on Splunk. The design stays vendor-agnostic: nothing outside the Splunk adapter and Splunk recipes may depend on Splunk.
+
 ## Read first
 - `docs/design-decisions.md`: settled design. Follow it; don't re-open decisions without being asked.
 - `docs/build-question-bank-prompt.md`: the task brief for building the bank.
 
 ## Rules
 - YAML under `bank/` is the source of truth. Everything else is generated from it.
-- Every question declares exactly one capability from `bank/capabilities.yaml` and is tagged `kind: context` or `kind: triage`. The broker returns a typed answer (bool, count, number, enum, time); each flow step on a non-bool question carries a rule that turns it into yes/no against a bounded parameter. No tool names or SPL in the bank; the Tool Broker maps capabilities to the customer's tools.
+- Every question declares exactly one capability from `bank/capabilities.yaml` and is tagged `kind: context` or `kind: triage`. The broker returns a typed answer (bool, count, number, enum, time); each flow step on a non-bool question carries a rule that turns it into yes/no against a bounded parameter. No tool names or query language in the bank; the Tool Broker maps capabilities to the customer's tools.
 - No schema field names in the bank (CIM, ECS, Sysmon or vendor; list in `tools/field_names.py`). Detections declare `required_roles`, and questions refer to roles (`role:host.asset_id`, `tools/roles.py`). Vendor value patterns and lists live in value tables under `bank/recipes/value_tables/`, each row verified or not.
 - No vendor or product names anywhere in the bank (list in `tools/vendors.py`). Only `data_source`, `sigma_logsource`, `sigma_refs`, `source` and `license` may name them; seed data lives in `bank/seeds/` and vendor value tables in `bank/recipes/value_tables/`; neither is ever in the runtime bundle.
 - Question text describes only what to check about an entity, never where or with which tool.
@@ -22,6 +24,9 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 - Runtime runs only frozen recipes; a live or unproven answer can only raise scrutiny.
 - Every parameter has bounds; removing scrutiny needs human approval.
 - Nothing in the triage layer or the shared bank assumes a specific SIEM, tool or field name.
+- Vendor-specific content (query languages, SIEM product terms, CIM/ECS/vendor field names, vendor API calls) lives only in adapter folders, broker recipes and vendor value tables. Core, triage logic, questions, flows, capabilities and parameters never contain it. Gates enforce this.
+- The SIEM alert only starts triage. The broker answers each capability from the authoritative source set at onboarding, usually the tool's own API; the SIEM is authoritative only for alert history and log searches. A fallback source can only raise scrutiny.
+- Value tables hold what a vendor's values mean (per source, each row verified or not); what the customer accepts lives in Triage-side parameters (bounded, with a direction tag) or context lists. Never mix them.
 - One way in, one way out: alerts enter only through the normalizer; every tool read and every write-back goes through the Tool Broker. No agent or model calls a tool directly.
 - Every broker question has a bank ID, a fixed answer type, a status and provenance, and no threshold.
 - Decisions are per alert; work, caching and the entity guard are per entity.

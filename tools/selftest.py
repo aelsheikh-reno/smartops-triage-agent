@@ -51,6 +51,10 @@ def t(path, old, new):
     return lambda root: edit_text(os.path.join(root, path), old, new)
 
 
+def cap(d, name):
+    return next(c for c in d["capabilities"] if c["name"] == name)
+
+
 def first_guard(d, qid):
     for st in d["flow"]:
         for g in st.get("guards") or []:
@@ -89,7 +93,38 @@ CASES = [
     ("entity_missing reason code missing", "validate", t("bank/reason_codes.yaml", "- code: entity_missing", "- code: entity_gone"), "entity_missing"),
     ("unverified product rows without the cap", "validate", y("bank/detections/vendor/ids_alert.yaml", lambda d: d.pop("auto_requires")), "declare auto_requires"),
     ("value-table row without verified", "validate",
-     y("bank/recipes/value_tables/microsoft-defender-for-endpoint.yaml", lambda d: d["classes"]["av_execution_state"]["rows"][0].pop("verified")), "verified must be"),
+     y("bank/recipes/value_tables/microsoft-defender-for-endpoint.yaml", lambda d: d["classes"]["run_status"]["rows"][0].pop("verified")), "verified must be"),
+    # Round 2: thresholds stay Triage-side, classification principle, source authority, per-class parameters.
+    ("threshold at the broker in org.prevalence", "validate", y(q("Q-0015"), lambda d: d["capability"]["inputs"].update(min_hosts=3)), "threshold or comparison"),
+    ("org.prevalence statistic setting as a literal", "validate", y(q("Q-0015"), lambda d: d["capability"]["inputs"].update(min_weeks=2)), "bound to a recipe_statistic parameter"),
+    ("org.prevalence statistic bound to a policy parameter", "validate",
+     y(q("Q-0015"), lambda d: d["capability"]["inputs"].update(min_weeks={"param": "org_prevalence_min_hosts"})), "bound to a recipe_statistic parameter"),
+    ("min_weeks above of_weeks", "validate", y("bank/parameters.yaml", lambda d: d["parameters"]["org_prevalence_min_weeks"].update(default=5)), "must not exceed"),
+    ("customer policy list inside a value table", "validate",
+     y("bank/recipes/value_tables/microsoft-defender-for-endpoint.yaml", lambda d: d["classes"]["run_status"].update(param="usb_non_storage_classes")), "never a customer's policy"),
+    ("customer address ranges matched inside a value table", "validate",
+     y("bank/recipes/value_tables/generic.yaml", lambda d: next(iter(d["classes"].values()))["rows"][0]["match"].update(cidr_param="internal_networks")), "never a customer's policy"),
+    ("vendor-meaning mapping inside a parameter", "validate",
+     y("bank/parameters.yaml", lambda d: d["parameters"].update(av_action_map={"default": {"Block": "pre_execution"}, "bounds": {"min_items": 1}, "reduces_scrutiny_when": "grows"})), "never a mapping"),
+    ("EDR capability answered from the SIEM although an endpoint API exists", "validate",
+     y("bank/capabilities.yaml", lambda d: cap(d, "endpoint.run_status").update(source_authority={"authoritative": "siem_copy", "fallback": ["edr_api"]})), "an endpoint API source exists"),
+    ("per-class value for a class C-08 does not have", "validate",
+     y("bank/parameters.yaml", lambda d: d["parameters"]["entity_guard_min_alerts"]["by_entity_class"].update(laptop=3)), "not an asset class of C-08"),
+    ("per-class value outside bounds", "validate",
+     y("bank/parameters.yaml", lambda d: d["parameters"]["entity_guard_min_alerts"]["by_entity_class"].update(server=999)), "outside bounds"),
+    ("context rule reads a context question it does not declare", "validate", y(q("Q-0067"), lambda d: d["capability"]["inputs"].update(reads=["C-06"])), "context_rule over"),
+    # Vendor-leak gate: query language, SIEM product terms, schema field names in bank logic.
+    ("query-language token (SPL) in question text", "validate", y(q("Q-0016"), lambda d: d.update(text=d["text"] + " (index=main | tstats count)")), "query-language token"),
+    ("query-language token (KQL) in a flow", "validate",
+     y(PSEXEC, lambda d: d["flow"][0]["attacker_influence"].update(reason="DeviceEvents | summarize count() by DeviceId")), "query-language token"),
+    ("SIEM product term in a context question", "validate", y("bank/context/C-03.yaml", lambda d: d.update(text=d["text"] + " Read from Incident Review.")), "SIEM product term"),
+    ("SIEM product term in a capability", "validate", y("bank/capabilities.yaml", lambda d: cap(d, "alert.history").update(measures="Count of notables for the key.")), "SIEM product term"),
+    ("schema field name in question prose", "validate", y(q("Q-0016"), lambda d: d.update(text=d["text"] + " Compare dest_ip.")), "schema field name"),
+    ("schema field name in a parameter", "validate",
+     y("bank/parameters.yaml", lambda d: d["parameters"]["alert_history_min_count"].update(description="Counted by process_guid.")), "schema field name"),
+    ("vendor terms in offline metadata and value tables pass", "validate",
+     lambda root: (edit_yaml(os.path.join(root, PSEXEC), lambda d: d.update(data_source=d["data_source"] + ["Splunk ES notable via | tstats from datamodel=Endpoint"])),
+                   edit_yaml(os.path.join(root, "bank/recipes/value_tables/generic.yaml"), lambda d: d.update(feed=d["feed"] + " (sourcetype=XmlWinEventLog, dest_ip)"))), None),
     ("identity groups as the only low-rated yes on a close path", "redteam",
      y(PSEXEC, lambda d: d["flow"][3].update(on_yes="close:benign_true_positive:admin_activity_baselined")), "FAIL escu:detect_psexec"),
 ]

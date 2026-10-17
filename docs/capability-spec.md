@@ -139,17 +139,18 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Owner:** endpoint, network or email specialist, by behavior.
 
 ## org.prevalence
-- **Measures:** the smallest weekly count of distinct hosts with the pattern across the lookback weeks (so a yes needs enough hosts in every week).
+- **Measures:** the k-th lowest weekly count of distinct hosts with the pattern over the last `of_weeks` weeks, with k = of_weeks − min_weeks + 1 (default 4 and 3, so the 2nd lowest). This is a statistic, not a threshold: "k-th lowest ≥ N" is exactly "at least min_weeks of the of_weeks weeks have ≥ N hosts", proved over every case in `tools/test_prevalence.py`.
   - With `window: alert_window`, it counts hosts inside the alert window instead.
   - Hosts in `exclude_list`, matched by asset ID, are not counted.
-- **Triage rule:** yes if the count ≥ `org_prevalence_min_hosts` over `org_prevalence_lookback_weeks`. With the alert window, yes if hosts ≥ `org_prevalence_escape_min_hosts` (fixed at 1).
-  - `org_prevalence_min_hosts`: default 5, min 3, max 50.
-  - `org_prevalence_lookback_weeks`: default 4, min 3, max 8.
-  - The old `min_weeks` (3 of 4 weeks) is gone: every week must reach the host count, which is stricter.
+- **Triage rule:** yes if the statistic ≥ `org_prevalence_min_hosts`. With the alert window, yes if hosts ≥ `org_prevalence_escape_min_hosts` (fixed at 1).
+  - `org_prevalence_min_hosts`: default 5, min 3, max 50. Triage-side threshold.
+  - `org_prevalence_of_weeks`: default 4, min 3, max 12. Recipe statistic setting (`category: recipe_statistic`).
+  - `org_prevalence_min_weeks`: default 3, min 2, max 12, never above `of_weeks`. Recipe statistic setting; lowering it reduces scrutiny.
+  - This restores the pre-migration rule (3 of 4 weeks). The first migration commit (`4686ea4`) used the minimum over every week, which was stricter.
 - **Template kind:** Sigma, with an aggregation (distinct hosts, distinct weeks).
 - **Splunk (CIM):** Endpoint.Processes (`process`, `process_hash`, `dest`), accelerated.
 - **Known-answer tests:** a common OS process returns roughly the fleet's host count. A unique test command run on one reference host returns 1.
-- **Unknown when:** the data model is not accelerated, the pattern cannot be normalized, or the exclude list is not provided. Setting `window` together with `lookback_weeks` is rejected by validate.
+- **Unknown when:** the data model is not accelerated, the pattern cannot be normalized, or the exclude list is not provided. Setting `window` together with `of_weeks`/`min_weeks` is rejected by validate.
 - **Attacker influence:** rated per question. It is high for command lines; as a guard that escalates, low.
 - **Owner:** endpoint specialist.
 
@@ -176,6 +177,21 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Unknown when:** the field is missing or empty, its value is in `unknown_values`, or the value's translation is not yet approved (which taints the close).
 - **Attacker influence:** rated per question and per source profile (direct API vs forwarded syslog).
 - **Owner:** Tool Broker (alert source). New value-table rows are proposed by the Use Case Manager and approved by a human; a family with unverified product rows is capped at Recommend for that customer.
+
+## endpoint.run_status
+- **Measures:** whether the detected file was stopped before it ran: pre_execution, ran or unknown, from the endpoint product's own record of the alert.
+- **Source authority:** the endpoint product's API (for Defender, the alert evidence in its security API). The broker finds the product's alert by `reporting_control.vendor_alert_id`; if that is missing, by `reporting_control.endpoint_device`, file hash and `edr_alert_match_window_minutes` (default 10, min 1, max 60). No match or several matches answer unknown. Fallback, only when the API is unavailable or not granted: the SIEM's copy of the product's alert, through its `siem_copy` value table; it answers unknown unless the matching row is verified pre_execution (none is today).
+- **Triage rule:** the step's enum rule (Q-0049: pre_execution means yes, unknown means unknown).
+- **Template kind:** API lookup, with the run-status value table in the API recipe.
+- **Known-answer tests:** known prevented, blocked, quarantined and detected alerts return pre_execution, ran, unknown and ran (#20 for Defender, #9 for CrowdStrike).
+- **Unknown when:** no match or several matches, mixed evidence, a quarantine or cleaning after execution, pending reboot, partial remediation, or a fallback answer from an unverified row.
+- **Attacker influence:** low from the API; medium when forwarded.
+- **Owner:** endpoint specialist.
+
+## context.rule
+- **Measures:** nothing new. The Triage agent applies a fixed rule (`context_rule` on the question) to cached context answers. Q-0067 reads C-06 (crown jewel) and C-08 (asset class): yes when C-06 is yes or C-08 is server. An unanswered context question takes its `unanswered_value`, which raises.
+- **Template kind:** none; no tool call. It is counted against the call budget conservatively.
+- **Owner:** Triage agent.
 
 ## vuln.not_applicable
 - **Measures:** the CVEs the signature maps to, the host's affected status for each, and the age of the scan data.
@@ -293,6 +309,6 @@ Run by the SIEM specialist as part of Phase 0, the foundation-readiness gate (de
 9. **Asset IDs in AV and EDR alerts** (the Alerts data model for Defender through the Splunk add-on, `docs/assumptions.md` A5; Malware for others): whether AV alerts carry a device or agent ID. Without it, AV precedents rate medium (the fingerprint falls back to the hostname).
 10. **Entity resolution quality:** the share of alerts mapped to an asset ID and to an identity. The entity guard and per-entity caching (design-decisions §6) depend on it. Minimum bar: at least 90% of alerts resolve their host to an asset with a priority.
 11. **CIM compliance per rule:** each pilot rule's data source is CIM-compliant and populates the rule's required entities.
-12. **EDR feed:** whether EDR data arrives as an alert API, as event logs in Splunk, or both.
+12. **EDR API access:** for each EDR, whether read-only API access is granted (yes/no), with the API's rate limits. Without it, the detections that need endpoint answers (for example AV/EDR run status) are capped at Recommend; the SIEM's copy of the EDR's alerts is a fallback that can only raise.
 
 The report lists each capability as buildable, buildable with gaps (named), or blocked, and feeds the coverage report.

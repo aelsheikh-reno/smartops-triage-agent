@@ -1,6 +1,6 @@
 # Context questions
 
-Status: in the bank as `bank/context/C-01.yaml`…`C-07.yaml` and `bank/context_rules.yaml` (draft); the runtime that asks them is (designed, not built). Design reference: `docs/design-decisions.md` §5. Rules every broker question follows: `docs/broker-questions.md`.
+Status: in the bank as `bank/context/C-01.yaml`…`C-08.yaml` and `bank/context_rules.yaml` (draft); the runtime that asks them is (designed, not built). Design reference: `docs/design-decisions.md` §5. Rules every broker question follows: `docs/broker-questions.md`.
 
 There is no separate context service. Context is a small fixed set of broker questions that the Triage agent asks once per entity per grouping window, at the "Group by entity" step (§6). The Tool Broker batches them, answers them from frozen recipes, and caches the answers per entity (§21). Every alert on the entity in the window reads the same cached answers.
 
@@ -17,6 +17,7 @@ Context questions feed the entity guard (§6), Q0 (§14) and priority (§20). Th
 | C-05 | What is the asset's priority? | value from a fixed list: critical, high, medium, low | host asset ID | `asset.priority` | priority (§20) |
 | C-06 | Is the asset a crown jewel? | yes/no | host asset ID | `asset.crown_jewel` (list CF-0007) | no auto-close on crown jewels (§19); Q0 |
 | C-07 | Is the user privileged? | yes/no | user identity ID | `identity.privileged` (list CF-0002) | priority (§20) |
+| C-08 | What class of asset is it? | value from a fixed list: server, workstation, network, other, unknown | host asset ID | `asset.class` | entity guard: N and window per class (§6); Q-0067 |
 
 C-03 deviates from a plain yes/no on purpose. "Higher than this alert" depends on the alert, so a yes/no could not be cached once per entity. The broker returns the highest severity, which is the same for every alert on the entity, and the Triage agent compares it with each alert's own severity. That comparison is not a threshold, so there is still no threshold in the recipe.
 
@@ -27,7 +28,9 @@ Each answer follows the broker answer contract in `docs/broker-questions.md`:
 - `status`: `answered`, `unknown`, `source_unavailable` or `sources_disagree`
 - `provenance`: source, `observed_at`, time-to-live, recipe version, evidence link
 
-"Source down" never reads as "no hit". If C-01 or C-02 comes back `source_unavailable` or `sources_disagree`, the entity guard cannot rule the entity out, so every close on it flags. If C-04 is not `answered`, Q0 does not close. If C-05 or C-06 is not `answered`, the asset is treated as critical and as a crown jewel for that window. If C-07 is not `answered`, the user is treated as privileged.
+"Source down" never reads as "no hit". If C-01 or C-02 comes back `source_unavailable` or `sources_disagree`, the entity guard cannot rule the entity out, so every close on it flags. If C-04 is not `answered`, Q0 does not close. If C-05 or C-06 is not `answered`, the asset is treated as critical and as a crown jewel for that window. If C-07 is not `answered`, the user is treated as privileged. If C-08 is not `answered` (or answers unknown), the entity is treated as a server.
+
+Q-0067 (removable media: is the host a server or crown jewel?) is not a broker call of its own: it is a Triage-side rule over the cached answers C-06 and C-08 (`bank/context_rules.yaml` `q0067`, capability `context.rule`). It answers yes when C-06 is yes or C-08 is server; an unanswered C-06 or C-08 answers yes. Before this it was a list lookup.
 
 ## What is not a context question
 Asked only when a flow step reaches it, as a triage question with its own bank ID: threat intel, baselines, prevalence, EDR detail (process tree, signer, hash).

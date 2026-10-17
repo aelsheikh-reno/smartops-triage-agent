@@ -4,7 +4,8 @@
 
 entity_guard:
   runs: once per entity per grouping window, before Q0
-  reads: [C-01, C-02]
+  reads: [C-01, C-02, C-08]
+  per_entity_class: "entity_guard_min_alerts, entity_guard_min_detections and entity_grouping_window_minutes take the value for the entity's class (C-08: server, workstation, network, other); an unanswered class counts as server."
   hot_when:
     any:
     - C-01: true
@@ -37,3 +38,12 @@ q0:
 priority:
   reads: [C-05, C-06, C-07]
   rule: the SIEM's own urgency or severity, raised by asset priority (C-05), by a crown jewel (C-06), by a privileged user (C-07) and by the entity being hot; adjusted by the verdict (docs/design-decisions.md §20). Never lowered below the SIEM's own urgency.
+
+q0067:
+  question: Q-0067
+  reads: [C-06, C-08]
+  yes_when:
+    any:
+    - C-06: true
+    - {C-08: {in: [server]}}
+  when_not_answered: C-06 unanswered counts as a crown jewel and C-08 unanswered as a server, so a gap answers yes (raises).

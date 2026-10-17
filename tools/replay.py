@@ -260,7 +260,7 @@ def to_roles(n):
             out[r] = v
     if n.get("action") is not None:
         out["reporting_control.action_raw"] = n.get("_action_raw") or n.get("action")
-    for k in ("_time", "_kind", "_idx", "_raw", "_tables"):
+    for k in ("_time", "_kind", "_idx", "_raw", "_tables", "_api"):
         if k in n:
             out[k] = n[k]
     if n.get("_time"):
@@ -299,7 +299,8 @@ def derive(d, n):
 def measure(b, q, inputs, n, ctx):
     """The broker's typed answer for one question on one alert, or None for status unknown."""
     cap = q["capability"]["name"]
-    for kind, name in B.walk_refs(inputs):
+    optional = set(q["capability"].get("optional_inputs") or [])
+    for kind, name in B.walk_refs({k: v for k, v in inputs.items() if k not in optional}):
         if kind != "bind" and ref_value(f"{kind}:{name}", n) in (None, ""):
             return None
     if cap == "alert.class":
@@ -312,8 +313,22 @@ def measure(b, q, inputs, n, ctx):
             values = {r: n.get(r) for r in reads}
             if all(v in (None, "") for v in values.values()):
                 return None
-        params = {"internal_networks": B.param_value(b, "internal_networks")}
-        return B.classify(b, cls, values, tables, params)[0]
+        return B.classify(b, cls, values, tables)[0]
+    if cap == "endpoint.run_status":
+        # The endpoint API is authoritative (_api: the vendor alerts it matched); without it the SIEM's copy of the alert
+        # is the fallback (_raw read through the product's siem_copy table, else the generic one).
+        copy = {"raw": n.get("_raw") or {"value": n.get("reporting_control.action_raw")}, "tables": n.get("_tables") or []}
+        return B.run_status(b, n.get("_api"), copy)[0]
+    if cap == "list.lookup" and (b["facts"].get(inputs.get("list")) or {}).get("default_entries"):
+        # A context list that starts from default entries (CF-0031 internal networks: the private ranges) holds them in the clean room.
+        import ipaddress
+        try:
+            ip = ipaddress.ip_address(str(ref_value(inputs["entity"], n)))
+        except ValueError:
+            return None
+        return any(ip in ipaddress.ip_network(c) for c in b["facts"][inputs["list"]]["default_entries"])
+    if cap == "context.rule":
+        return B.context_rule(b, q["context_rule"], ctx.get("context") or {})
     if cap == "alert.measure":
         return float(ref_value(inputs["of"], n))
     if cap == "traffic.denied_only":
@@ -330,7 +345,7 @@ def measure(b, q, inputs, n, ctx):
         return None
     if cap in ("entity.baseline", "org.prevalence", "email.message_status", "email.no_interaction", "email.auth", "file.signer"):
         return None
-    return False   # precedent.check, list.lookup, identity.groups, change.window, scan.job_active, *.reputation: empty in a clean room
+    return False   # precedent.check, list.lookup (CF-0031 internal networks included), identity.groups, change.window, scan.job_active, *.reputation: empty in a clean room
 
 
 def answer(b, q, item, n, ctx, d):
@@ -364,24 +379,39 @@ def run_flow(b, d, n, ctx):
 
 # Regression cases: hand-built normalized alerts (roles, plus the raw values the value tables read) with a required outcome.
 GRAPH = ["microsoft-defender-for-endpoint"]
+EVENT_LOG = ["microsoft-defender-antivirus-event-log"]
 AV = {"host.name": "ws-01", "user.name": "u1", "event.time": "2026-10-17T00:00:00Z", "file.path": "C:\\Users\\Public\\m.exe", "file.name": "m.exe"}
+PUA = {"reporting_control.signature": "PUA:Win32/Presenoker", "reporting_control.category": "pua"}
+
+
+def api(*evidence):
+    """The endpoint API's answer: the vendor alerts the broker matched (by vendor alert ID, else device + hash + window)."""
+    return {"tables": GRAPH, "matches": list(evidence)}
+
+
 REGRESSION = [
  ("vendor:av_detection", "no hash, high-risk class, detected (not blocked) must escalate",
   dict(AV, **{"reporting_control.signature": "HackTool:Win32/Mimikatz", "reporting_control.category": "hacktool", "reporting_control.action_raw": "detected"}), "escalate"),
  ("vendor:av_detection", "no hash, high-risk class, blocked must escalate",
   dict(AV, **{"reporting_control.signature": "HackTool:Win32/Mimikatz", "reporting_control.category": "hacktool", "reporting_control.action_raw": "blocked_pre_execution"}), "escalate"),
- ("vendor:av_detection", "Defender detectionStatus blocked (remediated at run time), low-risk class: no close",
-  dict(AV, **{"file.sha256": "a" * 64, "reporting_control.signature": "PUA:Win32/Presenoker", "reporting_control.category": "pua",
-              "_raw": {"detectionStatus": "blocked"}, "_tables": GRAPH}), "escalate"),
- ("vendor:av_detection", "Defender quarantine only (no detection status), low-risk class: flag",
-  dict(AV, **{"file.sha256": "b" * 64, "reporting_control.signature": "PUA:Win32/Presenoker", "reporting_control.category": "pua",
-              "_raw": {"remediationStatus": "quarantined"}, "_tables": GRAPH}), "flag"),
- ("vendor:av_detection", "any product, quarantined only, low-risk class: flag",
+ ("vendor:av_detection", "Defender API detectionStatus blocked (remediated at run time), low-risk class: no close",
+  dict(AV, **PUA, **{"file.sha256": "a" * 64, "reporting_control.vendor_alert_id": "da-1", "_api": api({"detectionStatus": "blocked"})}), "escalate"),
+ ("vendor:av_detection", "Defender API quarantine only (no detection status), low-risk class: flag",
+  dict(AV, **PUA, **{"file.sha256": "b" * 64, "reporting_control.vendor_alert_id": "da-2", "_api": api({"remediationStatus": "quarantined"})}), "flag"),
+ ("vendor:av_detection", "any product, no API, SIEM copy quarantined only, low-risk class: flag",
   dict(AV, **{"file.sha256": "c" * 64, "reporting_control.signature": "Adware:Win32/X", "reporting_control.category": "adware",
               "reporting_control.action_raw": "quarantined"}), "flag"),
- ("vendor:av_detection", "Defender detectionStatus prevented, low-risk class: mitigated close",
-  dict(AV, **{"file.sha256": "d" * 64, "reporting_control.signature": "PUA:Win32/Presenoker", "reporting_control.category": "pua",
-              "_raw": {"detectionStatus": "prevented"}, "_tables": GRAPH}), "close:mitigated_true_positive"),
+ ("vendor:av_detection", "Defender API prevented, low-risk class: mitigated close",
+  dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api({"detectionStatus": "prevented"})}),
+  "close:mitigated_true_positive"),
+ ("vendor:av_detection", "Defender API unavailable, SIEM event-log copy says Block, low-risk class: flag (fallback rows unverified)",
+  dict(AV, **PUA, **{"file.sha256": "e" * 64, "reporting_control.action_raw": "Block", "_raw": {"EventID": "1117", "Action Name": "Block"}, "_tables": EVENT_LOG}),
+  "flag"),
+ ("vendor:av_detection", "no vendor alert ID, fallback match finds two Defender alerts, low-risk class: flag",
+  dict(AV, **PUA, **{"file.sha256": "f" * 64, "reporting_control.endpoint_device": "dev-1",
+                     "_api": api({"detectionStatus": "prevented"}, {"detectionStatus": "prevented"})}), "flag"),
+ ("vendor:av_detection", "no vendor alert ID, fallback match finds no Defender alert, low-risk class: flag",
+  dict(AV, **PUA, **{"file.sha256": "0" * 64, "reporting_control.endpoint_device": "dev-1", "_api": api()}), "flag"),
 ]
 
 
@@ -403,7 +433,8 @@ def main():
     strict = "--strict" in sys.argv
     only = [a for a in sys.argv[1:] if not a.startswith("--")]
     b = B.load()
-    ctx = {"vuln_unknown": Counter()}
+    # Clean-room customer: no crown-jewel list entries (C-06 answered no) and no asset inventory (C-08 unanswered, so a server).
+    ctx = {"vuln_unknown": Counter(), "context": {"C-06": False}}
     rows, cannot, fails, mitigated = [], [], [], []
     for did, d in sorted(b["detections"].items()):
         if only and not any(did.startswith(o) for o in only):

@@ -1,0 +1,23 @@
+id: C-08
+text: What class of asset is the entity?
+kind: context
+capability:
+  name: asset.class
+  inputs:
+    entity: role:host.asset_id
+feeds:
+- entity_guard
+- q0067
+attacker_influence:
+  rating: low
+  reason: Asset data maintained by the customer.
+when_not_answered: The entity is treated as a server for the window.
+unanswered_value: server
+source:
+- docs/intake/context-questions.md
+- docs/design-decisions.md §5
+license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1

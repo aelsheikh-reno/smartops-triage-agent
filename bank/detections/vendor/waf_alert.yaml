@@ -70,10 +70,7 @@ flow:
   - question: Q-0050
     then: flag
     bind:
-      of: derived:client_ip
-    rule:
-      'yes':
-      - internal
+      entity: derived:client_ip
   - question: Q-0047
     then: flag
     rule:
@@ -152,10 +149,7 @@ flow:
   - question: Q-0050
     then: flag
     bind:
-      of: derived:client_ip
-    rule:
-      'yes':
-      - internal
+      entity: derived:client_ip
   - question: Q-0047
     then: flag
     rule:
@@ -167,4 +161,4 @@ source:
   title: Web application firewall alert
 license: internal
 status: draft
-version: 3
+version: 4

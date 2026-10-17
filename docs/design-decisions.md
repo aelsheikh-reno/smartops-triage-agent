@@ -1,5 +1,7 @@
 # SmartOps Triage Agent: Design Decisions
 
+**Version 1 scope.** Version 1 builds and tests one SIEM adapter: Splunk ES. All lab tests and the first pilots run on Splunk. The design stays vendor-agnostic: nothing outside the Splunk adapter and Splunk recipes may depend on Splunk.
+
 Build status: built today are the question bank (`bank/`) and its offline gates and tools (`tools/`: validate, attacker-influence check, replay, review packet, SQL loader, runtime-bundle export). The intake, context-question, broker-question, onboarding and pilot documents (`docs/intake/`, `docs/broker-questions.md`, `docs/reuse-map.md`, `docs/assumptions.md`, `docs/pilot-terms.md`) describe designed, not built, components. Everything marked "(designed, not built)" is design only: agreed direction, not running software, and open to change when it is built and measured.
 
 ## 1. What triage is
@@ -31,7 +33,7 @@ Flow: SIEM alert → normalizer (one inbound adapter per SIEM) → normalized al
 
   A call outside the caller's profile is refused and logged. Use Case Manager reads (fact metadata, list usage, closure history) run under their own read-only profile (§27).
 
-SIEMs in scope: Splunk ES first. Then Microsoft Sentinel, Elastic Security, IBM QRadar, FortiSIEM and CrowdStrike Falcon Next-Gen SIEM. Nothing in the triage layer or the shared bank may assume one SIEM, its query language or its field names. Everything SIEM-specific lives in the inbound adapter and in the broker's per-customer recipes (§10), including its write recipes.
+SIEM adapters: Splunk ES in version 1 (see Version 1 scope above). Later: Microsoft Sentinel, Elastic Security, IBM QRadar, FortiSIEM and CrowdStrike Falcon Next-Gen SIEM. Nothing in the triage layer or the shared bank may assume one SIEM, its query language or its field names. Everything SIEM-specific lives in the inbound adapter and in the broker's per-customer recipes (§10), including its write recipes.
 
 ### Normalized alert v1
 The normalizer turns each SIEM's alert into one shape, `normalized_alert` v1, specified field by field in `docs/intake/normalized-alert-v1.md`. It starts from smartops-soc-app's `context_service/templates/normalized_seed.py` (branch `feature/normalized-seed-template`, commit `062d456`) and keeps all of its sections. Added for triage:
@@ -45,7 +47,7 @@ The normalizer turns each SIEM's alert into one shape, `normalized_alert` v1, sp
 
 ### Lessons carried over from smartops-soc-app
 Each is cited by file on smartops-soc-app `main` at commit `a2d0eb0`, with the commit that introduced it.
-- **Event time comes from the event, never the alert's creation time.** A Splunk notable's `_time` is when the correlation search ran, often minutes to an hour after the activity. The event time is ESCU's `firstTime`, which carries no offset and takes `_time`'s offset. `engine/src/smartops/context.py`, `notable_event_time()` (introduced in `786a32f`; the bug and the 9-minute gap on run `072fd610` are in `docs/analyst-bug-report.md` C6 and `docs/smartops-issues-report.md` P1). Each adapter names its own event-time field; the normalizer never falls back to the alert's creation time silently: it records which field it used.
+- **Event time comes from the event, never the alert's creation time.** A SIEM alert's creation time can trail the activity: in the version 1 SIEM, a Splunk ES notable's `_time` is when the correlation search ran, often minutes to an hour after the activity. The event time is ESCU's `firstTime`, which carries no offset and takes `_time`'s offset. `engine/src/smartops/context.py`, `notable_event_time()` (introduced in `786a32f`; the bug and the 9-minute gap on run `072fd610` are in `docs/analyst-bug-report.md` C6 and `docs/smartops-issues-report.md` P1). Each adapter names its own event-time field; the normalizer never falls back to the alert's creation time silently: it records which field it used.
 - **Dedup at intake.** ESCU rules run every 5 minutes over a 60-minute span with no throttle, so each event was raised about 12 times. `engine/src/smartops/context.py`, `notables_spl()` (`dedup search_name dest firstTime`, introduced in `ebc8e66`). The normalizer folds repeats on (rule ID, primary entity, event time) into one alert with `first_seen`, `last_seen` and `count`.
 - **Escape attacker-controlled values before they enter any query.** `engine/src/smartops/context.py`, `_spl_escape()` (introduced in `330d1bc`). Recipes go further: runtime values are bound as parameters, never concatenated (§10). Every adapter escapes in its own query language.
 
@@ -72,6 +74,7 @@ Starting set:
 | C-05 | Asset priority | critical, high, medium or low |
 | C-06 | Crown-jewel asset | yes/no |
 | C-07 | Privileged user | yes/no |
+| C-08 | Asset class | server, workstation, network, other or unknown |
 
 They feed the entity guard (§6), Q0 (§14) and priority (§20). They never close an alert on their own: they can only raise scrutiny or set priority.
 
@@ -93,7 +96,7 @@ Entity guard: it runs once per entity per window, before Q0.
 - If the entity has an open escalation, or at least N alerts (parameter, default 3) from at least 2 different detections in the window, every close on that entity becomes a flag, and the entity is marked "hot" for the window.
 - It is raise-only: it can turn closes into flags, never the reverse. Each alert's flow still runs, so its answers and evidence reach the analyst.
 - A hot entity raises the alert's priority (§20).
-- It reads only broker answers: C-01 (open escalation) and C-02 (alerts and distinct detections in the window).
+- It reads only broker answers: C-01 (open escalation), C-02 (alerts and distinct detections in the window) and C-08 (asset class, which picks N and the window).
 
 Noisy entities (designed, not built):
 - A pair (entity, detection) may be marked routine. A routine alert does not count toward N.
@@ -102,7 +105,7 @@ Noisy entities (designed, not built):
   - alerts of high or critical severity
   - any detection not on that entity's routine list
   - any alert on an entity with an open escalation
-- N and the window may be set per entity class (for example domain controllers, build servers, user workstations), as parameters with bounds (§13).
+- N, the detection count and the window are set per entity class from C-08 (server, workstation, network, other), as parameters with bounds and direction tags (`by_entity_class` in `bank/parameters.yaml`; §13). Global default: N = 3 from 2 detections in 10 minutes, the same for every class until #18 measures otherwise. An unanswered asset class counts as a server.
 - Metric: the share of entities hot per day (§24). Issue #18 measures it on replayed bursts before the defaults are fixed.
 
 Risk-based alerting (for example Splunk ES risk notables) is entity-level by nature, but its flows are deferred: most customers don't use it (`docs/assumptions.md`). Batch 2 is authentication and identity detections only.
@@ -163,7 +166,7 @@ Every question is answerable by one lookup against:
 - The normalized alert itself (§4), as a broker source (`alert.class`, `alert.measure`)
 
 ### Capabilities and the Tool Broker (designed, not built)
-The Triage agent never knows which tools a customer has. Each question declares exactly one capability (`bank/capabilities.yaml`, e.g. `list.lookup`, `entity.baseline`, `org.prevalence`, `change.window`, `file.signer`, `file.reputation`). The bank holds no tool names or SPL.
+The Triage agent never knows which tools a customer has. Each question declares exactly one capability (`bank/capabilities.yaml`, e.g. `list.lookup`, `entity.baseline`, `org.prevalence`, `change.window`, `file.signer`, `file.reputation`). The bank holds no tool names, no query language and no SIEM product terms.
 
 Flow of one question:
 1. The Triage agent sends the question to the Tool Broker: capability plus inputs, with the windows and lookbacks taken from the parameter table (§13).
@@ -190,17 +193,21 @@ Answer contract (`bank/capabilities.yaml`): the Tool Broker returns one typed va
 
 Every question asked of the broker follows `docs/broker-questions.md`: a bank ID (C-xx or Q-xxxx), one entity, fingerprint or alert inside the caller's scope profile, one typed answer with a status and provenance, no threshold, read-only, a frozen recipe per source, and raw evidence kept as a link.
 
-Under the `triage` profile the Tool Broker enforces: entities named in the alert only; fixed windows (the 24h look-back triage window for event lookups; baselines and prevalence use their declared lookbacks and return counts, not raw events); read-only; a per-call timeout (timeout = unavailable); at most 6 calls per alert including Q0, counted on the worst single path through the flow (steps plus the guards of the closing step). Resolving a file's hash or signer inside a lookup is the broker's job and does not count against the budget.
+Under the `triage` profile the Tool Broker enforces: entities named in the alert only; fixed windows (the 24h look-back triage window for event lookups; baselines and prevalence use their declared lookbacks and return counts, not raw events); read-only; a per-call timeout (timeout = unavailable); at most 6 calls per alert including Q0, counted on the worst single path through the flow (steps plus the guards of the closing step). Resolving a file's hash or signer inside a lookup is the broker's job and does not count against the budget. Lookups in the platform's own context store (customer lists such as internal networks or sanctioned tools) are cached per entity like the context questions and do not count either; calls to the customer's tools do.
 
 ### Sources (designed, not built)
 - Any capability may be answered from the SIEM, from the EDR's or another tool's API directly, or through a SOAR action.
+- **Source authority.** The SIEM alert only starts triage. For each capability the broker answers from the authoritative source set at onboarding, usually the tool's own API. The SIEM is authoritative only for alert history and log searches (`alert.history`, `entity.baseline`, `org.prevalence`, `traffic.denied_only` and the other event-search capabilities; `source_authority` in `bank/capabilities.yaml`). A fallback source is used only when the authoritative one is unavailable or not granted, and its unverified answers can only raise scrutiny. `validate` rejects a capability whose authoritative source is the SIEM outside that list.
 - Each capability has one authoritative source per customer, set at onboarding, and a fallback order. If two sources disagree, the answer is unknown and the alert flags; disagreement is never resolved by picking one.
+- Endpoint run status (Q-0049, `endpoint.run_status`): the authoritative source is the endpoint product's API (for Defender, the alert evidence in its security API). The broker finds the product's alert by the vendor alert ID the normalizer filled (`reporting_control.vendor_alert_id`); if that is missing, by device (`reporting_control.endpoint_device`), file hash and a bounded time window (`edr_alert_match_window_minutes`). No match, or several, answers unknown. The run-status value table belongs to the API recipe. The SIEM's copy of the product's alert (for Defender, event log 1116/1117) is a fallback only, used when the API is unavailable or not granted; it answers unknown unless the row that matched is verified pre_execution, and no fallback row is verified today. The same holds for CrowdStrike and every other endpoint product: the vendor API is authoritative, the SIEM copy is a fallback, and the rows are unverified until the lab tests (#20 for Defender, #9 for CrowdStrike).
 - SOAR is read-only. The broker may call only actions on an approved read-only list (lookups, enrichments); any other action is refused and logged. Containment and enforcement actions are never called by the broker.
 - Tool API limits are respected: per-entity caching (the measurement cache, §21), batching, and a concurrency cap per source (parameter).
 - Recipes and their known-answer tests exist per source (§10). Attacker-influence ratings are per source profile and still apply (§14): the same capability may rate lower from a direct API than from a forwarded copy in the SIEM.
 - The endpoint specialist covers Defender, CrowdStrike, Kaspersky and other EDRs, through the MCP gateway or read-only SOAR actions.
 
 Context-store write-back goes only through `list.propose_update`. Reduce-scrutiny changes (allowlist additions) need human approval with an owner and an expiry. Increase-scrutiny changes (watchlists, removing an allowlist entry) may be automatic; removing an allowlist entry must notify the fact's owner. Enforcement blocks need approval.
+
+Vendor-specific content (query languages, SIEM product terms, CIM, ECS and vendor field names, vendor API calls) lives only in adapter folders, broker recipes and vendor value tables. Core, triage logic, questions, flows, capabilities and parameters never contain it. `validate` enforces this with the vendor-leak gate: it scans questions, context questions, detections' flows and required roles, capabilities, parameters and context rules for query-language tokens, SIEM product terms and schema field names, and allows them only in recipes, value tables, adapters and offline metadata (`data_source`, the use-case catalog).
 
 Vendor neutrality: the bank holds no vendor or product names. Only offline metadata (`data_source`, `sigma_logsource`, `sigma_refs`, `source`, `license`) may name them, plus seed data under `bank/seeds/`, which is loaded into the customer's context store at onboarding and never reaches the agent. Question text describes what to check about an entity, never where or with which tool. The Triage agent receives a runtime bundle (`tools/export_bundle.py`) built without the offline metadata; the validator fails if the bundle contains an offline key or a vendor name. Recipe templates (§10) may name tools; they ship separately from the runtime bundle.
 
@@ -231,7 +238,7 @@ Value tables: a small local model translates raw vendor values (for example an a
 A hard gate before triage starts, and before Shadow in onboarding. Triage on a broken foundation produces confident wrong answers, so the foundation is checked first. The checks are run by the SIEM specialist inside the Tool Broker, read-only, under the `detection_engineering` scope profile (rule-wide and historical, §4).
 
 Per SIEM:
-- Splunk: CIM compliance per rule; CIM data models enabled and accelerated, with acceleration completeness; Enterprise Security asset and identity lookups populated
+- Splunk (version 1): CIM compliance per rule; CIM data models enabled and accelerated, with acceleration completeness; Enterprise Security asset and identity lookups populated
 - Microsoft Sentinel: entity mappings on the analytics rules; asset watchlists
 - Elastic: ECS compliance; asset data
 - QRadar: the asset database; the network hierarchy
@@ -242,7 +249,7 @@ Common to every SIEM:
 - search or query concurrency headroom (feeds the throughput limits, §21)
 - EDR agent coverage across hosts
 - entity resolution quality: the share of alerts mapped to an asset ID and to an identity (§6)
-- which EDR feed exists: the alert API, or event logs in the SIEM
+- read-only API access to each EDR granted (yes/no), with the API's rate limits. Without it, the detections that need endpoint answers (for example the AV/EDR family's run status) are capped at Recommend: the SIEM copy is a fallback that can only raise
 - field coverage per capability (for example, the share of process events that carry a hash), ingestion delay and time sync
 - whether risk-based alerting is in use
 - asset-ID availability in AV and EDR alerts (without it, AV precedents rate medium)

@@ -3,10 +3,13 @@
 # match: {<raw property>: <value or list>} compares case-insensitively; {pattern: <regex>} searches the class's role values joined by a space.
 # May name products: it is recipe data, not bank logic, and never enters the runtime bundle. Each row is verified or not;
 # a detection family whose classes have unverified rows for a customer's product is capped at Recommend for that customer.
+# source: edr_api (the product's own API: authoritative for endpoint.run_status), siem_copy (the product's alert as copied into the
+# SIEM: fallback only; an unverified fallback row can only raise), or alert (values read from the normalized alert itself).
 vendor: Cisco
 product: Secure Firewall (intrusion events)
+source: alert
 feed: Intrusion events, Classification description
-source:
+references:
 - tools/replay.py SNORT_CLASS (previous replay mapping)
 license: internal
 classes:

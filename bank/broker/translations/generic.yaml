@@ -98,8 +98,8 @@ classes:
         email.delivery_stage: pre_delivery
       value: quarantined
       kind: unverified
-      questions: [Q-0074, Q-0062]
-      note: 'An email or DLP quarantine before the user received the item: it may support a close. Limited to the email and DLP questions; an endpoint question never reads it.'
+      questions: [Q-0074]
+      note: 'An email quarantine before the user received the message: it may support a close. Limited to the email question; an endpoint or DLP question never reads it.'
     - id: control_action.quarantined_post_delivery
       match:
         value:
@@ -111,7 +111,7 @@ classes:
         email.delivery_stage: post_delivery
       value: unknown
       kind: ambiguous
-      questions: [Q-0074, Q-0062]
+      questions: [Q-0074]
       note: 'A quarantine or purge of a message already delivered: the user may have opened it, so it does not say the threat was stopped. Ambiguous: unknown in every mode.'
     - id: control_action.quarantined_stage_unknown
       match:
@@ -122,8 +122,40 @@ classes:
         - purge
       value: unknown
       kind: ambiguous
-      questions: [Q-0074, Q-0062]
+      questions: [Q-0074]
       note: 'A quarantine with no delivery stage does not say whether the user received the item first. Ambiguous: unknown in every mode.'
+    # DLP has its own stage (round 6): whether the data had left before the control acted, separate from the email delivery stage.
+    - id: control_action.dlp_quarantined_before_egress
+      match:
+        value:
+        - quarantined
+        - quarantine
+        dlp.egress_stage: before_egress
+      value: quarantined
+      kind: unverified
+      questions: [Q-0062]
+      note: 'A DLP quarantine before the data left. Still a pending action for Q-0062 (a release would undo it), so it answers unknown there through dlp_pending_values; limited to the DLP question.'
+    - id: control_action.dlp_quarantined_after_egress
+      match:
+        value:
+        - quarantined
+        - quarantine
+        - removed
+        dlp.egress_stage: after_egress
+      value: unknown
+      kind: ambiguous
+      questions: [Q-0062]
+      note: 'A DLP quarantine or removal after the data already left: it does not say the data was stopped. Ambiguous: unknown in every mode.'
+    - id: control_action.dlp_quarantined_stage_unknown
+      match:
+        value:
+        - quarantined
+        - quarantine
+        - removed
+      value: unknown
+      kind: ambiguous
+      questions: [Q-0062]
+      note: 'A DLP quarantine with no egress stage does not say whether the data left first. Ambiguous: unknown in every mode.'
     - id: control_action.held
       match:
         value:

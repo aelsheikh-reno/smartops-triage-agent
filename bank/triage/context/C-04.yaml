@@ -1,5 +1,6 @@
 id: C-04
-text: How many audited closes, and how many independent analyst closes, does this fingerprint have in the validity window?
+text: How many audited closes, and how many independent human closes (manual closes in Shadow and analyst overrides, by distinct analysts), does this fingerprint have in the validity window?
+evidence: human_evidence
 kind: context
 inputs:
   fingerprint: alert:fingerprint
@@ -22,4 +23,4 @@ derived_from:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

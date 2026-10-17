@@ -1,8 +1,13 @@
 """Vendor and product names that must not appear in bank logic.
 
-Matched case-insensitively on word boundaries. Platform names that describe what is
-monitored (Windows, Linux, Active Directory, Kerberos) are allowed; names of products
-and companies that could be used to answer a question are not.
+Matched case-insensitively on word boundaries. The gate's definition (round 6):
+- Allowed: operating-system concepts, that is what is monitored and how the OS records it: platform names (Windows, Linux,
+  macOS), OS components and mechanisms (LSASS, the registry, the event log, services, scheduled tasks, shadow copies,
+  PowerShell, WMI, WinRM, RDP, SMB), directory concepts (Active Directory, Kerberos, local Administrators) and standards
+  (DMARC, SPF, DKIM, RFC 9110). A question about an OS concept says what to check, not where or with which tool.
+- Not allowed: names of companies and products that could be used to answer a question (SIEMs, endpoint, network, email,
+  identity, cloud and ITSM products), including the major platform vendors themselves (Microsoft, Google, Amazon, Apple...):
+  write "the operating-system vendor" or "the cloud provider" instead.
 """
 import re
 
@@ -39,6 +44,9 @@ NAMES = [
     "VirusTotal", "AbuseIPDB", "GreyNoise", "Recorded Future", "ThreatConnect", "MISP", "AlienVault",
     # misc products seen in sources
     "VMware", "Webex", "Steam", "Visual Studio Code", "VS Code",
+    # major platform and cloud vendors (round 6, §5.5): companies, not OS concepts
+    # (platforms that are monitored, such as Windows, Azure or AWS, stay allowed like any OS concept)
+    "Microsoft", "Google", "Alphabet", "Amazon", "Apple", "IBM", "Oracle", "Red Hat", "Canonical", "SUSE", "Salesforce",
 ]
 PATTERN = re.compile(r"(?<![A-Za-z0-9])(" + "|".join(re.escape(n) for n in sorted(NAMES, key=len, reverse=True)) + r")(?![A-Za-z0-9])", re.I)
 

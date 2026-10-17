@@ -2,6 +2,9 @@ id: D-0001
 name: Add or Set Antivirus Exclusion via MpPreference
 family: endpoint
 alert_type: analytic
+max_mode: recommend
+max_mode_reason: Adds an antivirus exclusion, which weakens a security control; a wrong close leaves the gap open (round 6, S5).
+auto_excluded_reason: destructive_or_anti_forensic
 techniques:
 - T1685
 required_roles:
@@ -67,11 +70,11 @@ flow:
   on_unknown: flag
 - step: 5
   question: Q-0004
-  on_yes: close:benign_true_positive:approved_change
+  on_yes: flag
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 6
+version: 7
 parameters:
   precedent_validity_hours: 72
 derived_from:

@@ -2,6 +2,9 @@ id: D-0029
 name: Web proxy or URL-filter block
 family: network
 alert_type: control
+max_mode: recommend
+max_mode_reason: "No true-positive replay data: the shipped proxy datasets hold allowed requests only (round 6, §5.2)."
+auto_excluded_reason: no_tp_replay_data
 techniques:
 - T1071.001
 - T1189
@@ -146,7 +149,7 @@ flow:
   - question: Q-0034
     then: escalate
 status: draft
-version: 3
+version: 4
 derived_from:
   library: bank
   rule: vendor:proxy_block

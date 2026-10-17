@@ -65,6 +65,7 @@ reason_codes:
 - code: provisioning_service_account
   disposition: benign_true_positive
   description: Account change made by a provisioning service account.
+  retired: Not used since round 6 (S6); the actor account on a list was its only hard-to-fake yes, which can no longer carry a close.
 - code: trusted_signed_software
   disposition: benign_true_positive
   description: Acting binary is trusted-signed and not a LOLBin, script host or dump tool.
@@ -74,6 +75,7 @@ reason_codes:
 - code: signature_not_applicable
   disposition: mitigated_true_positive
   description: Recent vulnerability data shows the target is not affected by the signature's exploit.
+  retired: Not used since round 6 (S4); the close needs the attempt blocked, and the step that asks is reached only when the control did not block it.
 - code: contained_without_interaction
   disposition: mitigated_true_positive
   description: Reported message contained and no recipient clicked or opened it.
@@ -122,6 +124,12 @@ reason_codes:
 - code: context_unknown
   disposition: flag
   description: A context question (C-01…C-08) the outcome depends on is unknown or its source is unavailable. The alert cannot close on anything that depends on it and flags; the flag names the C-ID. Missing context never escalates by itself.
+- code: severity_unmapped
+  disposition: flag
+  description: The SIEM's severity for the alert has no entry in the normalized severity map, so no severity comparison (C-02, C-03, Q0, the entity guard) can run. The alert flags; the normalizer never guesses a level (round 6, §3).
+- code: entity_hot
+  disposition: flag
+  description: The entity turned hot (entity guard) after a close on it was written inside the window; the close is reopened as a flag (round 6, S1). Raise-only.
 - code: entity_missing
   disposition: flag
   description: A role the detection requires (required_roles, or the precedent entity) could not be filled by the normalizer. The alert flags, and the normalizer opens a fix ticket for the rule's entity mapping or field extraction. It never guesses an entity.

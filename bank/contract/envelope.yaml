@@ -4,7 +4,7 @@ ids:
   alert_id: 'the SIEM plus the source alert ID (<siem>:<source alert id>); the same alert arriving twice is deduplicated, not triaged twice'
   run_id: 'a UUID, unique per triage run of one alert; a re-triage gets a new run_id linked to the same alert_id'
   entity_window_id: 'one per entity grouping window; the context questions for that window carry it'
-  request_id: '<run_id or entity_window_id>:<step>:<question id>:<attempt>; unique per question sent. A retry of the same request reuses it; attempt grows only when the Triage agent deliberately asks again'
+  request_id: '<run_id or entity_window_id>:<step>:<question id>:<attempt>; unique per question sent. The attempt number grows only when the Triage agent deliberately asks the question again (a new request, for example after source_unavailable); a transport retry of the same request reuses the request_id unchanged'
   measurement_id: 'one per broker measurement; a cached answer reused by several runs keeps its measurement_id, and each answer records which measurement it came from'
 request:
   required: [request_id, run_or_window, question_id, scope_profile, deadline]
@@ -12,10 +12,26 @@ request:
 answer:
   required: [request_id, run_or_window, measurement_id, answer, status, trust, provenance]
   run_or_window: echoes the request's run_id or entity_window_id
+defer:   # the broker's router cannot take the request now (overload or rate limiting): the request waits, it is not answered
+  required: [request_id, run_or_window, reason, retry_after_seconds]
+  reasons: [overload, rate_limited]
+deadline:
+  parameter: question_timeout_seconds
+  on_miss: source_unavailable   # never unknown: a missed deadline says nothing about the entity, and never supports a close
+defer_rule:
+  max_wait_parameter: defer_max_wait_seconds
+  order: alert priority, then arrival   # waiting requests are served in this order when capacity returns
+  effect: 'the request waits; its deadline moves to the first defer plus defer_max_wait_seconds and never further. An answer by then is accepted as usual.'
+  past_max_wait: source_unavailable
+cache:
+  cached_statuses: [answered, unknown, sources_disagree]   # completed measurements only
+  never_cached: [source_unavailable]
+  idempotent: 'a repeated request_id (a transport retry) returns the cached completed measurement, with its measurement_id, and never measures twice. source_unavailable is never cached: a retry of the same request_id measures again, under a new measurement_id.'
 rules:
 - The Triage agent accepts an answer only if it matches a pending request_id for that run (or window). Mismatches are rejected and logged.
-- Each question has a timeout (parameter question_timeout_seconds, bounded). No answer by the deadline gives status unknown, and the flow continues.
+- Each question has a deadline (parameter question_timeout_seconds, bounded; a longer deadline reduces scrutiny). No answer by the deadline gives status source_unavailable, which never supports a close; the alert flags.
+- When the broker defers a request (overload or rate limiting), the request waits in priority order and is not answered unknown. The wait is bounded by defer_max_wait_seconds; past it the status is source_unavailable.
 - A late answer is logged and discarded, never applied.
-- Retries reuse the request_id. The broker treats a repeated request_id as the same request (idempotent) and never measures twice.
+- A transport retry reuses the request_id. The broker treats a repeated request_id as the same request and returns the same completed measurement; it never caches source_unavailable, so a retry after it measures again. The attempt number in request_id grows only when the Triage agent deliberately asks again.
 - The decision log is keyed by run_id and lists every request_id and measurement_id. The SIEM write-back carries run_id.
 - Context answers are shared through entity_window_id. Each run records which context measurements it used.

@@ -29,7 +29,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import bank as B  # noqa: E402
 
 OK = ("none", "low")
-NEVER_SOLE = {"identity.groups"}
+def actor_identity(b, qid):
+    """An answer about who performed the action: a capability tagged actor_identity (group membership, the implementer of a
+    change) or a question tagged actor_identity (an actor account on a list, such as a provisioning service account)."""
+    q = b["questions"][qid]
+    return bool(q.get("actor_identity") or b["capability_by_name"].get(q["capability"]["name"], {}).get("actor_identity"))
 
 
 def check(b, d, profile="direct"):
@@ -38,7 +42,7 @@ def check(b, d, profile="direct"):
         if not outcome.startswith("close"):
             continue
         yes = B.yes_ratings(b, path, outcome, guards, profile)
-        strong = [qid for qid, r in yes if r in OK and b["questions"][qid]["capability"]["name"] not in NEVER_SOLE]
+        strong = [qid for qid, r in yes if r in OK and not actor_identity(b, qid)]
         results.append((bool(strong), path, outcome, yes))
     return results
 

@@ -128,7 +128,27 @@ def load():
         "techniques": {k: _provenance(v) for k, v in _by_id("triage/techniques/T*.yaml").items()},
         "pilot": _load(os.path.join(INTAKE, "pilot.yaml")),
         "use_cases": (_load(use_cases_path) or {}).get("use_cases", []) if os.path.exists(use_cases_path) else [],
+        "auto_exclusions": (_optional(os.path.join(TRIAGE, "auto_exclusions.yaml")).get("reasons") or {}),
+        "evidence": _optional(os.path.join(CONTRACT, "evidence.yaml")),
+        "severity": _optional(os.path.join(CONTRACT, "severity.yaml")),
+        "severity_map": _optional(os.path.join(INTAKE, "severity-map.yaml")),
+        "proposals": _optional(os.path.join(TRIAGE, "proposals.yaml")),
     }
+
+
+def _optional(path):
+    return (_load(path) or {}) if os.path.exists(path) else {}
+
+
+def auto_excluded(d, st=None):
+    """The auto_excluded_reason codes of a detection (max_mode recommend) or of one of its close steps (bank/triage/auto_exclusions.yaml)."""
+    x = (st if st is not None else d).get("auto_excluded_reason")
+    return [] if not x else [x] if isinstance(x, str) else list(x)
+
+
+def auto_eligible_path(d, path):
+    """A close path can close in Auto only if the detection is not capped at Recommend and no step on it is auto-excluded."""
+    return d.get("max_mode") != "recommend" and not any(auto_excluded(d, st) for st, _ in path if st["on_" + _].startswith("close"))
 
 
 ENVELOPE_REQUEST = ("request_id", "question_id", "scope_profile", "deadline")
@@ -157,9 +177,60 @@ def accept_answer(pending, msg, received_at):
     for k in ("run_id", "entity_window_id"):
         if req.get(k) != msg.get(k):
             return False, f"{k.replace('_', ' ').replace('entity window id', 'entity_window_id').replace('run id', 'run_id')} does not match the pending request"
-    if str(received_at) > str(req["deadline"]):
+    if _ts(received_at) > _ts(req["deadline"]):
         return False, "late"
     return True, "accepted"
+
+
+def _ts(t):
+    from datetime import datetime
+    return datetime.fromisoformat(str(t).replace("Z", "+00:00")).timestamp()
+
+
+def resolve_request(b, request, events):
+    """What the Triage agent records for one request (contract/envelope.yaml deadline, defer_rule): the status of the
+    accepted answer, or source_unavailable when no answer was accepted by the effective deadline. events: [{at, defer: {...}}
+    or {at, answer: {...}}] in time order. A defer (overload or rate limiting) makes the request wait: its deadline moves to
+    the first defer plus defer_max_wait_seconds and never further; it is never answered unknown.
+    Returns (status, reason)."""
+    env = b["contract"]["envelope"]
+    deadline, first_defer = _ts(request["deadline"]), None
+    max_wait = float(param_value(b, env["defer_rule"]["max_wait_parameter"]))
+    for ev in events:
+        at = _ts(ev["at"])
+        if "defer" in ev:
+            if at > deadline:
+                break
+            if (ev["defer"].get("reason") not in env["defer"]["reasons"]):
+                return env["deadline"]["on_miss"], f"defer reason {ev['defer'].get('reason')!r} is not overload or rate limiting"
+            first_defer = at if first_defer is None else first_defer
+            deadline = first_defer + max_wait
+            continue
+        ok, why = accept_answer({request["request_id"]: dict(request, deadline=_iso(deadline))}, ev["answer"], ev["at"])
+        if ok:
+            return ev["answer"]["status"], "accepted"
+    if first_defer is not None:
+        return env["defer_rule"]["past_max_wait"], "deferred past defer_max_wait_seconds"
+    return env["deadline"]["on_miss"], "no answer by the deadline"
+
+
+def _iso(ts):
+    from datetime import datetime, timezone
+    return datetime.fromtimestamp(ts, timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def cache_problems(b, served):
+    """Check the broker's answers to repeated sends of one request_id (transport retries) against the cache rule
+    (contract/envelope.yaml cache): after a completed measurement a retry returns the same measurement_id; after
+    source_unavailable a retry measures again, under a new measurement_id. served: [{status, measurement_id}]."""
+    cache = b["contract"]["envelope"]["cache"]
+    out = []
+    for prev, cur in zip(served, served[1:]):
+        if prev["status"] in cache["cached_statuses"] and cur["measurement_id"] != prev["measurement_id"]:
+            out.append(f"measured twice: {prev['status']} {prev['measurement_id']} is a completed measurement, the retry must return it")
+        if prev["status"] in cache["never_cached"] and cur["measurement_id"] == prev["measurement_id"]:
+            out.append(f"{prev['status']} was cached: the retry returned {prev['measurement_id']} instead of measuring again")
+    return out
 
 
 def source_ids(b, libraries=None):
@@ -465,23 +536,92 @@ def apply_rule(b, rule, value, atype, detection=None):
     raise ValueError(atype)
 
 
+def severity_rank(b, level):
+    """Position of a normalized severity (bank/contract/severity.yaml) on the scale, or None for anything else (raw or unmapped)."""
+    scale = (b.get("severity") or {}).get("scale") or []
+    return scale.index(level) if level in scale else None
+
+
 def context_rule(b, rule, answers):
-    """Evaluate a Triage-side rule over cached context answers ({"C-06": False, "C-08": "workstation"}), in three values:
-    True, False, or None when the result depends on a context answer that is unknown (missing, or None for source unavailable).
-    None makes the step or guard answer unknown, which flags (context_unknown); missing context never escalates."""
+    """Evaluate a Triage-side rule over cached context answers ({"C-06": False, "C-08": "workstation", "C-02": {...}}), in three
+    values: True, False, or None when the result depends on a context answer that is unknown (missing, or None for source
+    unavailable). None makes the step or guard answer unknown, which flags (context_unknown); missing context never escalates.
+    answers may also hold _mode (shadow, recommend, auto), _severity (this alert's normalized severity), _detection and
+    _customer (for parameter values). A key C-xx.component reads one component of a count answer. Operators: in, gte, lte,
+    not_above (normalized severity only), sum_of_severities (adds the day_detections_<severity> components) and modes (the
+    condition holds only in those modes; elsewhere it is false)."""
     if "any" in rule:
         got = [context_rule(b, r, answers) for r in rule["any"]]
         return True if True in got else (None if None in got else False)
     if "all" in rule:
         got = [context_rule(b, r, answers) for r in rule["all"]]
         return False if False in got else (None if None in got else True)
-    (cid, want), = rule.items()
+    (key, want), = rule.items()
+    cid, _, comp = key.partition(".")
+    if isinstance(want, dict) and "modes" in want and answers.get("_mode", "recommend") not in want["modes"]:
+        return False
     got = answers.get(cid)
     if got is None or got == "unknown":
         return None
-    if isinstance(want, dict) and "in" in want:
+    if comp and not (isinstance(want, dict) and "sum_of_severities" in want):
+        got = got.get(comp) if isinstance(got, dict) else None
+        if got is None:
+            return None
+    pv = lambda v: param_value(b, v["param"], answers.get("_detection"), answers.get("_customer"), answers.get("_entity_class")) if isinstance(v, dict) and "param" in v else v
+    if not isinstance(want, dict):
+        return got == want
+    if "in" in want:
         return got in want["in"]
-    return got == want
+    if "not_above" in want:
+        if want["not_above"] != "this_alert_severity":
+            raise ValueError(f"not_above compares with this_alert_severity only: {want}")
+        if got == "none":
+            return True
+        mine, other = severity_rank(b, answers.get("_severity")), severity_rank(b, got)
+        return None if mine is None or other is None else other <= mine
+    if "sum_of_severities" in want:
+        if not isinstance(got, dict):
+            return None
+        levels = pv(want["sum_of_severities"])
+        if any(severity_rank(b, lv) is None for lv in levels):
+            raise ValueError(f"sum_of_severities lists a value outside the normalized scale: {levels}")
+        parts = [got.get(f"{comp}_{lv}") for lv in levels]
+        if None in parts:
+            return None
+        got = sum(parts)
+    if "gte" in want:
+        return float(got) >= float(pv(want["gte"]))
+    if "lte" in want:
+        return float(got) <= float(pv(want["lte"]))
+    raise ValueError(f"unknown context rule operator: {want}")
+
+
+def entity_hot(b, answers):
+    """The entity guard (bank/triage/context_rules.yaml entity_guard): True (hot), False, or None (unknown: closes flag)."""
+    return context_rule(b, b["context_rules"]["entity_guard"]["hot_when"], answers)
+
+
+def q0(b, answers):
+    """Q0 from the context answers (bank/triage/context_rules.yaml q0)."""
+    return context_rule(b, b["context_rules"]["q0"]["yes_when"], answers)
+
+
+def human_evidence(b, closures, analysts_distinct=True):
+    """C-04's components from a list of recorded closes ({kind, analyst, ...}), by the one definition in
+    bank/contract/evidence.yaml: audited closes, and independent human closes (manual closes in Shadow and analyst
+    overrides, by distinct analysts). Kinds the definition lists under never (accepted recommendations, Auto closes,
+    precedent matches) are not counted."""
+    he = b["evidence"]["human_evidence"]
+    counted = [c for c in closures if c["kind"] in he["counts"] and c["kind"] not in he["never"]]
+    audited = sum(1 for c in counted if c["kind"] == "audited_close")
+    human = [c for c in counted if c["kind"] in ("manual_shadow_close", "analyst_override")]
+    return {"audited": audited, "independent_human": len({c.get("analyst") for c in human}) if analysts_distinct else len(human)}
+
+
+def norm_value(v):
+    """How a raw value is compared with a translation row: case-insensitive, surrounding space and trailing periods
+    trimmed, inner whitespace collapsed ("Prevention, process killed." matches "Prevention, process killed")."""
+    return re.sub(r"\s+", " ", str(v if v is not None else "")).strip().rstrip(".").strip().lower()
 
 
 def classify(b, cls, values, product_tables=(), answers=None, question=None):
@@ -510,8 +650,8 @@ def classify(b, cls, values, product_tables=(), answers=None, question=None):
                 ok = bool(joined) and re.search(m["pattern"], joined, re.I) is not None
             else:
                 for k, want in m.items():
-                    got = (first if k == "value" else str(values.get(k, "") or "")).lower()
-                    if got not in {str(w).lower() for w in (want if isinstance(want, list) else [want])}:
+                    got = norm_value(first if k == "value" else values.get(k, ""))
+                    if got not in {norm_value(w) for w in (want if isinstance(want, list) else [want])}:
                         ok = False
             if ok:
                 return r["value"], dict(r, table=tname)
@@ -634,7 +774,34 @@ def classify_effective(b, cls, values, product_tables=(), answers=None, ctx=None
     return row_answer(b, cls, v, row, answers, ctx)
 
 
-def run_status(b, api, siem_copy, ctx=None):
+def alerted_evidence(b, alert, tables, sha256):
+    """The raw run-status properties of the alerted file (S7). A product table with an evidence spec (Defender) lists the
+    evidence items of the vendor alert: the broker picks the item whose file hash is the alerted file's, never the first
+    item; none or several such items answer unknown. Each property is read only from the evidence types the spec allows
+    (Defender: detectionStatus from the file, process and registry evidence subtypes; remediationStatus from the base type,
+    so any item). A table without an evidence spec reads the alert's own properties. Returns (raw dict or None, reason)."""
+    spec = next((b["value_tables"][t].get("evidence") for t in tables if (b["value_tables"].get(t) or {}).get("evidence")), None)
+    if not spec:
+        return alert, "alert properties"
+    items = [e for e in alert.get("evidence") or [] if sha256 and any(
+        str(_dig(e, path) or "").lower() == str(sha256).lower() for path in spec["hash_paths"].get(e.get("type"), []))]
+    if len(items) != 1:
+        return None, f"{len(items)} evidence items for the alerted file hash"
+    item = items[0]
+    raw = {}
+    for prop, types in spec["properties"].items():
+        if types == "base" or item.get("type") in types:
+            raw[prop] = item.get(prop)
+    return raw, f"evidence item {item.get('type')}"
+
+
+def _dig(d, path):
+    for k in path.split("."):
+        d = (d or {}).get(k) if isinstance(d, dict) else None
+    return d
+
+
+def run_status(b, api, siem_copy, ctx=None, sha256=None):
     """endpoint.run_status as the Tool Broker answers it.
     api: None when the endpoint API is unavailable or not granted; otherwise {"tables": [...], "matches": [raw evidence dicts]}
          (an empty or multiple match list answers unknown). siem_copy: {"tables": [...], "raw": {...}} or None.
@@ -643,7 +810,10 @@ def run_status(b, api, siem_copy, ctx=None):
     if api is not None:
         if len(api.get("matches") or []) != 1:
             return "unknown", "checked", "edr_api: no single matching alert"
-        v, trust, prov = classify_effective(b, "run_status", api["matches"][0], api.get("tables") or [], answers="endpoint.run_status", ctx=ctx)
+        raw, why = alerted_evidence(b, api["matches"][0], api.get("tables") or [], sha256)
+        if raw is None:
+            return "unknown", "checked", f"edr_api: {why}"
+        v, trust, prov = classify_effective(b, "run_status", raw, api.get("tables") or [], answers="endpoint.run_status", ctx=ctx)
         return v or "unknown", trust, prov
     if siem_copy:
         v, trust, prov = classify_effective(b, "run_status", siem_copy.get("raw") or {}, siem_copy.get("tables") or [], answers="endpoint.run_status", ctx=ctx)

@@ -4,7 +4,7 @@ tests: BE-0007
 attacker_influence:
   rating: low
   reason: OS-verified code signature; dump-capable signed binaries are excluded.
-notes: Gate on the baseline closure. Signer trust is not proof of benign intent; Microsoft-signed dump tools are excluded. Seed signers are unverified until onboarding.
+notes: Gate on the baseline closure. Signer trust is not proof of benign intent; dump tools signed by the operating-system vendor are excluded. Seed signers are unverified until onboarding.
 derived_from:
   source:
   - elastic/detection-rules rules/windows/credential_access_lsass_openprocess_api.toml (signed with valid digital signatures)
@@ -15,7 +15,7 @@ derived_from:
 text_origin: original
 legal_review: false
 status: draft
-version: 3
+version: 4
 kind: triage
 inputs:
   entity: entity:process

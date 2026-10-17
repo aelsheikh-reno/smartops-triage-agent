@@ -35,3 +35,40 @@ answers:
   reason: no pending request
   received_at: '2026-10-17T10:00:05Z'
   message: {request_id: 7f3c1e0a-run:3:Q-0028:1, run_id: 7f3c1e0a-run, measurement_id: m-904, answer: low_risk, status: answered, trust: not_checked, provenance: {source: alert}}
+# Request outcomes over time (contract/envelope.yaml deadline and defer_rule). validate runs each through the resolution
+# rule; expect is the status the Triage agent records. defer_max_wait_seconds is 300 by default.
+sequences:
+- name: no answer by the deadline
+  request: {request_id: 7f3c1e0a-run:4:Q-0028:1, run_id: 7f3c1e0a-run, question_id: Q-0028, scope_profile: triage, deadline: '2026-10-17T10:00:10Z'}
+  events: []
+  expect: source_unavailable
+- name: deferred for rate limiting, answered inside the maximum wait
+  request: {request_id: 7f3c1e0a-run:4:Q-0028:1, run_id: 7f3c1e0a-run, question_id: Q-0028, scope_profile: triage, deadline: '2026-10-17T10:00:10Z'}
+  events:
+  - {at: '2026-10-17T10:00:02Z', defer: {request_id: 7f3c1e0a-run:4:Q-0028:1, run_id: 7f3c1e0a-run, reason: rate_limited, retry_after_seconds: 30}}
+  - {at: '2026-10-17T10:03:00Z', answer: {request_id: 7f3c1e0a-run:4:Q-0028:1, run_id: 7f3c1e0a-run, measurement_id: m-910, answer: low_risk, status: answered, trust: not_checked, provenance: {source: alert}}}
+  expect: answered
+- name: deferred for overload, waited past the maximum
+  request: {request_id: 7f3c1e0a-run:4:Q-0028:1, run_id: 7f3c1e0a-run, question_id: Q-0028, scope_profile: triage, deadline: '2026-10-17T10:00:10Z'}
+  events:
+  - {at: '2026-10-17T10:00:02Z', defer: {request_id: 7f3c1e0a-run:4:Q-0028:1, run_id: 7f3c1e0a-run, reason: overload, retry_after_seconds: 60}}
+  - {at: '2026-10-17T10:05:03Z', answer: {request_id: 7f3c1e0a-run:4:Q-0028:1, run_id: 7f3c1e0a-run, measurement_id: m-911, answer: low_risk, status: answered, trust: not_checked, provenance: {source: alert}}}
+  expect: source_unavailable
+- name: a second defer does not extend the maximum wait
+  request: {request_id: 7f3c1e0a-run:4:Q-0028:1, run_id: 7f3c1e0a-run, question_id: Q-0028, scope_profile: triage, deadline: '2026-10-17T10:00:10Z'}
+  events:
+  - {at: '2026-10-17T10:00:02Z', defer: {request_id: 7f3c1e0a-run:4:Q-0028:1, run_id: 7f3c1e0a-run, reason: overload, retry_after_seconds: 60}}
+  - {at: '2026-10-17T10:04:00Z', defer: {request_id: 7f3c1e0a-run:4:Q-0028:1, run_id: 7f3c1e0a-run, reason: overload, retry_after_seconds: 60}}
+  - {at: '2026-10-17T10:06:00Z', answer: {request_id: 7f3c1e0a-run:4:Q-0028:1, run_id: 7f3c1e0a-run, measurement_id: m-912, answer: low_risk, status: answered, trust: not_checked, provenance: {source: alert}}}
+  expect: source_unavailable
+# Transport retries of one request_id (contract/envelope.yaml cache): what the broker served each time. expect: valid or the problem.
+retries:
+- name: retry after a completed measurement returns the same measurement
+  served: [{status: answered, measurement_id: m-920}, {status: answered, measurement_id: m-920}]
+  expect: valid
+- name: retry after source_unavailable measures again
+  served: [{status: source_unavailable, measurement_id: m-921}, {status: answered, measurement_id: m-922}]
+  expect: valid
+- name: a cached source_unavailable
+  served: [{status: source_unavailable, measurement_id: m-923}, {status: source_unavailable, measurement_id: m-923}]
+  expect: source_unavailable was cached

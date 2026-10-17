@@ -40,7 +40,8 @@ def build(b=None):
     b = b or B.load()
     caps = b["capabilities"]
     contract = {"questions": list(b["contract"]["questions"].values()),
-                "answer": b["contract"]["answer"], "envelope": b["contract"]["envelope"]}
+                "answer": b["contract"]["answer"], "envelope": b["contract"]["envelope"],
+                "evidence": b["evidence"], "severity": b["severity"]}
     triage_params = (B._load(os.path.join(B.TRIAGE, "parameters.yaml")) or {})
     triage = strip({
         "bundle_version": 2,
@@ -50,6 +51,8 @@ def build(b=None):
         "parameter_precedence": triage_params.get("precedence"),
         "context_questions": _files("triage/context/C-*.yaml"),
         "context_rules": B._load(os.path.join(B.TRIAGE, "context_rules.yaml")),
+        "auto_exclusions": b["auto_exclusions"],
+        "proposals": b["proposals"],
         "reason_codes": B._load(os.path.join(B.TRIAGE, "reason_codes.yaml"))["reason_codes"],
         "explanations": [{k: e[k] for k in ("id", "name", "description")} for e in _files("triage/explanations/BE-*.yaml")],
         "questions": _files("triage/questions/Q-*.yaml"),

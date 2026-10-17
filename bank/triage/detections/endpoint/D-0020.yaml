@@ -25,7 +25,7 @@ fingerprint:
 - role:host.name
 - role:process.path
 - role:process.sha256
-- role:process_access.granted_access
+- role:process_access.rights
 fingerprint_influence:
   role:host.name:
     rating: low
@@ -36,7 +36,7 @@ fingerprint_influence:
   role:process.sha256:
     rating: low
     reason: Computed by the sensor.
-  role:process_access.granted_access:
+  role:process_access.rights:
     rating: high
     reason: Access mask the attacker requests.
 precedent_entity: role:host.name
@@ -81,7 +81,7 @@ flow:
   on_no: flag
   on_unknown: flag
 status: draft
-version: 7
+version: 8
 parameters:
   entity_baseline_min_days: 5
 derived_from:

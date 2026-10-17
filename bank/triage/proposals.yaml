@@ -1,0 +1,33 @@
+# What evidence the Use Case Manager needs before it proposes a reduce-scrutiny change (docs/design-decisions.md §27).
+# (designed, not built) It only proposes; a human approves, with an owner and an expiry. Every count here is of human
+# evidence (bank/contract/evidence.yaml): manual closes in Shadow, analyst overrides and audited closes. Accepted
+# recommendations and the Triage agent's own closes never count, so the two agents cannot reinforce each other.
+proposals:
+  routine_pairs:
+    proposes: an (entity, detection) pair for the routine list (C-02 then excludes its alerts from the entity guard's count)
+    evidence: human_evidence
+    min_closes: {param: proposal_min_human_closes}
+    min_analysts: {param: proposal_min_analysts}
+    min_days: {param: proposal_min_days}
+    min_weeks: {param: routine_pair_min_weeks}
+  list_entries:
+    proposes: an allowlist or exception entry (through list.propose_update)
+    evidence: human_evidence
+    min_closes: {param: proposal_min_human_closes}
+    min_analysts: {param: proposal_min_analysts}
+    min_days: {param: proposal_min_days}
+  closure_mining:
+    proposes: a new exception, fact or benign question from recurring closure reasons
+    evidence: human_evidence
+    min_closes: {param: proposal_min_human_closes}
+    min_analysts: {param: proposal_min_analysts}
+    min_days: {param: proposal_min_days}
+  thresholds:
+    proposes: a threshold change from stored measurements replayed in Shadow (the outcomes it is scored against are human evidence only)
+    evidence: human_evidence
+    min_closes: {param: proposal_min_human_closes}
+    min_analysts: {param: proposal_min_analysts}
+    min_days: {param: proposal_min_days}
+rejected_when:
+- the evidence comes from alerts of a single source
+- the evidence is a burst inside one grouping window

@@ -1,6 +1,7 @@
 id: Q-0000
-text: 'Is there a qualifying precedent for this fingerprint: an audited close, or at least the customer''s minimum number of independent analyst closes, inside the validity window, with the precedent entity
-  not a crown jewel and no other alert on it of higher severity than this one (a mitigated precedent only when this alert was also stopped)?'
+text: 'Is there a qualifying precedent for this fingerprint: an audited close, or (outside Auto) at least the customer''s minimum number of independent human closes, inside the validity window, with
+  the precedent entity not a crown jewel, no other alert on it of higher severity than this one, and no other detection on it in the grouping window (a mitigated precedent only when this alert was
+  also stopped)?'
 tests: BE-0000
 attacker_influence:
   rating: low
@@ -16,13 +17,14 @@ derived_from:
 text_origin: original
 legal_review: false
 status: draft
-version: 5
+version: 6
 kind: context
 inputs:
   fingerprint: alert:fingerprint
   entity: bind:precedent_entity
 needs:
   context_questions:
+  - C-02
   - C-03
   - C-04
   - C-06

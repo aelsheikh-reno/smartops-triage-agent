@@ -29,7 +29,7 @@ Design, workflows and question bank for the SmartOps triage agent. The question 
 | `bank/triage/` | What the Triage agent uses: detections (neutral D-IDs, one folder per family) and their flows, questions, context questions C-01…C-08 and their rules, parameters, semantics, reason codes, customer modes |
 | `bank/broker/` | What the Tool Broker uses: capabilities, the question map, sources and source authority, translations (each row with a kind; verified per customer under `bank/broker/customers/`), context lists and seeds |
 | `bank/intake/` | What the normalizer and the Detection Engineer use: the rule map (source rule IDs to D-IDs), the use-case catalog, the pilot list |
-| `tools/` | Validation (`validate.py`, with the role registry `roles.py` and the field-name list `field_names.py`), close-path gate, strict true-positive replay, gate self-test, SQL loader and context-fact ranking; `gates.sh` runs them all |
+| `tools/` | Validation (`validate.py`, with the role registry `roles.py` and the field-name list `field_names.py`), close-path gate, strict true-positive replay (single alerts and alert sequences), Auto trust-rule equivalence check (`equivalence.py`), gate self-test, SQL loader and context-fact ranking; `gates.sh` runs them all |
 
 Workflow pages: `docs/workflows/triage-workflow.html` (alert-level) and `docs/workflows/onboarding-workflow.html` (customer onboarding). The repo files are the source of truth. Earlier published copies on claude.ai may be out of date:
 - Alert-level workflow: https://claude.ai/artifact/1MtZNSiYtydwf6SQd4JKWo

@@ -63,11 +63,11 @@ flow:
   on_unknown: flag
 - step: 5
   question: Q-0004
-  on_yes: close:benign_true_positive:approved_change
+  on_yes: flag
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 6
+version: 7
 parameters:
   precedent_validity_hours: 72
 derived_from:

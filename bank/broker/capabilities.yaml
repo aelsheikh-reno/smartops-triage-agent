@@ -12,6 +12,7 @@
 unverified_seed: A yes whose evidence rests on a seed entry with verified false taints the flow. That step, and any later close reached through it, becomes flag until onboarding verifies the entry.
 coverage_items:
   device_control_write_events: The customer's device-control product also reports file-write events. Without them a connect event that records zero files written proves nothing.
+  attachment_open_telemetry: The endpoint product on each recipient's host records which files were opened (by hash). Without it, no click or open record can show that an attachment was not opened.
 auto_eligibility: 'A detection is Auto-eligible for a customer only when every value-table row on its close paths is verified for that customer (bank/broker/customers/<c>/verifications.yaml: cited vendor doc, a Product Operator spot check of at least verification_min_spot_check_alerts real alerts, checker, date, vendor product version, expiry). A vendor product version change re-opens verification. Technique fallbacks are capped at Recommend. validate enforces this for every customer that sets a detection to Auto.'
 
 scope:   # enforced by the Tool Broker per caller (docs/design-decisions.md §4)
@@ -50,6 +51,7 @@ source_authority:
   - entity.alerts
   - entity.max_severity
   - alert.history
+  - alert.recipient_hosts_severity
   - entity.baseline
   - org.prevalence
   - traffic.denied_only
@@ -224,9 +226,9 @@ capabilities:
   - entity
   answer:
     type: bool
-  yes_means: 'Q0, answered by the Triage agent from context questions C-03, C-04 and C-06 (bank/triage/context_rules.yaml q0): the fingerprint has an audited close, or at least q0_min_independent_closes independent
-    analyst closes, inside the validity window; no other alert on the entity has a higher severity than this one; the precedent entity is not a crown jewel. A mitigated precedent counts only when this alert
-    was also stopped.'
+  yes_means: 'Q0, answered by the Triage agent from context questions C-02, C-03, C-04 and C-06 (bank/triage/context_rules.yaml q0): the fingerprint has an audited close, or (outside Auto) at least
+    q0_min_independent_closes independent human closes, inside the validity window (human evidence only, bank/contract/evidence.yaml); no other alert on the entity has a higher normalized severity than this
+    one; at most one distinct detection fired on the entity in the grouping window; the precedent entity is not a crown jewel. A mitigated precedent counts only when this alert was also stopped.'
   no_means: No qualifying precedent.
   rating_floor: per_detection
   escalate_only: false
@@ -269,14 +271,21 @@ capabilities:
   inputs:
   - entity
   - window
+  - lookback_hours
   - routine_list
   answer:
     type: count
     components:
     - alerts
     - distinct_detections
-  measures: Alerts that already fired on the entity in the grouping window, and the number of distinct detections among them. Alerts from (entity, detection) pairs on the routine list are not counted, except
-    alerts of high or critical severity, which always count.
+    - day_detections_informational
+    - day_detections_low
+    - day_detections_medium
+    - day_detections_high
+    - day_detections_critical
+  measures: 'Alerts that already fired on the entity in the grouping window, and the number of distinct detections among them; and, over the look-back ending at the alert time, the number of distinct detections
+    at each normalized severity (bank/contract/severity.yaml), each detection counted once at the highest severity of its alerts. Alerts from (entity, detection) pairs on the routine list are not counted,
+    except alerts of high or critical normalized severity, which always count. A new alert on the entity invalidates the cached answer for the window (no threshold here: the Triage agent compares).'
   rating_floor: none
   escalate_only: false
   source_authority:
@@ -381,9 +390,11 @@ capabilities:
     type: count
     components:
     - audited
-    - independent_analyst
-  measures: 'Closes of this fingerprint inside the validity window by an original decision (an analyst or a non-precedent flow step) with a recorded reason: how many passed audit, and how many independent
-    analyst closes (distinct analysts) there were. A close with reason precedent_match never counts. A mitigated_true_positive close counts only when current_action shows this alert was also stopped.'
+    - independent_human
+  evidence: human_evidence
+  measures: 'Closes of this fingerprint inside the validity window that are human evidence (bank/contract/evidence.yaml): how many passed audit (audited_close), and how many manual closes in Shadow or
+    analyst overrides there were, by distinct analysts (independent_human). An accepted recommendation, an Auto close and a close with reason precedent_match never count. A mitigated_true_positive close
+    counts only when current_action shows this alert was also stopped.'
   rating_floor: per_detection
   escalate_only: false
   source_authority:
@@ -475,6 +486,7 @@ capabilities:
   inputs:
   - user
   - groups
+  actor_identity: true   # an answer about who performed the action: never the only hard-to-fake yes on a close path
   answer:
     type: bool
   yes_means: The account is one of, or a direct or nested member of, the named accounts or groups.
@@ -522,13 +534,13 @@ capabilities:
   - pattern
   - of_weeks
   - min_weeks
-  - window (optional)
+  - lookback_hours (optional; instead of of_weeks and min_weeks, a plain count over the look-back ending at the alert time)
   - exclude_list (optional)
   answer:
     type: count
   measures: 'With of_weeks and min_weeks: the k-th lowest weekly count of distinct hosts showing the pattern over the of_weeks weeks before the alert window, with k = of_weeks - min_weeks + 1 (default 4
     and 3, so the 2nd lowest). It is at least N exactly when at least min_weeks of the of_weeks weeks reach N hosts, so the Triage agent compares it with org_prevalence_min_hosts and no threshold reaches
-    the broker. of_weeks and min_weeks set the statistic, not a threshold. With window alert_window: distinct hosts showing it inside the alert window. Hosts in exclude_list (a context list''s host scopes,
+    the broker. of_weeks and min_weeks set the statistic, not a threshold. With lookback_hours: distinct hosts showing it over the look-back ending at the alert time. Hosts in exclude_list (a context list''s host scopes,
     by asset ID) are not counted.'
   rating_floor: none
   escalate_only: false
@@ -570,6 +582,7 @@ capabilities:
   - class
   - of (optional)
   - delivery_stage (optional, email; before or after the recipient received the message)
+  - egress_stage (optional, DLP; before or after the data left)
   answer:
     type: enum
     values_from: alert_classes
@@ -604,7 +617,7 @@ capabilities:
   - endpoint_device (optional)
   - file (optional, for the fallback match)
   - at_time
-  - match_window_minutes
+  - match_window_minutes (broker parameter edr_alert_match_window_minutes, set in the question map; the window ends at the alert time)
   answer:
     type: enum
     values:
@@ -670,6 +683,28 @@ capabilities:
     authoritative: email_security_api
     fallback:
     - siem_copy
+- name: alert.recipient_hosts_severity
+  kind: lookup
+  group: triage
+  inputs:
+  - entity
+  - lookback_hours
+  answer:
+    type: enum
+    values:
+    - none
+    - informational
+    - low
+    - medium
+    - high
+    - critical
+  measures: 'The highest normalized severity (bank/contract/severity.yaml) of any other alert, over the look-back ending at the alert time, on any host of any recipient of the message (the hosts the
+    directory or asset inventory links to each recipient); none when there is none. Unknown when a recipient''s hosts cannot be resolved (round 6, B2).'
+  rating_floor: none
+  escalate_only: false
+  source_authority:
+    authoritative: siem
+    fallback: []
 - name: email.no_interaction
   kind: lookup
   group: triage
@@ -681,7 +716,8 @@ capabilities:
   no_means: At least one recipient clicked or opened.
   rating_floor: low
   escalate_only: false
-  notes: Unknown when click or open records are not collected. Added for the same reason as email.message_status.
+  notes: 'Unknown when click or open records are not collected. If the message carried an attachment, unknown unless the coverage report includes attachment_open_telemetry for every recipient''s
+    host: an absence of click records is not evidence that nobody opened the file (round 6, B2). Added for the same reason as email.message_status.'
   source_authority:
     authoritative: email_security_api
     fallback:
@@ -691,11 +727,12 @@ capabilities:
   group: triage
   inputs:
   - source
-  - destination
-  - window
+  - destination (optional)
+  - at_time
+  - lookback_hours
   answer:
     type: bool
-  yes_means: Every connection from the source (to the destination, when given) in the alert window was denied; none was allowed or established.
+  yes_means: Every connection from the source (to the destination, when given) over the look-back ending at the alert time was denied; none was allowed or established.
   no_means: At least one connection was allowed or established.
   rating_floor: low
   escalate_only: false
@@ -754,6 +791,7 @@ capabilities:
     - siem_copy
 - name: list.propose_update
   kind: write
+  evidence: human_evidence
   group: write
   inputs:
   - list

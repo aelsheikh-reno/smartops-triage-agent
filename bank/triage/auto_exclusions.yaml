@@ -1,0 +1,18 @@
+# Why a detection, or one close step in it, never closes in Auto (round 6, S5, S8, B1 and §5.2). Raise-only.
+# A detection-level exclusion sets max_mode: recommend, a max_mode_reason (prose) and auto_excluded_reason (a code below).
+# A step-level exclusion sets auto_excluded_reason on the step: in Auto that step's close becomes a flag; in Shadow and
+# Recommend it stands, marked "auto_excluded: <code>". Neither counts as Auto-eligible (tools/validate.py).
+reasons:
+  destructive_or_anti_forensic:
+    meaning: The activity destroys recovery data, removes evidence or weakens a security control. A wrong close loses the evidence or the defence, so a human always sees the close.
+    applies_to: detection
+    techniques: [T1490, T1685, T1685.005]   # inhibit recovery, disable or modify tools, clear event logs; every detection on one of these is capped
+  attacker_reachable_sender:
+    meaning: The close rests on the sender being on the customer's approved list. An attacker who compromises an approved sender's mailbox reaches it, so the close is never written without a human.
+    applies_to: step
+  lateral_movement_change:
+    meaning: A lateral-movement close resting on an approved change. Change records name what was planned, not who ran it on which host.
+    applies_to: step
+  no_tp_replay_data:
+    meaning: No true-positive replay data exists for the detection, so its false-close rate on attacks is unmeasured (#14, #26).
+    applies_to: detection

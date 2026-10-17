@@ -39,7 +39,7 @@ fingerprint_influence:
     rating: high
     reason: Triggered by traffic the initiator crafts.
 status: draft
-version: 6
+version: 7
 flow:
 - step: 1
   question: Q-0000
@@ -130,21 +130,14 @@ flow:
     then: escalate
 - step: 5
   question: Q-0033
-  on_yes: close:mitigated_true_positive:signature_not_applicable
+  on_yes: flag   # round 6, S4: this close needs the attempt blocked, and step 5 is reached only when Q-0027 said it was not
   on_no: escalate
   on_unknown: flag
   guards:
-  - question: Q-0050
-    then: flag
-  - question: Q-0046
-    then: flag
-    bind:
-      key: role:src.ip
-    rule:
-      gte:
-        param: ids_history_min_count
   - question: Q-0032
     then: escalate
+    applies_to:
+    - flag
 derived_from:
   library: bank
   rule: vendor:ids_alert

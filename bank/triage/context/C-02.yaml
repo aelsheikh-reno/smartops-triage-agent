@@ -1,12 +1,15 @@
 id: C-02
-text: How many alerts fired on the entity in the grouping window, and from how many distinct detections?
+text: How many alerts fired on the entity in the grouping window, and from how many distinct detections; and how many distinct detections fired on it at each normalized severity in the last 24 hours?
 kind: context
 inputs:
   entity: alert:entity
   window:
     param: entity_grouping_window_minutes
+  lookback_hours:
+    param: triage_lookback_hours
 feeds:
 - entity_guard
+- q0
 attacker_influence:
   rating: none
   reason: Counts alerts already raised; the activity cannot remove them.
@@ -21,4 +24,4 @@ derived_from:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2

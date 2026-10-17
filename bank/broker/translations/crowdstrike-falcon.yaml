@@ -1,6 +1,6 @@
 # Vendor value table (recipe layer). Maps one product's raw alert values to the bank's alert classes
 # (bank/broker/capabilities.yaml alert_classes). Rows are tried in order; the first match wins; no match gives the class default.
-# match: {<raw property>: <value or list>} compares case-insensitively; {pattern: <regex>} searches the class's role values joined by a space.
+# match: {<raw property>: <value or list>} compares normalized values (case, surrounding space and trailing periods ignored); {pattern: <regex>} searches the class's role values joined by a space.
 # source: edr_api (the product's own API: authoritative for endpoint.run_status), siem_copy (the product's alert as copied into the SIEM: a fallback), or alert (values read from the normalized alert itself).
 # Each row has an id and a kind: ambiguous (the value does not say what happened: always unknown, in every mode) or
 # unverified (meaning from vendor docs, not confirmed at this customer: may support a close in Shadow and Recommend, marked
@@ -30,6 +30,12 @@ classes:
       value: ran
       kind: unverified
       note: The process started.
+    - id: run_status.prevention_operation_blocked
+      match:
+        PatternDispositionDescription: Prevention, operation blocked
+      value: ran
+      kind: unverified
+      note: An operation of a running process was blocked; the process ran (round 6).
     - id: run_status.quarantine_file_quarantined
       match:
         PatternDispositionDescription: Quarantine, file quarantined

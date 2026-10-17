@@ -1,0 +1,14 @@
+# Each SIEM's alert severity mapped to the normalized scale (bank/contract/severity.yaml). Intake only: the normalizer
+# reads it and fills alert:severity. A value with no entry flags the alert with reason severity_unmapped.
+# Version 1 builds the Splunk ES adapter first; other SIEMs are added here when their adapters are built (designed, not built).
+siems:
+  splunk_es:
+    field: severity   # the notable event's severity (urgency is derived from it and the asset or identity priority; not used for comparisons)
+    reference: https://docs.splunk.com/Documentation/ES/latest/User/Triagenotableevents
+    map:
+      informational: informational
+      low: low
+      medium: medium
+      high: high
+      critical: critical
+    unmapped: [unknown]   # ES's own "unknown" severity is never guessed; the alert flags with severity_unmapped

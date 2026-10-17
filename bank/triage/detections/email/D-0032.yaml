@@ -2,6 +2,9 @@ id: D-0032
 name: User-reported phishing email
 family: email
 alert_type: control
+max_mode: recommend
+max_mode_reason: No true-positive replay data for user-reported email (round 6, §5.2).
+auto_excluded_reason: no_tp_replay_data
 techniques:
 - T1566
 derived_fields:
@@ -63,7 +66,10 @@ flow:
   on_yes: close:false_positive:false_report
   on_no: next
   on_unknown: next
+  auto_excluded_reason: attacker_reachable_sender
   guards:
+  - question: Q-0075
+    then: flag
   - question: Q-0070
     when:
     - 'no'
@@ -92,6 +98,11 @@ flow:
   on_no: escalate
   on_unknown: flag
   guards:
+  - question: Q-0076
+    then: flag
+    rule:
+      yes_unless:
+      - none
   - question: Q-0035
     when:
     - 'no'
@@ -103,7 +114,7 @@ flow:
     rule:
       gte: *id001
 status: draft
-version: 3
+version: 4
 parameters:
   precedent_validity_hours: 72
 derived_from:

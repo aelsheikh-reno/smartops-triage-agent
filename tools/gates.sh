@@ -19,6 +19,7 @@ if [ $# -gt 0 ] && [ ${#replay_batches[@]} -eq 0 ]; then
 else
   echo "== 3. replay (strict)";   python3 tools/replay.py --strict "${replay_batches[@]}" > build/replay.txt 2>&1 || rc=1; tail -16 build/replay.txt
 fi
+echo "== 3b. Auto trust-rule equivalence"; python3 tools/equivalence.py "$@" | head -1 || rc=1
 echo "== 4. gate self-test";      python3 tools/selftest.py > build/selftest.txt 2>&1 || rc=1; tail -1 build/selftest.txt
 echo "== 5. org.prevalence";      python3 tools/test_prevalence.py || rc=1
 echo "== 6. review packet";       python3 tools/review_packet.py "$packet" "$@" || rc=1

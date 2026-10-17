@@ -2,6 +2,9 @@ id: D-0031
 name: Email gateway threat alert
 family: email
 alert_type: control
+max_mode: recommend
+max_mode_reason: No true-positive replay data for email-gateway alerts (round 6, §5.2).
+auto_excluded_reason: no_tp_replay_data
 techniques:
 - T1566.001
 - T1566.002
@@ -80,8 +83,14 @@ flow:
   on_yes: close:mitigated_true_positive:contained_without_interaction
   on_no: escalate
   on_unknown: flag
+  guards:
+  - question: Q-0076
+    then: flag
+    rule:
+      yes_unless:
+      - none
 status: draft
-version: 4
+version: 5
 derived_from:
   library: bank
   rule: vendor:email_gateway

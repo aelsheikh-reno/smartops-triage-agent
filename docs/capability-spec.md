@@ -144,9 +144,9 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 
 ## org.prevalence
 - **Measures:** the k-th lowest weekly count of distinct hosts with the pattern over the last `of_weeks` weeks, with k = of_weeks − min_weeks + 1 (default 4 and 3, so the 2nd lowest). This is a statistic, not a threshold: "k-th lowest ≥ N" is exactly "at least min_weeks of the of_weeks weeks have ≥ N hosts", proved over every case in `tools/test_prevalence.py`.
-  - With `window: alert_window`, it counts hosts inside the alert window instead.
+  - With `lookback_hours` (the 24h triage look-back), it counts hosts over the look-back ending at the alert time instead.
   - Hosts in `exclude_list`, matched by asset ID, are not counted.
-- **Triage rule:** yes if the statistic ≥ `org_prevalence_min_hosts`. With the alert window, yes if hosts ≥ `org_prevalence_escape_min_hosts` (fixed at 1).
+- **Triage rule:** yes if the statistic ≥ `org_prevalence_min_hosts`. With the look-back, yes if hosts ≥ `org_prevalence_escape_min_hosts` (fixed at 1).
   - `org_prevalence_min_hosts`: default 5, min 3, max 50. Triage-side threshold.
   - `org_prevalence_of_weeks`: default 4, min 3, max 12. Statistic setting (`category: statistic_setting`).
   - `org_prevalence_min_weeks`: default 3, min 2, max 12, never above `of_weeks`. Statistic setting; lowering it reduces scrutiny.
@@ -224,13 +224,13 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Template kind:** API (mail security click and open logs).
 - **Splunk:** click logs, if indexed.
 - **Known-answer tests:** a test click on a test message is counted.
-- **Unknown when:** click or open records are not collected.
+- **Unknown when:** click or open records are not collected; or the message carried an attachment and the coverage report lacks `attachment_open_telemetry` (endpoint records of files opened, by hash) for every recipient's host. An absence of click records is not evidence (round 6, B2).
 - **Attacker influence:** low.
 - **Owner:** email specialist.
 
 ## traffic.denied_only
-- **Measures:** counts of allowed or established versus denied connections from `src` (to `dest` when given) in the alert window.
-- **Triage rule:** yes if allowed = 0 and denied ≥ 1. No parameter; the window is the fixed alert window.
+- **Measures:** counts of allowed or established versus denied connections from `src` (to `dest` when given) over the 24h look-back ending at the alert time.
+- **Triage rule:** yes if allowed = 0 and denied ≥ 1. No parameter; the window is the triage look-back (`triage_lookback_hours`).
 - **Template kind:** Sigma, with an aggregation (count by action).
 - **Splunk (CIM):** Network_Traffic (`src`, `dest`, `dest_port`, `action`), accelerated.
 - **Known-answer tests:** a known health-check source with allowed traffic returns allowed > 0. The data source shows recent events.

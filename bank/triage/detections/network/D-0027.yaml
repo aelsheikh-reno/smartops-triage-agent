@@ -89,6 +89,18 @@ flow:
   on_yes: close:benign_true_positive:approved_infrastructure
   on_no: next
   on_unknown: next
+  guards:
+  - question: Q-0042
+    when:
+    - 'no'
+    then: flag
+  - question: Q-0046
+    then: flag
+    bind:
+      key: role:src.ip
+    rule:
+      gte:
+        param: alert_history_min_count
 - step: 4
   question: Q-0055
   on_yes: close:benign_true_positive:approved_change
@@ -105,7 +117,7 @@ flow:
   - question: Q-0032
     then: escalate
 status: draft
-version: 4
+version: 5
 derived_from:
   library: bank
   rule: vendor:firewall_deny

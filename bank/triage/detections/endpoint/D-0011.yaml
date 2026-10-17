@@ -69,7 +69,7 @@ flow:
   on_unknown: next
 - step: 4
   question: Q-0004
-  on_yes: close:benign_true_positive:approved_change
+  on_yes: flag
   on_no: next
   on_unknown: next
 - step: 5
@@ -81,7 +81,7 @@ flow:
   on_no: escalate
   on_unknown: flag
 status: draft
-version: 7
+version: 8
 notes: Command-line and registry-value baselines are attacker-chosen strings (attacker_influence high), so on their own they flag instead of closing.
 parameters:
   precedent_validity_hours: 72

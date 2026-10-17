@@ -1,9 +1,9 @@
 id: Q-0036
-text: Do click and open records show that no recipient followed a link or opened an attachment from the message?
+text: Do click and open records show that no recipient followed a link or opened an attachment from the message (unknown when it carried an attachment and attachment opens are not recorded on every recipient's host)?
 tests: BE-0024
 attacker_influence:
-  rating: low
-  reason: Click and open records come from the mail platform; clicks outside its rewriting (copied links, other devices) can be missed.
+  rating: medium
+  reason: Click and open records come from the mail platform; clicks outside its rewriting (copied links, other devices) and attachments opened from a local copy are missed, so an absence of records is not evidence on its own (round 6, B2).
 derived_from:
   source:
   - bank/intake/use_cases.yaml triage_hints
@@ -11,7 +11,7 @@ derived_from:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2
 kind: triage
 inputs:
   message: role:email.message_id

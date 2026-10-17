@@ -14,7 +14,10 @@ derived_from:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2
 kind: triage
 inputs:
   of: role:reporting_control.action
+  egress_stage: role:dlp.egress_stage
+optional_inputs:
+- egress_stage

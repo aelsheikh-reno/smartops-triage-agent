@@ -1,0 +1,5 @@
+# Normalized severity: the one scale every severity comparison in the bank uses (round 6, §3). (designed, not built)
+# The normalizer maps each SIEM's own severity to it and fills alert:severity; the mapping lives with intake, not here.
+# C-02, C-03, Q0, the entity guard, the routine rule and priority compare only these values, never a SIEM's raw severity.
+scale: [informational, low, medium, high, critical]   # ascending
+unmapped: The normalizer flags the alert with reason severity_unmapped and never guesses a level. A severity class answer of other (a product value the broker cannot place on the scale) answers unknown wherever it is compared.

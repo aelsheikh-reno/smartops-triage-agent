@@ -2,6 +2,9 @@ id: D-0033
 name: DLP policy match
 family: data_protection
 alert_type: control
+max_mode: recommend
+max_mode_reason: No true-positive replay data for DLP alerts (round 6, §5.2).
+auto_excluded_reason: no_tp_replay_data
 techniques:
 - T1048
 - T1567
@@ -65,6 +68,8 @@ flow:
     rule:
       'yes':
         param: dlp_high_severity_values
+      unknown:
+      - other
   - question: Q-0064
     then: flag
     rule:
@@ -117,6 +122,8 @@ flow:
     rule:
       'yes':
         param: dlp_high_severity_values
+      unknown:
+      - other
   - question: Q-0064
     then: flag
     rule:
@@ -139,27 +146,24 @@ flow:
     rule:
       'yes':
         param: dlp_high_severity_values
+      unknown:
+      - other
   - question: Q-0064
     then: flag
     rule:
       gte:
         param: dlp_record_count_flag
   - question: Q-0046
-    then: flag
-    bind:
-      key: role:user.name
-    rule:
-      gte: *id001
-  - question: Q-0046
     then: escalate
     bind:
       key: role:user.name
     applies_to:
+    - close
     - flag
     rule:
       gte: *id001
 status: draft
-version: 4
+version: 5
 derived_from:
   library: bank
   rule: vendor:dlp_match

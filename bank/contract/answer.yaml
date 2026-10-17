@@ -7,8 +7,8 @@ answer_types:
   time: an RFC3339 time
 status:
   answered: the step's rule turns the value into yes or no (or unknown for enum values the rule lists as unknown)
-  unknown: 'no data, no single match, an ambiguous translation, or no answer by the deadline: follow the step''s on_unknown'
-  source_unavailable: never closes. Stop and flag; the detection runs in Recommend until the capability is healthy. Never read as no hit.
+  unknown: 'the source answered but holds no data, no single match, or an ambiguous translation: follow the step''s on_unknown'
+  source_unavailable: 'the source is down, the answer missed its deadline, or a deferred request waited past its maximum (contract/envelope.yaml). Never closes and never supports a close: stop and flag; the detection runs in Recommend until the capability is healthy. Never read as no hit, never cached.'
   sources_disagree: 'two sources gave different answers: never closes; the alert flags'
 trust:
   checked: answered from the source set at onboarding, with any translation checked for this customer (or standards-defined)

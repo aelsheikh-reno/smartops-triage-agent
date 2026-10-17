@@ -1,0 +1,18 @@
+id: Q-0075
+text: Is the From domain one of the customer's own email domains?
+tests: BE-0035
+attacker_influence:
+  rating: high
+  reason: The From domain is chosen by the sender. Used only as a guard that flags; a yes never supports a close.
+notes: 'Guard on the approved-sender close of a user report (round 6, B1): the customer''s own domains never count as approved senders, so an internal sender reported as phishing flags.'
+derived_from:
+  source:
+  - external review of PR 23 (round 6, B1)
+  license: internal
+text_origin: original
+legal_review: false
+status: draft
+version: 1
+kind: triage
+inputs:
+  entity: role:email.sender_domain

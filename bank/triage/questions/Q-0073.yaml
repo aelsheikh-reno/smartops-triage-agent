@@ -1,5 +1,5 @@
 id: Q-0073
-text: Was the file's hash seen in the alert window on any host outside the approved security-tooling and analysis hosts?
+text: Was the file's hash seen in the last 24 hours, up to the alert time, on any host outside the approved security-tooling and analysis hosts?
 tests: BE-0031
 attacker_influence:
   rating: low
@@ -12,8 +12,9 @@ derived_from:
 text_origin: original
 legal_review: false
 status: draft
-version: 1
+version: 2
 kind: triage
 inputs:
   pattern: file with hash role:file.sha256
-  window: alert_window
+  lookback_hours:
+    param: triage_lookback_hours

@@ -9,7 +9,53 @@ vendor: Microsoft
 product: Defender for Endpoint
 source: edr_api
 answers: endpoint.run_status
-feed: 'Defender API: alert evidence via the Graph security API (detectionStatus, remediationStatus), found by the vendor alert ID or a bounded device + file hash + time match'
+feed: 'Defender API: alert evidence via the Graph security API (detectionStatus, remediationStatus), found by the vendor alert ID or a bounded device + file hash + time match. The evidence item read is
+  the one for the alerted file, by SHA-256, never the first item (round 6, S7; #20)'
+# Which evidence item and which property (round 6, S7). detectionStatus is a property of the file, process and registry
+# evidence subtypes only; remediationStatus is on the base alertEvidence type, so every item has it. The broker picks the
+# item whose hash is the alerted file's; a sibling item (another file in the same alert) is never read. None or several
+# matching items answer unknown.
+evidence:
+  hash_paths:
+    fileEvidence: [fileDetails.sha256]
+    processEvidence: [imageFile.sha256]
+  properties:
+    detectionStatus: [fileEvidence, processEvidence, registryKeyEvidence, registryValueEvidence]
+    remediationStatus: base
+# Known-answer tests for this table, run by validate through the broker's run_status (a vendor alert with its evidence items,
+# the alerted file's hash, the required answer).
+known_answers:
+- name: benign sibling prevented, alerted file detected
+  sha256: aaaa000000000000000000000000000000000000000000000000000000000001
+  alert:
+    evidence:
+    - {type: fileEvidence, fileDetails: {sha256: bbbb000000000000000000000000000000000000000000000000000000000002}, detectionStatus: prevented, remediationStatus: prevented}
+    - {type: fileEvidence, fileDetails: {sha256: aaaa000000000000000000000000000000000000000000000000000000000001}, detectionStatus: detected, remediationStatus: none}
+  expect: ran
+- name: alerted file prevented
+  sha256: aaaa000000000000000000000000000000000000000000000000000000000001
+  alert:
+    evidence:
+    - {type: fileEvidence, fileDetails: {sha256: aaaa000000000000000000000000000000000000000000000000000000000001}, detectionStatus: prevented}
+  expect: pre_execution
+- name: alerted file as process evidence, blocked at run time
+  sha256: aaaa000000000000000000000000000000000000000000000000000000000001
+  alert:
+    evidence:
+    - {type: processEvidence, imageFile: {sha256: aaaa000000000000000000000000000000000000000000000000000000000001}, detectionStatus: blocked}
+  expect: ran
+- name: no evidence item for the alerted file
+  sha256: aaaa000000000000000000000000000000000000000000000000000000000001
+  alert:
+    evidence:
+    - {type: fileEvidence, fileDetails: {sha256: bbbb000000000000000000000000000000000000000000000000000000000002}, detectionStatus: prevented}
+  expect: unknown
+- name: detectionStatus on a base-type item (not a file, process or registry subtype) is not read
+  sha256: aaaa000000000000000000000000000000000000000000000000000000000001
+  alert:
+    evidence:
+    - {type: urlEvidence, fileDetails: {sha256: aaaa000000000000000000000000000000000000000000000000000000000001}, detectionStatus: prevented}
+  expect: unknown
 references:
 - https://learn.microsoft.com/en-us/graph/api/resources/security-alertevidence?view=graph-rest-1.0
 - docs/assumptions.md A4

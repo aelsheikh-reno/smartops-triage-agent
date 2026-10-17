@@ -37,6 +37,8 @@ AV = "bank/triage/detections/endpoint_malware/D-0026.yaml"
 IDS = "bank/triage/detections/network/D-0028.yaml"
 USB = "bank/triage/detections/data_protection/D-0034.yaml"
 RULE_MAP = "bank/intake/rule-map.yaml"
+EVIDENCE = "bank/contract/evidence.yaml"
+PROPOSALS = "bank/triage/proposals.yaml"
 OVERLAY = "bank/triage/customers/selftest/parameters.yaml"
 
 
@@ -222,6 +224,67 @@ CASES = [
      "limited to email and DLP questions"),
     ("identity groups as the only low-rated yes on a close path", "redteam",
      y(PSEXEC, lambda d: d["flow"][3].update(on_yes="close:benign_true_positive:admin_activity_baselined")), "FAIL D-0006"),
+    # Round 6: actor identity, Auto exclusions, human evidence, deadlines and defer, normalized severity, replay data caps.
+    ("actor-identity answer (a provisioning account on a list) as the only hard-to-fake yes", "redteam",
+     y("bank/triage/detections/identity/D-0025.yaml", lambda d: d["flow"][1].update(on_yes="close:benign_true_positive:provisioning_service_account")), "FAIL D-0025"),
+    ("actor-identity tag removed from an actor-account question", "validate", y(q("Q-0020"), lambda d: d.pop("actor_identity")), "tag it actor_identity"),
+    ("actor-identity tag removed from the change-implementer question", "validate", y(q("Q-0004"), lambda d: d.pop("actor_identity")), "tag it actor_identity"),
+    ("family without replay data that isn't capped", "replay email", y("bank/triage/detections/email/D-0031.yaml", lambda d: [d.pop(k) for k in ("max_mode", "max_mode_reason", "auto_excluded_reason")]),
+     "not capped at Recommend"),
+    ("destructive detection not capped at Recommend", "validate", y("bank/triage/detections/endpoint/D-0004.yaml", lambda d: [d.pop(k) for k in ("max_mode", "max_mode_reason", "auto_excluded_reason")]),
+     "destructive or anti-forensic technique"),
+    ("unknown auto_excluded_reason code", "validate", y("bank/triage/detections/endpoint/D-0004.yaml", lambda d: d.update(auto_excluded_reason="looks_risky")), "not a detection-level code"),
+    ("Q0 closes on a detection with Q0 off", "validate", y("bank/triage/detections/endpoint/D-0016.yaml", lambda d: d["flow"][0].update(on_yes="close:inherit:precedent_match")), "q0_off_reason is set"),
+    ("customer sets a capped detection to Auto", "validate", customer({"D-0031": "auto"}), "capped at Recommend"),
+    # B3: an accepted recommendation counted as human evidence, in each place that counts closes
+    ("accepted recommendation added to the human-evidence definition", "validate",
+     y(EVIDENCE, lambda d: d["human_evidence"]["counts"].update(accepted_recommendation="an analyst accepted the recommendation")), "counts exactly"),
+    ("Auto close dropped from what never counts", "validate", y(EVIDENCE, lambda d: d["human_evidence"]["never"].pop("auto_close")), "never count as human evidence"),
+    ("C-04 counts closes without the definition", "validate", y("bank/triage/context/C-04.yaml", lambda d: d.update(evidence="all_closes")), "evidence count C-04"),
+    ("Q0 counts closes without the definition", "validate", y("bank/triage/context_rules.yaml", lambda d: d["q0"].update(evidence="accepted_recommendations")), "evidence count q0"),
+    ("routine-pair proposals count accepted recommendations", "validate", y(PROPOSALS, lambda d: d["proposals"]["routine_pairs"].update(evidence="recommendations_and_overrides")), "evidence count routine_pairs"),
+    ("routine rule counts closes without the definition", "validate", y("bank/triage/context_rules.yaml", lambda d: d["entity_guard"]["routine"].pop("evidence")), "evidence count routine (context_rules)"),
+    ("list-entry proposals count accepted recommendations", "validate", y(PROPOSALS, lambda d: d["proposals"]["list_entries"].update(evidence="any_close")), "evidence count list_entries"),
+    ("closure mining counts accepted recommendations", "validate", y(PROPOSALS, lambda d: d["proposals"]["closure_mining"].pop("evidence")), "evidence count closure_mining"),
+    ("threshold proposals scored on accepted recommendations", "validate", y(PROPOSALS, lambda d: d["proposals"]["thresholds"].update(evidence="agreement")), "evidence count thresholds"),
+    ("case memory counts closes without the definition", "validate", y("bank/broker/capabilities.yaml", lambda d: cap(d, "case.precedent").pop("evidence")), "evidence count case.precedent"),
+    ("list proposals written without the definition", "validate", y("bank/broker/capabilities.yaml", lambda d: cap(d, "list.propose_update").update(evidence="accepted")), "evidence count list.propose_update"),
+    ("Q0 in Auto on independent closes alone (no audited close)", "validate",
+     y("bank/triage/context_rules.yaml", lambda d: d["q0"]["yes_when"]["all"][0]["any"][1]["C-04.independent_human"].pop("modes")), "in Auto a precedent needs an audited close"),
+    # S1, S2: the entity guard
+    ("Q0 while another detection fires on the entity", "validate", y("bank/triage/context_rules.yaml", lambda d: d["q0"]["yes_when"]["all"].pop(1)), "distinct_detections lte 1"),
+    ("no 24h distinct-detection rule", "validate", y("bank/triage/context_rules.yaml", lambda d: d["entity_guard"]["hot_when"]["any"].pop(2)), "24h distinct-detection rule"),
+    # B4: deadlines, defer and the cache
+    ("a missed deadline answers unknown", "validate", y("bank/contract/envelope.yaml", lambda d: d["deadline"].update(on_miss="unknown")), "deadline.on_miss must be source_unavailable"),
+    ("a cached source_unavailable", "validate", y("bank/contract/envelope.yaml", lambda d: d["cache"]["cached_statuses"].append("source_unavailable")), "source_unavailable is never cached"),
+    ("a cached source_unavailable accepted as a valid retry", "validate",
+     y("bank/contract/envelope_examples.yaml", lambda d: next(r for r in d["retries"] if r["name"] == "a cached source_unavailable").update(expect="valid")), "was cached"),
+    ("a defer past max wait not turned into source_unavailable", "validate", y("bank/contract/envelope.yaml", lambda d: d["defer_rule"].update(past_max_wait="unknown")), "past_max_wait must be source_unavailable"),
+    ("a defer past max wait expected to be answered", "validate",
+     y("bank/contract/envelope_examples.yaml", lambda d: next(s for s in d["sequences"] if s["name"].startswith("deferred for overload")).update(expect="answered")), "the resolution rule says source_unavailable"),
+    ("transport retries bump the attempt number", "validate",
+     y("bank/contract/envelope.yaml", lambda d: d["ids"].update(request_id="<run_id>:<step>:<question id>:<attempt>; the attempt grows on every send")), "attempt grows only on a deliberate re-ask"),
+    # §3: normalized severity only
+    ("a severity comparison on a raw SIEM severity", "validate",
+     y("bank/triage/context_rules.yaml", lambda d: d["q0"]["yes_when"]["all"][2]["C-03"].update(not_above="role:reporting_control.severity")), "compare normalized severities only"),
+    ("a raw SIEM severity in a counted-severity parameter", "validate",
+     y("bank/triage/parameters.yaml", lambda d: d["parameters"]["entity_day_counted_severities"].update(default=["medium", "high", "urgent"])), "outside the normalized scale"),
+    ("a SIEM severity mapped off the scale", "validate", y("bank/intake/severity-map.yaml", lambda d: d["siems"]["splunk_es"]["map"].update(critical="sev1")), "not a normalized severity"),
+    # S7: the evidence item for the alerted file, never the first
+    ("Defender evidence read from the first item", "validate",
+     y("bank/broker/translations/microsoft-defender-for-endpoint.yaml", lambda d: d.pop("evidence")), "known answer 'benign sibling prevented, alerted file detected'"),
+    # B1, B2, S3: flow guards
+    ("user report from the customer's own domain closes", "replay email",
+     y("bank/triage/detections/email/D-0032.yaml", lambda d: d["flow"][2].update(guards=[g for g in d["flow"][2]["guards"] if g["question"] != "Q-0075"])), "FAIL D-0032"),
+    ("no-interaction close without the recipient-host check", "replay email",
+     y("bank/triage/detections/email/D-0031.yaml", lambda d: d["flow"][4].pop("guards")), "FAIL D-0031"),
+    ("approved infrastructure source closes a deny alert on its own", "redteam",
+     y("bank/triage/detections/network/D-0027.yaml", lambda d: d["flow"][2].pop("guards")), "FAIL D-0027"),
+    # §4: one stage per concept, windows look back only
+    ("email delivery-stage row serving the DLP question", "validate",
+     y("bank/broker/translations/generic.yaml", lambda d: next(r for r in d["classes"]["control_action"]["rows"] if r["id"] == "control_action.quarantined_pre_delivery").update(questions=["Q-0074", "Q-0062"])),
+     "serves email questions only"),
+    ("a question that looks into the alert window", "validate", y(q("Q-0073"), lambda d: d.update(text="Was the file's hash seen in the alert window on any other host?")), "windows look back only"),
 ]
 
 

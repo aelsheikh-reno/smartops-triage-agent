@@ -10,6 +10,11 @@ questions:
     components:
     - alerts
     - distinct_detections
+    - day_detections_informational
+    - day_detections_low
+    - day_detections_medium
+    - day_detections_high
+    - day_detections_critical
 - id: C-03
   answer:
     type: enum
@@ -25,7 +30,7 @@ questions:
     type: count
     components:
     - audited
-    - independent_analyst
+    - independent_human
 - id: C-05
   answer:
     type: enum
@@ -385,3 +390,16 @@ questions:
   answer:
     type: enum
     values: *id003
+- id: Q-0075
+  answer:
+    type: bool
+- id: Q-0076
+  answer:
+    type: enum
+    values:
+    - none
+    - informational
+    - low
+    - medium
+    - high
+    - critical

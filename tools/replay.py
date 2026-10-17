@@ -238,9 +238,9 @@ ROLE = {
     "process": "process.command_line", "process_name": "process.name", "process_path": "process.path", "process_guid": "process.guid",
     "process_hash": "process.sha256", "parent_process_guid": "process.parent_guid", "parent_process_path": "process.parent_path",
     "parent_process_name": "process.parent_name", "registry_path": "registry.path", "registry_value_name": "registry.value_name",
-    "registry_value_data": "registry.value_data", "EventCode": "event.code", "ImagePath": "file.path",
+    "registry_value_data": "registry.value_data", "EventCode": "event.type_id", "ImagePath": "file.path",
     "SourceImage": "process.path", "SourceProcessGUID": "process.guid", "TargetImage": "target_process.path",
-    "granted_access": "process_access.granted_access", "CallTrace": "process_access.call_trace",
+    "granted_access": "process_access.rights", "CallTrace": "process_access.call_stack",
     "signature": "reporting_control.signature", "signature_id": "reporting_control.signature_id", "category": "reporting_control.category",
     "severity": "reporting_control.severity", "action": "reporting_control.action", "file_hash": "file.sha256", "file_name": "file.name",
     "file_path": "file.path",
@@ -276,7 +276,7 @@ def ref_value(ref, n):
     if kind == "alert":
         return n.get(name)
     if kind == "entity":
-        return n.get({"process": "process.guid", "parent_process": "process.parent_guid", "module": "process.guid", "file": "file.path"}[name])
+        return n.get({"process": "process.guid", "parent_process": "process.parent_guid", "module": "process.guid", "file": "file.path", "recipient_hosts": "email.recipient"}[name])
     return None
 
 
@@ -299,6 +299,10 @@ def derive(d, n):
 def measure(b, q, inputs, n, ctx):
     """The broker's typed answer for one question on one alert, or None for status unknown."""
     cap = q["capability"]["name"]
+    if cap == "email.no_interaction" and n.get("file.sha256") and "attachment_open_telemetry" not in (ctx.get("coverage") or []):
+        return None   # B2: the message carried an attachment and no host records attachment opens: missing clicks are not evidence
+    if cap == "precedent.check":
+        return B.q0(b, context_answers(b, n, ctx, d=ctx.get("_detection")))
     if q["id"] in (ctx.get("overrides") or {}):
         return ctx["overrides"][q["id"]]   # a regression case supplies a broker answer the clean room cannot give
     optional = set(q["capability"].get("optional_inputs") or [])
@@ -324,7 +328,7 @@ def measure(b, q, inputs, n, ctx):
         # The endpoint API is authoritative (_api: the vendor alerts it matched); without it the SIEM's copy of the alert
         # is the fallback (_raw read through the product's siem_copy table, else the generic one).
         copy = {"raw": n.get("_raw") or {"value": n.get("reporting_control.action_raw")}, "tables": n.get("_tables") or []}
-        v, ctx["_trust"], ctx["_prov"] = B.run_status(b, n.get("_api"), copy, ctx=ctx)
+        v, ctx["_trust"], ctx["_prov"] = B.run_status(b, n.get("_api"), copy, ctx=ctx, sha256=n.get("file.sha256"))
         return v
     if cap == "list.lookup" and (b["facts"].get(inputs.get("list")) or {}).get("default_entries"):
         # A context list that starts from default entries (CF-0031 internal networks: the private ranges) holds them in the clean room.
@@ -355,6 +359,55 @@ def measure(b, q, inputs, n, ctx):
     return False   # precedent.check, list.lookup (CF-0031 internal networks included), identity.groups, change.window, scan.job_active, *.reputation: empty in a clean room
 
 
+def _entity(n):
+    return n.get("host.name") or n.get("user.name") or n.get("email.recipient")
+
+
+def _minutes(t):
+    """Minutes since the epoch for the time formats the datasets use; 0 when a time is missing or unreadable (every such
+    alert then counts as simultaneous, which can only make an entity hotter)."""
+    from datetime import datetime
+    t = str(t or "").strip()
+    for parse in (lambda x: datetime.fromisoformat(x.replace("Z", "+00:00")), lambda x: datetime.strptime(x[:19], "%m/%d/%Y %I:%M:%S"),
+                  lambda x: datetime.strptime(x[:19], "%m/%d/%Y %H:%M:%S"), lambda x: datetime.fromtimestamp(float(x))):
+        try:
+            return parse(t).timestamp() / 60
+        except (ValueError, OverflowError, OSError):
+            pass
+    return 0.0
+
+
+def context_answers(b, n, ctx, d=None, at=None):
+    """The context answers for one alert as the broker would return them, measured fresh at time `at` (default: the alert's
+    own time): C-02 and C-03 from the alerts on the same entity seen so far (ctx["timeline"], else this detection's replayed
+    alerts), C-04 from the recorded closes of the fingerprint (ctx["closures"]) by the human-evidence definition, and the
+    rest (C-01, C-06, C-08) from the case's context. A new alert invalidates the cached C-02: nothing here is cached (S1)."""
+    ans = dict({"C-01": False}, **(ctx.get("context") or {}))
+    seen = ctx.get("timeline") if ctx.get("timeline") is not None else ctx.get("alerts", [])[:n.get("_idx", 0) + 1]
+    now = _minutes(at or n.get("event.time"))
+    p = lambda name: B.param_value(b, name, d, ctx.get("customer"), ans.get("C-08") if ans.get("C-08") in ("server", "workstation", "network", "other") else None)
+    window, look = float(p("entity_grouping_window_minutes")), float(p("triage_lookback_hours")) * 60
+    mine = [x for x in seen if _entity(x) == _entity(n) and now - look <= _minutes(x.get("event.time")) <= now]
+    routine = {tuple(r) for r in ctx.get("routine") or []}
+    counted = [x for x in mine if (_entity(x), x.get("_detection")) not in routine or x.get("severity") in ("high", "critical")]
+    in_window = [x for x in counted if now - window <= _minutes(x.get("event.time"))]
+    c02 = {"alerts": len(in_window), "distinct_detections": len({x.get("_detection") for x in in_window})}
+    top = {}
+    for x in counted:
+        if B.severity_rank(b, x.get("severity")) is not None:
+            top[x.get("_detection")] = max(top.get(x.get("_detection"), x["severity"]), x["severity"], key=lambda s: B.severity_rank(b, s))
+    for level in b["severity"]["scale"]:
+        c02[f"day_detections_{level}"] = sum(1 for v in top.values() if v == level)
+    ans.setdefault("C-02", c02)
+    others = [x.get("severity") for x in mine if x is not n and B.severity_rank(b, x.get("severity")) is not None]
+    ans.setdefault("C-03", max(others, key=lambda s: B.severity_rank(b, s)) if others else "none")
+    fp = n.get("fingerprint")
+    ans.setdefault("C-04", B.human_evidence(b, [c for c in ctx.get("closures") or [] if c.get("fingerprint", fp) == fp]))
+    ans.update(_mode=ctx.get("mode", "recommend"), _severity=n.get("severity"), _detection=d, _customer=ctx.get("customer"),
+               _entity_class=ans.get("C-08"))
+    return ans
+
+
 def answer(b, q, item, n, ctx, d):
     """The Triage side of one question: the broker's answer, status and trust, turned into yes / no / unknown by the step's rule.
     Records (question, yes/no/unknown, trust, provenance) in ctx["answers"]; the triage side reads only the trust."""
@@ -362,7 +415,11 @@ def answer(b, q, item, n, ctx, d):
         return "unknown"   # clean room: no coverage report, so the question is no_capability
     ctx["_trust"], ctx["_prov"] = "checked", None
     value = measure(b, q, B.step_inputs(q, item), n, ctx)
+    if q["id"] in (ctx.get("not_checked") or []) and value is not None:
+        ctx["_trust"], ctx["_prov"] = "not_checked", ctx.get("_prov") or "fallback source"   # a regression case's fallback-source answer
     a = B.apply_rule(b, item.get("rule"), value, B.answer_type(b, q["id"]), d)
+    if ctx.get("_nc_as_unknown") and ctx["_trust"] == "not_checked":
+        a = "unknown"   # run A of the stricter-of rule: every not_checked answer read as unknown
     ctx.setdefault("answers", []).append((q["id"], a, ctx["_trust"], ctx["_prov"]))
     return a
 
@@ -372,12 +429,34 @@ def run_flow(b, d, n, ctx):
     The Auto rule, in triage terms: a not_checked answer may support a close in Shadow and Recommend (the close is marked
     "not_checked: <question>" in the explanation and decision log), never in Auto (the close becomes a flag). An answer of
     unknown supports nothing. The provenance in brackets is the broker's, shown here for the gate report only."""
-    ctx["answers"] = []
+    ctx["answers"], ctx["_closing_step"], ctx["_detection"] = [], None, d
     out, trail = _run_flow(b, d, n, ctx)
+    if out.startswith("close"):
+        # S1: the entity guard is re-evaluated on a fresh C-02 immediately before the close is written.
+        hot = B.entity_hot(b, context_answers(b, n, ctx, d))
+        if hot is not False:
+            return "flag", trail + [f"entity guard {'hot' if hot else 'unknown'} at write time -> flag"]
+    if out.startswith("close"):
+        # Auto exclusions (bank/triage/auto_exclusions.yaml): a detection capped at Recommend, or an excluded close step,
+        # never closes in Auto; in Shadow and Recommend the close stands, marked.
+        step_codes = B.auto_excluded(d, ctx["_closing_step"] or {})
+        excluded = (B.auto_excluded(d) if d.get("max_mode") == "recommend" else []) + step_codes
+        if excluded and ctx.get("mode") == "auto":
+            return "flag", trail + [f"auto_excluded ({', '.join(excluded)}) in Auto -> flag"]
+        if step_codes:
+            trail = trail + [f"auto_excluded: {', '.join(step_codes)}"]
     nc = sorted({f"{qid} [{prov}]" for qid, a, trust, prov in ctx["answers"] if trust == "not_checked" and a != "unknown"})
-    if out.startswith("close") and nc:
-        if ctx.get("mode") == "auto":
+    if ctx.get("mode") == "auto" and nc and not ctx.get("_nc_as_unknown"):
+        # Auto: the stricter of (B) the trust rule (a close resting on a not_checked answer flags) and (A) the same flow with
+        # every not_checked answer read as unknown (round 6, §5.1: the trust rule alone was weaker on 94 paths).
+        b_out = "flag" if out.startswith("close") else out
+        a_out, a_trail = _run_flow(b, d, n, dict(ctx, _nc_as_unknown=True, answers=[]))
+        if B.SEVERITY[B.outcome_kind(a_out)] > B.SEVERITY[B.outcome_kind(b_out)]:
+            return a_out, trail + [f"not_checked answer in Auto: {', '.join(nc)}; read as unknown the flow gives {a_out} [{' > '.join(a_trail)}], the stricter -> {a_out}"]
+        if out.startswith("close"):
             return "flag", trail + [f"not_checked answer in Auto: {', '.join(nc)} -> flag"]
+        return out, trail
+    if out.startswith("close") and nc:
         trail = trail + [f"not_checked: {x}" for x in nc]
     return out, trail
 
@@ -400,6 +479,7 @@ def _run_flow(b, d, n, ctx):
                 trail.append("guards " + ",".join(f"{g['question']}={a}" for g, a in results) + f" -> {raised}")
                 out = raised
         if out != "next":
+            ctx["_closing_step"] = st
             return context_unknown(out, trail, ctx)
     return "flag", trail
 
@@ -419,9 +499,12 @@ AV = {"host.name": "ws-01", "user.name": "u1", "event.time": "2026-10-17T00:00:0
 PUA = {"reporting_control.signature": "PUA:Win32/Presenoker", "reporting_control.category": "pua"}
 
 
-def api(*evidence):
-    """The endpoint API's answer: the vendor alerts the broker matched (by vendor alert ID, else device + hash + window)."""
-    return {"tables": GRAPH, "matches": list(evidence)}
+def api(sha, *alerts):
+    """The endpoint API's answer: the vendor alerts the broker matched (by vendor alert ID, else device + hash + window), each
+    with one file evidence item for the alerted file (hash sha) carrying the given statuses. An alert given as a list holds
+    several evidence items as they are."""
+    return {"tables": GRAPH, "matches": [{"evidence": a if isinstance(a, list) else [dict({"type": "fileEvidence", "fileDetails": {"sha256": sha}}, **a)]}
+                                         for a in alerts]}
 
 
 VERIFIED = ["microsoft-defender-for-endpoint", "generic"]   # tables a synthetic customer has verified (as after #20 and onboarding)
@@ -429,23 +512,32 @@ USB = {"_coverage": ["device_control_write_events"], "host.name": "srv-01", "use
        "reporting_control.action": "allowed", "device.files_written": 0}
 MAIL = {"_overrides": {"Q-0035": True}, "email.sender": "a@example.org", "email.subject": "invoice", "email.recipient": "u1@corp.example",
         "email.url": "http://example.org/x", "file.sha256": "1" * 64, "event.time": "2026-10-17T00:00:00Z", "reporting_control.action": "quarantined"}
-API_PREVENTED = dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api({"detectionStatus": "prevented"})})
+REPORT = {"email.message_id": "<m1@example.org>", "email.sender": "notice@corp.example", "email.sender_domain": "corp.example", "email.recipient": "u1@corp.example",
+          "user.name": "u1", "email.url": "http://example.org/x", "event.time": "2026-10-17T00:00:00Z", "severity": "medium"}
+PSEXEC = {"host.name": "ws-07", "user.name": "admin1", "process.parent_name": "cmd.exe", "process.sha256": "7" * 64, "process.name": "psexec.exe",
+          "process.command_line": "psexec.exe -accepteula \\\\srv-02 cmd", "event.time": "2026-10-17T08:00:00Z", "severity": "medium"}
+LSASS = {"host.name": "ws-07", "user.name": "admin1", "process.path": "C:\\Tools\\procdump.exe", "process.sha256": "8" * 64, "process.guid": "{g-1}",
+         "target_process.path": "C:\\Windows\\System32\\lsass.exe", "process_access.rights": "0x1010", "event.time": "2026-10-17T08:15:00Z", "severity": "medium"}
+CLOSE = lambda kind, analyst=None: {"kind": kind, "analyst": analyst}
+API_PREVENTED = dict(AV, **PUA, **{"file.sha256": "d" * 64, "reporting_control.vendor_alert_id": "da-4", "_api": api("d" * 64, {"detectionStatus": "prevented"})})
 BLOCK_1117 = dict(AV, **PUA, **{"file.sha256": "e" * 64, "reporting_control.action_raw": "Block", "_raw": {"EventID": "1117", "Action Name": "Block"}, "_tables": EVENT_LOG})
 
 # (detection, name, alert, required outcome). A required outcome ending in "+not_checked" also requires the close to be marked
-# "not_checked: <question>"; any other close must not be marked. Alert keys starting with _ are harness inputs: _mode (shadow, recommend, auto; default
+# "not_checked: <question>"; any other close must not be marked. A required outcome starting with "not " must not be reached
+# (for example "not close:inherit": Q0 must not close). Alert keys starting with _ are harness inputs: _mode (shadow, recommend, auto; default
 # recommend), _api (the endpoint API's matches), _raw/_tables (the SIEM copy), _coverage (coverage reports present),
 # _context (context answers; None = unknown or source unavailable), _verified (tables a synthetic customer has verified),
-# _overrides (broker answers per question the clean room cannot give, for example the mailbox status).
+# _overrides (broker answers per question the clean room cannot give, for example the mailbox status), _closures (recorded closes
+# of the fingerprint, by kind: Q0 counts them through the human-evidence definition).
 REGRESSION = [
  ("D-0026", "no hash, high-risk class, detected (not blocked) must escalate",
   dict(AV, **{"reporting_control.signature": "HackTool:Win32/Mimikatz", "reporting_control.category": "hacktool", "reporting_control.action_raw": "detected"}), "escalate"),
  ("D-0026", "no hash, high-risk class, blocked must escalate",
   dict(AV, **{"reporting_control.signature": "HackTool:Win32/Mimikatz", "reporting_control.category": "hacktool", "reporting_control.action_raw": "blocked_pre_execution"}), "escalate"),
  ("D-0026", "Defender API detectionStatus blocked (remediated at run time), low-risk class: no close",
-  dict(AV, **PUA, **{"file.sha256": "a" * 64, "reporting_control.vendor_alert_id": "da-1", "_api": api({"detectionStatus": "blocked"})}), "escalate"),
+  dict(AV, **PUA, **{"file.sha256": "a" * 64, "reporting_control.vendor_alert_id": "da-1", "_api": api("a" * 64, {"detectionStatus": "blocked"})}), "escalate"),
  ("D-0026", "Defender API quarantine only (no detection status), low-risk class: flag",
-  dict(AV, **PUA, **{"file.sha256": "b" * 64, "reporting_control.vendor_alert_id": "da-2", "_api": api({"remediationStatus": "quarantined"})}), "flag"),
+  dict(AV, **PUA, **{"file.sha256": "b" * 64, "reporting_control.vendor_alert_id": "da-2", "_api": api("b" * 64, {"remediationStatus": "quarantined"})}), "flag"),
  ("D-0026", "any product, no API, SIEM copy quarantined only (ambiguous row), low-risk class: flag",
   dict(AV, **{"file.sha256": "c" * 64, "reporting_control.signature": "Adware:Win32/X", "reporting_control.category": "adware",
               "reporting_control.action_raw": "quarantined"}), "flag"),
@@ -467,9 +559,9 @@ REGRESSION = [
                      "_tables": EVENT_LOG}), "escalate"),
  ("D-0026", "no vendor alert ID, fallback match finds two Defender alerts, low-risk class: flag",
   dict(AV, **PUA, **{"file.sha256": "f" * 64, "reporting_control.endpoint_device": "dev-1",
-                     "_api": api({"detectionStatus": "prevented"}, {"detectionStatus": "prevented"})}), "flag"),
+                     "_api": api("f" * 64, {"detectionStatus": "prevented"}, {"detectionStatus": "prevented"})}), "flag"),
  ("D-0026", "no vendor alert ID, fallback match finds no Defender alert, low-risk class: flag",
-  dict(AV, **PUA, **{"file.sha256": "0" * 64, "reporting_control.endpoint_device": "dev-1", "_api": api()}), "flag"),
+  dict(AV, **PUA, **{"file.sha256": "0" * 64, "reporting_control.endpoint_device": "dev-1", "_api": api("0" * 64)}), "flag"),
  ("D-0031", "email quarantined before delivery, Recommend: close (blocked by the control), marked not_checked",
   dict(MAIL, **{"email.delivery_stage": "pre_delivery"}), "close:mitigated_true_positive+not_checked"),
  ("D-0031", "email quarantined after delivery (a purge of a delivered message): ambiguous, flag",
@@ -483,11 +575,104 @@ REGRESSION = [
   dict(USB, _context={"C-06": False, "C-08": "workstation"}), "close:benign_true_positive+not_checked"),
  ("D-0034", "removable media, C-08 workstation, unverified rows, Auto: flag",
   dict(USB, _mode="auto", _context={"C-06": False, "C-08": "workstation"}), "flag"),
- ("D-0034", "removable media, C-08 workstation, rows verified, Auto: close",
-  dict(USB, _mode="auto", _verified=VERIFIED, _context={"C-06": False, "C-08": "workstation"}), "close:benign_true_positive"),
+ ("D-0034", "removable media, C-08 workstation, rows verified, Auto: flag (capped at Recommend: no true-positive replay data, §5.2)",
+  dict(USB, _mode="auto", _verified=VERIFIED, _context={"C-06": False, "C-08": "workstation"}), "flag"),
  ("D-0034", "removable media, C-06 unavailable and C-08 workstation: flag (context_unknown)",
   dict(USB, _context={"C-06": None, "C-08": "workstation"}), "flag"),
+ # Round 6, §5.1: in Auto the outcome is the stricter of the trust rule and the flow with not_checked answers read as unknown.
+ ("D-0006", "Auto: baseline yes from the fallback source (not_checked) would flag; read as unknown the flow reaches Q-0004 and escalates",
+  dict(PSEXEC, _mode="auto", _overrides={"Q-0001": False, "Q-0002": True, "Q-0003": 30, "Q-0004": False}, _not_checked=["Q-0003"]), "escalate"),
+ ("D-0006", "the same in Recommend: the not_checked baseline yes flags (no Auto rule)",
+  dict(PSEXEC, _overrides={"Q-0001": False, "Q-0002": True, "Q-0003": 30, "Q-0004": False}, _not_checked=["Q-0003"]), "flag"),
+ # Round 6, S7: the broker reads the evidence item for the alerted file, by hash, never the first item.
+ ("D-0026", "Defender API: a benign sibling file prevented, the alerted file detected: ran, escalate",
+  dict(AV, **PUA, **{"file.sha256": "c1" * 32, "reporting_control.vendor_alert_id": "da-5", "_api": api("c1" * 32, [
+      {"type": "fileEvidence", "fileDetails": {"sha256": "c2" * 32}, "detectionStatus": "prevented", "remediationStatus": "prevented"},
+      {"type": "fileEvidence", "fileDetails": {"sha256": "c1" * 32}, "detectionStatus": "detected"}])}), "escalate"),
+ ("D-0026", "Defender API: the only evidence item is for another file: unknown, flag",
+  dict(AV, **PUA, **{"file.sha256": "c3" * 32, "reporting_control.vendor_alert_id": "da-6", "_api": api("c3" * 32, [
+      {"type": "fileEvidence", "fileDetails": {"sha256": "c4" * 32}, "detectionStatus": "prevented"}])}), "flag"),
+ # Round 6, B1: the customer's own domains never count as approved senders; an approved external sender never closes in Auto.
+ ("D-0032", "user report, internal sender (own domain) on the approved list, DMARC pass, no URL hit: flag",
+  dict(REPORT, _overrides={"Q-0037": False, "Q-0071": True, "Q-0070": True, "Q-0034": False, "Q-0075": True}), "flag"),
+ ("D-0032", "user report, approved external sender, DMARC pass, no URL hit, Recommend: close shown (never in Auto)",
+  dict(REPORT, **{"email.sender": "notice@payroll.example", "email.sender_domain": "payroll.example"},
+       _overrides={"Q-0037": False, "Q-0071": True, "Q-0070": True, "Q-0034": False, "Q-0075": False}), "close:false_positive"),
+ ("D-0032", "user report, approved external sender alone, Auto: no close",
+  dict(REPORT, **{"email.sender": "notice@payroll.example", "email.sender_domain": "payroll.example"}, _mode="auto",
+       _overrides={"Q-0037": False, "Q-0071": True, "Q-0070": True, "Q-0034": False, "Q-0075": False}), "flag"),
+ # B2: missing click records are not evidence when the message carried an attachment.
+ ("D-0031", "delivered macro attachment, purged 2h later, zero clicks, no attachment-open telemetry: flag",
+  dict(MAIL, **{"email.delivery_stage": "post_delivery", "file.name": "invoice.docm"}, _overrides={"Q-0035": True, "Q-0036": True, "Q-0076": "none"}), "flag"),
+ ("D-0031", "the same with attachment-open telemetry on every recipient host and no other alert there: close shown",
+  dict(MAIL, **{"email.delivery_stage": "post_delivery", "file.name": "invoice.docm"}, _coverage=["attachment_open_telemetry"],
+       _overrides={"Q-0035": True, "Q-0036": True, "Q-0076": "none"}), "close:mitigated_true_positive"),
+ ("D-0031", "the same with telemetry, but another alert on a recipient's host: flag",
+  dict(MAIL, **{"email.delivery_stage": "post_delivery", "file.name": "invoice.docm"}, _coverage=["attachment_open_telemetry"],
+       _overrides={"Q-0035": True, "Q-0036": True, "Q-0076": "medium"}), "flag"),
+ # B3: only human evidence makes a precedent; in Auto only an audited close does.
+ ("D-0006", "two accepted recommendations by two analysts: Q0 does not fire",
+  dict(PSEXEC, _closures=[CLOSE("accepted_recommendation", "a1"), CLOSE("accepted_recommendation", "a2")]), "not close:inherit"),
+ ("D-0006", "two Auto closes: Q0 does not fire",
+  dict(PSEXEC, _closures=[CLOSE("auto_close"), CLOSE("auto_close")]), "not close:inherit"),
+ ("D-0006", "two manual closes in Shadow by two analysts, Recommend: Q0 fires",
+  dict(PSEXEC, _closures=[CLOSE("manual_shadow_close", "a1"), CLOSE("manual_shadow_close", "a2")]), "close:inherit"),
+ ("D-0006", "two analyst overrides by two analysts, Auto: Q0 does not fire (Auto needs an audited close)",
+  dict(PSEXEC, _mode="auto", _closures=[CLOSE("analyst_override", "a1"), CLOSE("analyst_override", "a2")]), "not close:inherit"),
+ ("D-0006", "one audited close, Auto: Q0 fires",
+  dict(PSEXEC, _mode="auto", _closures=[CLOSE("audited_close", "a1")]), "close:inherit"),
 ]
+
+
+# Alert sequences on one entity (S1, S2): (name, [(detection, alert)], context, required outcome for every alert, after any
+# reopening). Each alert is triaged when it arrives; the entity guard runs on a fresh C-02 before each close is written, and
+# when the entity turns hot the closes already written on it inside the window (the look-back for the 24h rule) reopen as flags.
+AT = lambda t: {"event.time": f"2026-10-17T{t}:00Z"}
+SEQUENCES = [
+ ("S1: 3 alerts from 2 detections within 4 minutes on one host, each closable alone: all flag",
+  [("D-0026", dict(API_PREVENTED, **AT("10:00"), **{"host.name": "ws-01"})), ("D-0026", dict(API_PREVENTED, **AT("10:02"), **{"host.name": "ws-01", "file.sha256": "9" * 64, "_api": api("9" * 64, {"detectionStatus": "prevented"})})),
+   ("D-0034", dict(USB, **AT("10:04"), **{"host.name": "ws-01"}))], {"C-06": False, "C-08": "workstation"}, "flag"),
+ ("S1 control: the same two D-0026 alerts alone stay closable (the guard needs 3 alerts)",
+  [("D-0026", dict(API_PREVENTED, **AT("10:00"), **{"host.name": "ws-01"})), ("D-0026", dict(API_PREVENTED, **AT("10:02"), **{"host.name": "ws-01", "file.sha256": "9" * 64, "_api": api("9" * 64, {"detectionStatus": "prevented"})}))],
+  {"C-06": False, "C-08": "workstation"}, "close:mitigated_true_positive"),
+ ("S2: PsExec and LSASS access on one host, both medium, 15 minutes apart, each closable alone: both flag",
+  [("D-0006", dict(PSEXEC, _overrides={"Q-0001": True})), ("D-0020", dict(LSASS, _overrides={"Q-0005": True}))], {"C-06": False}, "flag"),
+ ("S2 control: the same two at low severity stay closable (the 24h rule counts medium and above)",
+  [("D-0006", dict(PSEXEC, severity="low", _overrides={"Q-0001": True})), ("D-0020", dict(LSASS, severity="low", _overrides={"Q-0005": True}))], {"C-06": False}, "close"),
+]
+
+
+def run_sequences(b, ctx, batches):
+    failures = []
+    eg = b["context_rules"]["entity_guard"]["hot_when"]["any"]
+    for name, seq, context, want in SEQUENCES:
+        if any(b["detections"][did]["family"] not in batches for did, _ in seq):
+            continue
+        timeline, results = [], []
+        for i, (did, alert) in enumerate(seq):
+            d = b["detections"][did]
+            n = derive(d, dict(alert, _idx=i, _detection=did))
+            timeline.append(n)
+            c = dict(ctx, alerts=timeline, timeline=list(timeline), conns=[], context=dict(context), coverage=alert.get("_coverage") or [],
+                     overrides=alert.get("_overrides") or {}, closures=alert.get("_closures") or [], not_checked=alert.get("_not_checked") or [], mode=alert.get("_mode", "recommend"), customer=None, today=TODAY)
+            out, trail = run_flow(b, d, n, c)
+            results.append([n, out, trail])
+            # the entity turned hot on this alert: reopen the closes already written on it (window rule: the grouping window; 24h rule: the look-back)
+            ans = context_answers(b, n, c, d)
+            window_hot = B.context_rule(b, {"any": eg[:2]}, ans) is not False
+            day_hot = B.context_rule(b, eg[2], ans) is not False
+            span = float(B.param_value(b, "triage_lookback_hours")) * 60 if day_hot else float(B.param_value(b, "entity_grouping_window_minutes"))
+            if window_hot or day_hot:
+                for r in results[:-1]:
+                    if r[1].startswith("close") and _entity(r[0]) == _entity(n) and _minutes(n["event.time"]) - _minutes(r[0]["event.time"]) <= span:
+                        r[1], r[2] = "flag", r[2] + [f"reopened: entity hot at {n['event.time']} (reason entity_hot)"]
+        ok = all(out == want or out.startswith(want + ":") or (want == "close" and out.startswith("close")) for _, out, _ in results)
+        print(f"  {'ok  ' if ok else 'FAIL'} sequence {name}")
+        for n, out, trail in results:
+            print(f"         {n['_detection']} {n['event.time']}: {out}  [{' > '.join(trail)}]")
+        if not ok:
+            failures.append(name)
+    return failures
 
 
 TODAY = "2026-10-17"
@@ -513,9 +698,15 @@ def run_regression(b, ctx, batches):
             bb["customers"][customer] = synthetic_customer(bb, alert["_verified"])
         n = derive(bb["detections"][did], dict(alert, _idx=0))
         c = dict(ctx, alerts=[n], conns=[], context=dict(ctx.get("context") or {}, **(alert.get("_context") or {})), coverage=alert.get("_coverage") or [],
-                 overrides=alert.get("_overrides") or {},
+                 overrides=alert.get("_overrides") or {}, closures=alert.get("_closures") or [], not_checked=alert.get("_not_checked") or [],
                  mode=alert.get("_mode", "recommend"), customer=customer, today=TODAY)
         out, trail = run_flow(bb, bb["detections"][did], n, c)
+        if want.startswith("not "):
+            ok = not out.startswith(want[4:])
+            print(f"  {'ok  ' if ok else 'FAIL'} {did}: {name} -> {out}  [{' > '.join(trail)}]")
+            if not ok:
+                failures.append(name)
+            continue
         need_mark = want.endswith("+not_checked")
         want = want.replace("+not_checked", "")
         got = out if want.startswith("close:") and out.startswith(want) else out.split(":")[0]
@@ -601,9 +792,20 @@ def main():
         print("\nVulnerability step answered unknown (never closes): " + ", ".join(f"{k} {v}" for k, v in sorted(ctx["vuln_unknown"].items())))
     print("\nRegression cases:")
     reg_fail = run_regression(b, ctx, batches)
-    n_reg = sum(1 for did, *_ in REGRESSION if b["detections"][did]["family"] in batches)
-    B.require_loaded(f"replay ({', '.join(sorted(batches))})", detections=len(rows), events=sum(r[2] for r in rows))
-    bad = fails or reg_fail or (strict and mitigated)
+    print("\nAlert sequences on one entity:")
+    reg_fail += run_sequences(b, ctx, batches)
+    n_reg = sum(1 for did, *_ in REGRESSION if b["detections"][did]["family"] in batches) + \
+        sum(1 for _, seq, *_ in SEQUENCES if all(b["detections"][did]["family"] in batches for did, _ in seq))
+    # A detection without true-positive replay data must be capped at Recommend (no_tp_replay_data); a family run that
+    # replays zero events passes only if every detection in it is so capped (round 6, §5.2).
+    uncapped = [did for did, _ in cannot if "no_tp_replay_data" not in B.auto_excluded(b["detections"][did])]
+    for did in uncapped:
+        print(f"FAIL {did}: no true-positive replay data, but not capped at Recommend with auto_excluded_reason no_tp_replay_data")
+    if rows or uncapped or not cannot:
+        B.require_loaded(f"replay ({', '.join(sorted(batches))})", detections=len(rows), events=sum(r[2] for r in rows))
+    else:
+        print(f"replay: 0 events, every one of the {len(cannot)} detections without replay data is capped at Recommend")
+    bad = fails or reg_fail or (strict and mitigated) or uncapped
     print(f"\nreplay: {sum(r[2] for r in rows)} TP events in {len(rows)} detections, {n_reg - len(reg_fail)}/{n_reg} regression cases; "
           f"{len(fails)} benign/FP closes, {len(mitigated)} mitigated closes"
           f" -> {'FAIL' if bad else 'PASS'}{' (strict)' if strict else ''}")

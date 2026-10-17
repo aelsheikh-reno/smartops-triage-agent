@@ -2,6 +2,9 @@ id: D-0035
 name: Removable media file write (device control) alert
 family: data_protection
 alert_type: control
+max_mode: recommend
+max_mode_reason: No true-positive replay data for device-control alerts (round 6, §5.2).
+auto_excluded_reason: no_tp_replay_data
 techniques:
 - T1052.001
 - T1091
@@ -124,7 +127,7 @@ flow:
       gte:
         param: usb_files_written_flag
 status: draft
-version: 1
+version: 2
 parameters:
   precedent_validity_hours: 72
 derived_from:

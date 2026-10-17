@@ -243,6 +243,9 @@ questions:
       - CF-0023
   Q-0049:
     capability: endpoint.run_status
+    inputs:
+      match_window_minutes:
+        param: edr_alert_match_window_minutes   # broker parameter (bank/broker/parameters.yaml)
   Q-0050:
     capability: list.lookup
     inputs:
@@ -338,6 +341,15 @@ questions:
     needs:
       context:
       - CF-0026
+  Q-0075:
+    capability: list.lookup
+    inputs:
+      list: CF-0032
+    needs:
+      context:
+      - CF-0032
+  Q-0076:
+    capability: alert.recipient_hosts_severity
   Q-0072:
     capability: alert.measure
   Q-0074:

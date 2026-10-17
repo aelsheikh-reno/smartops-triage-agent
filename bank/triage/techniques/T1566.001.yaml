@@ -10,6 +10,7 @@ template: office_child
 covers: Office application launching a payload
 max_mode: recommend
 max_mode_reason: technique fallback with no true-positive replay data (#14); capped at Recommend until it has some
+auto_excluded_reason: no_tp_replay_data
 fingerprint:
 - role:host.name
 - role:user.name
@@ -66,4 +67,4 @@ derived_from:
   source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
   license: MITRE ATT&CK Terms of Use
 status: draft
-version: 4
+version: 5

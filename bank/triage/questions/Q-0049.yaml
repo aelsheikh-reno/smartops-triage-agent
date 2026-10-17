@@ -15,15 +15,13 @@ derived_from:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3
 kind: triage
 inputs:
   vendor_alert_id: role:reporting_control.vendor_alert_id
   endpoint_device: role:reporting_control.endpoint_device
   file: role:file.sha256
   at_time: role:event.time
-  match_window_minutes:
-    param: edr_alert_match_window_minutes
 optional_inputs:
 - vendor_alert_id
 - endpoint_device

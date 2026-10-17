@@ -10,6 +10,7 @@ template: account
 covers: Local account creation
 max_mode: recommend
 max_mode_reason: technique fallback with no true-positive replay data (#14); capped at Recommend until it has some
+auto_excluded_reason: no_tp_replay_data
 fingerprint:
 - role:host.name
 - role:user.name
@@ -40,7 +41,7 @@ flow:
         param: alert_history_min_count
 - step: 2
   question: Q-0020
-  on_yes: close:benign_true_positive:provisioning_service_account
+  on_yes: flag
   on_no: next
   on_unknown: next
 - step: 3
@@ -54,11 +55,11 @@ flow:
   question: Q-0004
   bind:
     user: role:actor.name
-  on_yes: close:benign_true_positive:approved_change
+  on_yes: flag
   on_no: escalate
   on_unknown: flag
 derived_from:
   source: MITRE ATT&CK v20.0 (mitre-attack/attack-stix-data); flow assembled from the pilot rule-level flows
   license: MITRE ATT&CK Terms of Use
 status: draft
-version: 4
+version: 5

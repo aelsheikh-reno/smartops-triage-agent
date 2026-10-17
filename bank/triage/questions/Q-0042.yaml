@@ -1,5 +1,5 @@
 id: Q-0042
-text: Was every connection from the source address in the alert window denied, with none allowed or established, to any destination?
+text: Was every connection from the source address in the last 24 hours, up to the alert time, denied, with none allowed or established, to any destination?
 tests: BE-0028
 attacker_influence:
   rating: low
@@ -11,8 +11,10 @@ derived_from:
 text_origin: original
 legal_review: false
 status: draft
-version: 2
+version: 3
 kind: triage
 inputs:
   source: role:src.ip
-  window: role:event.time
+  at_time: role:event.time
+  lookback_hours:
+    param: triage_lookback_hours

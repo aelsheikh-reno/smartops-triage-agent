@@ -2,6 +2,9 @@ id: D-0030
 name: Web application firewall alert
 family: network
 alert_type: control
+max_mode: recommend
+max_mode_reason: "No true-positive replay data: no WAF dataset ships with any test (round 6, §5.2)."
+auto_excluded_reason: no_tp_replay_data
 techniques:
 - T1190
 derived_fields:
@@ -151,7 +154,7 @@ flow:
       gte:
         param: waf_distinct_signatures_min
 status: draft
-version: 4
+version: 5
 derived_from:
   library: bank
   rule: vendor:waf_alert

@@ -22,7 +22,7 @@ ROLES = {
     "file": ["sha256", "path", "name", "signer"],
     "process": ["guid", "path", "name", "command_line", "sha256", "parent_guid", "parent_path", "parent_name"],
     "target_process": ["path"],
-    "process_access": ["granted_access", "call_trace"],
+    "process_access": ["rights", "call_stack"],   # access rights requested on the target process, and the calling code's stack
     "registry": ["path", "value_name", "value_data"],
     # vendor_alert_id / endpoint_device: the reporting product's own alert ID and device (agent) ID, which the Tool Broker
     # uses to find the alert in the vendor's API (the authoritative source); missing -> a bounded fallback match
@@ -31,8 +31,8 @@ ROLES = {
     "web": ["url", "user_agent", "method", "status", "category", "app", "forwarded_for"],
     "network": ["transport", "rule"],
     "device": ["id", "class", "event_type", "files_written"],
-    "dlp": ["object", "object_hash", "record_count"],
-    "event": ["time", "code"],
+    "dlp": ["object", "object_hash", "record_count", "egress_stage"],   # egress_stage: before_egress or after_egress (whether the data had left when the control acted)
+    "event": ["time", "type_id"],   # type_id: the OS or product's identifier for the event type
 }
 ATTRS = {f"{r}.{a}" for r, attrs in ROLES.items() for a in attrs}
 
@@ -42,9 +42,10 @@ ENTITIES = {
     "parent_process": "the parent of the alert's process",
     "module": "the module (DLL or registered file) the alert's process loaded",
     "file": "the alert's file (role file)",
+    "recipient_hosts": "the hosts of the message's recipients (role email), as the Tool Broker resolves them",
     "subject": "placeholder: the step must bind it to one of the entities above",
 }
-ALERT_PROPS = {"fingerprint", "entity"}  # entity: the grouping entity (host by asset ID, or user)
+ALERT_PROPS = {"fingerprint", "entity", "severity"}  # entity: the grouping entity (host by asset ID, or user); severity: normalized (bank/contract/severity.yaml)
 PLACEHOLDERS = {"entity:subject", "bind:history_key"}
 
 REF = re.compile(r"\b(role|entity|derived|alert|bind):([A-Za-z_][A-Za-z0-9_.]*)")
@@ -72,5 +73,5 @@ def role_of(ref):
     if kind == "role":
         return name.split(".")[0]
     if kind == "entity":
-        return {"process": "process", "parent_process": "process", "module": "process", "file": "file"}.get(name)
+        return {"process": "process", "parent_process": "process", "module": "process", "file": "file", "recipient_hosts": "email"}.get(name)
     return None

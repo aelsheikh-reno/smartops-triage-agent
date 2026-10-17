@@ -1,0 +1,21 @@
+# Human evidence: the one definition every count of closes uses (round 6, B3). (designed, not built: the case memory that
+# records these does not exist yet.) A count of closes anywhere in the bank declares evidence: human_evidence and counts
+# only the kinds below; tools/validate.py rejects any count that does not.
+human_evidence:
+  counts:
+    manual_shadow_close: an analyst closed the alert themselves in Shadow, where the Triage agent's close was not shown to them
+    analyst_override: an analyst closed the alert with a disposition or reason different from the Triage agent's recommendation
+    audited_close: a close that a human audit sampled and confirmed (the audited false-close rate, docs/design-decisions.md §19)
+  never:
+    accepted_recommendation: an analyst accepting the Triage agent's recommended close in Recommend; it is the agent's judgement, not independent evidence
+    auto_close: the Triage agent's own close in Auto
+    precedent_match: a close by precedent (Q0); precedents never chain
+  independent: closes by distinct analysts; one analyst's repeated closes count once
+  auto_mode: in Auto, a precedent (Q0) needs at least one audited_close; manual closes and overrides alone are not enough
+  counted_by:   # every place that counts closes; each declares evidence: human_evidence
+  - {place: C-04, file: bank/triage/context/C-04.yaml, what: Q0's precedent counts}
+  - {place: q0, file: bank/triage/context_rules.yaml, what: the precedent rule}
+  - {place: routine_pairs, file: bank/triage/proposals.yaml, what: routine (entity, detection) pair proposals}
+  - {place: list_entries, file: bank/triage/proposals.yaml, what: list-entry (allowlist) proposals}
+  - {place: closure_mining, file: bank/triage/proposals.yaml, what: closure-mining proposals}
+  - {place: thresholds, file: bank/triage/proposals.yaml, what: threshold proposals}

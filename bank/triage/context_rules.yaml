@@ -4,7 +4,7 @@
 # missing context never closes and never escalates; it flags with reason context_unknown, naming the C-ID.
 
 entity_guard:
-  runs: once per entity per grouping window, before Q0
+  runs: once per entity per grouping window, before Q0; again on fresh C-02 immediately before any close on the entity is written
   reads: [C-01, C-02, C-08]
   per_entity_class: "entity_guard_min_alerts, entity_guard_min_detections and entity_grouping_window_minutes take the value for the entity's class (C-08: server, workstation, network, other); an unknown class uses the global defaults (never the strictest class)."
   hot_when:
@@ -13,28 +13,34 @@ entity_guard:
     - all:
       - {C-02.alerts: {gte: {param: entity_guard_min_alerts}}}
       - {C-02.distinct_detections: {gte: {param: entity_guard_min_detections}}}
+    # S2: distinct non-routine detections over the 24h look-back, counted at the normalized severities the parameter lists
+    - {C-02.day_detections: {sum_of_severities: {param: entity_day_counted_severities}, gte: {param: entity_day_min_detections}}}
+  refresh: 'S1: a new alert on the entity invalidates its cached C-02 for the window, so the next read measures again. The guard is re-evaluated on that fresh C-02 immediately before any close on the entity is written. When the entity turns hot, the closes already written on it inside the grouping window (or, for the 24h rule, the look-back) are reopened as flags with reason entity_hot. Raise-only.'
   effect: every close on the entity becomes a flag, and its priority is raised. Raise-only; each alert's flow still runs.
   routine:
     list: "the customer's routine list of (entity, detection) pairs; the Tool Broker applies it inside C-02"
-    meaning: an alert from an (entity, detection) pair on the routine list does not count toward entity_guard_min_alerts (C-02 excludes it).
+    meaning: an alert from an (entity, detection) pair on the routine list does not count toward entity_guard_min_alerts, entity_guard_min_detections or the 24h detection count (C-02 excludes it).
     never_routine:
-    - alerts of high or critical severity (always counted)
+    - alerts of high or critical normalized severity (always counted)
     - any detection not on that entity's routine list
     - any alert on an entity with an open escalation (C-01)
-    approval: reduce-scrutiny. The Use Case Manager proposes a pair from at least 4 weeks of consistent, audited benign closes, with an approval packet; a human approves it with an owner and an expiry.
+    approval: reduce-scrutiny. The Use Case Manager proposes a pair (bank/triage/proposals.yaml routine_pairs) from human evidence only, with an approval packet; a human approves it with an owner and an expiry.
+    evidence: human_evidence
 
 q0:
   question: Q-0000
-  reads: [C-03, C-04, C-06]
+  reads: [C-02, C-03, C-04, C-06]
+  evidence: human_evidence
   yes_when:
     all:
     - any:
       - {C-04.audited: {gte: 1}}
-      - {C-04.independent_analyst: {gte: {param: q0_min_independent_closes}}}
-    - {C-03: {not_above: this_alert_severity}}
+      - {C-04.independent_human: {gte: {param: q0_min_independent_closes}, modes: [shadow, recommend]}}   # B3: in Auto only an audited close is a precedent
+    - {C-02.distinct_detections: {lte: 1}}   # S2: no precedent while another detection fires on the entity in the window
+    - {C-03: {not_above: this_alert_severity}}   # normalized severity (bank/contract/severity.yaml)
     - C-06: false
   validity: {param: precedent_validity_hours}
-  notes: A close with reason precedent_match is never itself a precedent. A mitigated precedent counts only when this alert was also stopped (C-04 current_action). In Shadow and Recommend the precedent is shown to the analyst instead of closing.
+  notes: A close with reason precedent_match is never itself a precedent. Only human evidence counts (bank/contract/evidence.yaml); accepted recommendations and Auto closes never do. A mitigated precedent counts only when this alert was also stopped (C-04 current_action). In Shadow and Recommend the precedent is shown to the analyst instead of closing.
 
 priority:
   reads: [C-05, C-06, C-07]

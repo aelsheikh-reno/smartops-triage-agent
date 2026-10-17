@@ -16,8 +16,9 @@ derived_from:
 text_origin: original
 legal_review: false
 status: draft
-version: 5
+version: 6
 kind: triage
+actor_identity: true
 inputs:
   entities:
   - role:host.name

@@ -2,6 +2,9 @@ id: D-0004
 name: Deleting Shadow Copies
 family: endpoint
 alert_type: analytic
+max_mode: recommend
+max_mode_reason: Deletes shadow copies, which destroys recovery data and often precedes ransomware; a wrong close loses the recovery point (round 6, S5).
+auto_excluded_reason: destructive_or_anti_forensic
 techniques:
 - T1490
 required_roles:
@@ -54,11 +57,11 @@ flow:
   on_unknown: next
 - step: 3
   question: Q-0004
-  on_yes: close:benign_true_positive:approved_change
+  on_yes: flag
   on_no: escalate
   on_unknown: escalate
 status: draft
-version: 6
+version: 7
 derived_from:
   library: escu
   rule: escu:deleting_shadow_copies

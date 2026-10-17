@@ -46,7 +46,8 @@ PROSE = {"text", "name", "intent", "notes", "note", "description", "reason", "so
          "changed_in_migration", "below_floor_reason", "approved_by", "pattern", "when", "then", "applies_to", "if_entry_type", "on_yes",
          "on_no", "on_unknown", "step", "question", "kind", "feeds", "when_not_answered", "sigma_logsource_none", "required_roles",
          "precedent_validity_reason", "parameters", "rule", "list", "context", "context_questions", "coverage", "fallback_rating", "rating",
-         "join", "first", "all", "repo", "_file", "derived_from", "alert_type"}
+         "join", "first", "all", "repo", "_file", "derived_from", "alert_type",
+         "auto_excluded_reason", "q0_off_reason", "actor_identity", "evidence", "meaning", "applies_to"}
 TODAY = __import__("datetime").date.today().isoformat()
 ROW_KINDS = ("ambiguous", "unverified", "proposed", "standards_defined")
 THRESHOLD_KEYS = {"min_count", "min_hosts", "min_days", "min_weeks", "of_weeks", "threshold", "op", "values", "unknown_op", "unknown_values", "max_count"}
@@ -256,6 +257,18 @@ def main():
         err("bank/broker/capabilities.yaml scope", "profiles must be triage, falsifier, detection_engineering and use_case_manager")
     if "±" in json.dumps(b["capabilities"]["scope"], ensure_ascii=False):
         err("bank/broker/capabilities.yaml scope", "the triage window is a 24h look-back, never ±24h")
+    # every window looks back only (round 6, §4): no question or capability measures "in the alert window" or around the alert time
+    LOOKS_AROUND = re.compile(r"(?<!before )\bthe alert window\b|around the alert time|after the alert time", re.I)
+    for qid, q in list(b["questions"].items()) + list(b["context_questions"].items()):
+        if LOOKS_AROUND.search(q.get("text", "")):
+            err(q["_file"], "windows look back only: say the look-back ending at the alert time, not the alert window")
+    for c in b["capabilities"]["capabilities"]:
+        for k in ("measures", "yes_means", "no_means"):
+            if LOOKS_AROUND.search(str(c.get(k, ""))):
+                err(f"bank/broker/capabilities.yaml {c['name']}", f"{k}: windows look back only (the look-back ending at the alert time)")
+    for pname, p_ in b["parameters"].items():
+        if LOOKS_AROUND.search(str(p_.get("description", ""))):
+            err(f"parameters {pname}", "windows look back only (the look-back ending at the alert time)")
     for cname, spec in classes.items():
         if spec.get("default") not in spec.get("values", []):
             err(f"bank/broker/capabilities.yaml alert_classes {cname}", "default must be one of the class values")
@@ -381,8 +394,10 @@ def main():
                 err(w, f"alert.class needs a class from alert_classes (got {inputs.get('class')})")
         if cap["name"] == "alert.measure" and not str(inputs.get("of", "")).startswith("role:"):
             err(w, "alert.measure reads one role attribute (of: role:<role>.<attr>)")
-        if cap["name"] == "org.prevalence" and "window" in inputs and ({"of_weeks", "min_weeks"} & set(inputs)):
-            err(w, "org.prevalence: window and of_weeks/min_weeks are exclusive")
+        if cap["name"] == "org.prevalence" and ({"window", "lookback_hours"} & set(inputs)) and ({"of_weeks", "min_weeks"} & set(inputs)):
+            err(w, "org.prevalence: lookback_hours and of_weeks/min_weeks are exclusive")
+        if "window" in inputs and cap["name"] != "context.rule" and not (isinstance(inputs["window"], dict) and "param" in inputs["window"]):
+            err(w, "a window input is a bounded parameter that ends at the alert time (look-back only), never a role or a literal")
         if cap["name"] == "context.rule":
             reads = inputs.get("reads") or []
             used = set(re.findall(r"C-0\d", repr(q.get("context_rule"))))
@@ -392,6 +407,12 @@ def main():
             declared = {x.split(" ")[0] for x in (c.get("inputs") or [])}
             if declared and k not in declared:
                 err(w, f"input '{k}' is not an input of {cap['name']}")
+        # S6: an answer about who performed the action is tagged actor_identity (never the only hard-to-fake yes on a close path)
+        actor_refs = {f"{kk}:{name}" for kk, name in refs_in(inputs)}
+        who = any(r.startswith("role:actor.") for r in actor_refs) and cap["name"] in ("list.lookup", "change.window") or \
+            cap["name"] == "change.window" and any(r.startswith("role:user.") for r in actor_refs)
+        if who and not (q.get("actor_identity") or c.get("actor_identity")):
+            err(w, "answers who performed the action (an actor account on a list, or a change implementer): tag it actor_identity: true")
         for item in (q.get("needs") or {}).get("coverage") or []:
             if item not in (b["capabilities"].get("coverage_items") or {}):
                 err(w, f"needs.coverage {item} is not declared in capabilities.yaml coverage_items")
@@ -440,7 +461,7 @@ def main():
     for sect in ("entity_guard", "q0", "priority", "q0067"):
         if sect not in cr:
             err("bank/triage/context_rules.yaml", f"missing {sect}")
-    for sect, want in (("entity_guard", ["C-01", "C-02", "C-08"]), ("q0", ["C-03", "C-04", "C-06"]), ("priority", ["C-05", "C-06", "C-07"]),
+    for sect, want in (("entity_guard", ["C-01", "C-02", "C-08"]), ("q0", ["C-02", "C-03", "C-04", "C-06"]), ("priority", ["C-05", "C-06", "C-07"]),
                        ("q0067", ["C-06", "C-08"])):
         if sorted((cr.get(sect) or {}).get("reads") or []) != want:
             err("bank/triage/context_rules.yaml", f"{sect} reads {want}")
@@ -448,6 +469,70 @@ def main():
         param_check(err, "bank/triage/context_rules.yaml", params, m.group(1))
     if (cr.get("q0") or {}).get("question") != "Q-0000" or b["questions"]["Q-0000"]["capability"]["name"] != "precedent.check":
         err("bank/triage/context_rules.yaml", "q0 is Q-0000, answered by precedent.check from the context questions")
+    # B3: human evidence is defined once (bank/contract/evidence.yaml); every count of closes declares and uses it
+    he = (b["evidence"] or {}).get("human_evidence") or {}
+    ev_file = "bank/contract/evidence.yaml"
+    if set(he.get("counts") or {}) != {"manual_shadow_close", "analyst_override", "audited_close"}:
+        err(ev_file, "human_evidence counts exactly manual_shadow_close, analyst_override and audited_close")
+    if not {"accepted_recommendation", "auto_close", "precedent_match"} <= set(he.get("never") or {}) or set(he.get("counts") or {}) & set(he.get("never") or {}):
+        err(ev_file, "accepted recommendations, Auto closes and precedent matches never count as human evidence")
+    props = (b["proposals"] or {}).get("proposals") or {}
+    places = {"C-04": b["context_questions"].get("C-04") or {}, "q0": cr.get("q0") or {},
+              "routine_pairs": props.get("routine_pairs") or {}, "list_entries": props.get("list_entries") or {},
+              "closure_mining": props.get("closure_mining") or {}, "thresholds": props.get("thresholds") or {},
+              "routine (context_rules)": (cr.get("entity_guard") or {}).get("routine") or {},
+              "case.precedent": caps.get("case.precedent") or {}, "list.propose_update": caps.get("list.propose_update") or {}}
+    listed = {x.get("place") for x in he.get("counted_by") or []}
+    for place, doc in places.items():
+        if doc.get("evidence") != "human_evidence":
+            err(ev_file if not doc else f"evidence count {place}", f"counts closes without the one definition: needs evidence: human_evidence (got {doc.get('evidence')!r})")
+    for place in {"C-04", "q0", "routine_pairs", "list_entries", "closure_mining", "thresholds"} - listed:
+        err(ev_file, f"counted_by must list {place}")
+    for name, pr in props.items():
+        for k in ("min_closes", "min_analysts", "min_days"):
+            if not isinstance(pr.get(k), dict) or "param" not in pr[k]:
+                err(f"bank/triage/proposals.yaml {name}", f"{k} must be a bounded parameter")
+            else:
+                param_check(err, f"bank/triage/proposals.yaml {name}", params, pr[k]["param"])
+    if set((b["contract"]["questions"].get("C-04") or {}).get("answer", {}).get("components") or []) != {"audited", "independent_human"}:
+        err("bank/contract/questions.yaml C-04", "components are audited and independent_human (bank/contract/evidence.yaml)")
+    for ev_key in re.findall(r"'evidence': '([^']*)'", repr([cr, props, b["context_questions"], b["capabilities"]["capabilities"]])):
+        if ev_key != "human_evidence":
+            err("evidence", f"evidence: {ev_key}: a count of closes uses human_evidence only")
+    q0_yes = repr((cr.get("q0") or {}).get("yes_when"))
+    if "'C-04.audited'" not in q0_yes or "'modes': ['shadow', 'recommend']" not in q0_yes:
+        err("bank/triage/context_rules.yaml q0", "in Auto a precedent needs an audited close: the independent_human branch is limited to modes [shadow, recommend]")
+    if "{'C-02.distinct_detections': {'lte': 1}}" not in q0_yes:
+        err("bank/triage/context_rules.yaml q0", "Q0 needs C-02.distinct_detections lte 1 (S2)")
+    if "day_detections" not in repr((cr.get("entity_guard") or {}).get("hot_when")) or not (cr.get("entity_guard") or {}).get("refresh"):
+        err("bank/triage/context_rules.yaml entity_guard", "needs the 24h distinct-detection rule (S2) and the refresh rule (S1)")
+
+    # §3: every severity comparison uses the normalized scale (bank/contract/severity.yaml)
+    scale = (b["severity"] or {}).get("scale") or []
+    if scale != ["informational", "low", "medium", "high", "critical"]:
+        err("bank/contract/severity.yaml", "scale must be informational, low, medium, high, critical")
+    sev_values = (b["capabilities"].get("alert_classes", {}).get("severity") or {}).get("values") or []
+    if set(sev_values) - set(scale) - {"other"}:
+        err("bank/broker/capabilities.yaml alert_classes severity", f"values outside the normalized scale: {sorted(set(sev_values) - set(scale) - {'other'})}")
+    if [v for v in (b["contract"]["questions"].get("C-03") or {}).get("answer", {}).get("values") or [] if v != "none"] != scale:
+        err("bank/contract/questions.yaml C-03", "values are none plus the normalized scale")
+    for m in re.finditer(r"'not_above': '([^']*)'", repr(cr)):
+        if m.group(1) != "this_alert_severity":
+            err("bank/triage/context_rules.yaml", f"severity comparison on {m.group(1)!r}: compare normalized severities only (this_alert_severity, bank/contract/severity.yaml)")
+    for pname, p in params.items():
+        if "severit" in pname:
+            bad = sorted(set(p["default"] if isinstance(p["default"], list) else [p["default"]]) | set((p.get("bounds") or {}).get("allowed") or []))
+            bad = [v for v in bad if v not in scale and v != "other"]
+            if bad:
+                err(f"parameters {pname}", f"severity values outside the normalized scale (a raw SIEM or product severity?): {bad}")
+    for siem, spec in ((b["severity_map"] or {}).get("siems") or {}).items():
+        for raw, norm in (spec.get("map") or {}).items():
+            if norm not in scale:
+                err(f"bank/intake/severity-map.yaml {siem}", f"{raw} maps to {norm!r}, not a normalized severity")
+    if not (b["severity_map"] or {}).get("siems", {}).get("splunk_es"):
+        err("bank/intake/severity-map.yaml", "needs the Splunk ES mapping (version 1 SIEM)")
+    if (b["reason_codes"].get("severity_unmapped") or {}).get("disposition") != "flag":
+        err("bank/triage/reason_codes.yaml", "severity_unmapped must exist with disposition flag")
     if "CF-0030" not in b["facts"] or not {"owner", "approved_by", "expiry"} <= set(b["facts"]["CF-0030"].get("fields") or []):
         err("bank/facts", "routine (entity, detection) pairs need CF-0030 with owner, approved_by and expiry")
     em = b["reason_codes"].get("entity_missing")
@@ -500,6 +585,24 @@ def main():
         err("bank/contract/envelope.yaml", "ids are alert_id, run_id, entity_window_id, request_id and measurement_id")
     if "question_timeout_seconds" not in params:
         err("bank/triage/parameters.yaml", "question_timeout_seconds (the per-question deadline) must be a bounded parameter")
+    # B4: a missed deadline and a defer past its maximum wait are source_unavailable; source_unavailable is never cached
+    ef = "bank/contract/envelope.yaml"
+    if (env.get("deadline") or {}).get("on_miss") != "source_unavailable":
+        err(ef, "deadline.on_miss must be source_unavailable (a missed deadline never answers unknown and never supports a close)")
+    if (env.get("defer_rule") or {}).get("past_max_wait") != "source_unavailable":
+        err(ef, "defer_rule.past_max_wait must be source_unavailable")
+    if (env.get("defer_rule") or {}).get("max_wait_parameter") not in params or set((env.get("defer") or {}).get("reasons") or []) != {"overload", "rate_limited"}:
+        err(ef, "defer needs reasons overload and rate_limited and a bounded max_wait_parameter")
+    for p_ in ("question_timeout_seconds", (env.get("defer_rule") or {}).get("max_wait_parameter")):
+        if p_ in params and params[p_].get("reduces_scrutiny_when") != "higher":
+            err(f"bank/triage/parameters.yaml {p_}", "a longer deadline or wait lets more answers arrive instead of flagging: reduces_scrutiny_when higher")
+    cache = env.get("cache") or {}
+    if "source_unavailable" in (cache.get("cached_statuses") or []) or "source_unavailable" not in (cache.get("never_cached") or []):
+        err(ef, "source_unavailable is never cached: only completed measurements are idempotent per request_id")
+    if "deliberately" not in str((env.get("ids") or {}).get("request_id")) or "transport retry" not in str((env.get("ids") or {}).get("request_id")):
+        err(ef, "request_id: the attempt grows only on a deliberate re-ask; a transport retry reuses the request_id")
+    if "deadline" in str((ans.get("status") or {}).get("unknown")):
+        err("bank/contract/answer.yaml", "status unknown must not cover a missed deadline (that is source_unavailable)")
     exs = con.get("examples") or {}
     pending = {}
     for r in exs.get("pending") or []:
@@ -512,6 +615,29 @@ def main():
         ok, why = B.accept_answer(pending, a.get("message") or {}, a.get("received_at"))
         if ok != (a.get("expect") == "accept") or (not ok and a.get("reason") and a["reason"] != why):
             err("bank/contract/envelope_examples.yaml", f"answer '{a.get('name')}': expected {a.get('expect')}, the acceptance rule says {why}")
+    if not env.get("deadline") or not env.get("defer_rule") or not env.get("cache"):
+        pass   # reported above
+    else:
+        for sq in exs.get("sequences") or []:
+            got, why = B.resolve_request(b, sq["request"], sq.get("events") or [])
+            if got != sq.get("expect"):
+                err("bank/contract/envelope_examples.yaml", f"sequence '{sq.get('name')}': expected {sq.get('expect')}, the resolution rule says {got} ({why})")
+        for rt in exs.get("retries") or []:
+            probs = B.cache_problems(b, rt["served"])
+            if (rt.get("expect") == "valid") != (not probs) or (probs and not any(rt["expect"] in p_ for p_ in probs)):
+                err("bank/contract/envelope_examples.yaml", f"retries '{rt.get('name')}': expected {rt.get('expect')}, the cache rule says {probs or 'valid'}")
+        if not any(sq.get("expect") == "source_unavailable" and any("defer" in e for e in sq.get("events") or []) for sq in exs.get("sequences") or []) or \
+                not any(rt.get("expect") != "valid" for rt in exs.get("retries") or []):
+            err("bank/contract/envelope_examples.yaml", "needs a defer-past-max-wait sequence and a cached-source_unavailable retry example")
+
+    # S7: each translation's known-answer tests run through the broker's run_status
+    for tname, tdoc in b["value_tables"].items():
+        for ka in tdoc.get("known_answers") or []:
+            got, _, prov = B.run_status(b, {"tables": [tname], "matches": [ka["alert"]]}, None, sha256=ka.get("sha256"))
+            if got != ka.get("expect"):
+                err(tdoc["_file"], f"known answer '{ka.get('name')}': expected {ka.get('expect')}, the broker answers {got} ({prov})")
+    if not any(ka for t in b["value_tables"].values() for ka in t.get("known_answers") or [] if t.get("evidence")):
+        err("bank/broker/translations", "a table with an evidence spec needs known-answer tests (S7)")
 
     # ---------- vendor names, bundle ----------
     named = [("bank/broker/capabilities.yaml", b["capabilities"]), ("bank/triage/parameters.yaml", b["parameters"]), ("bank/triage/context_rules.yaml", cr),
@@ -623,6 +749,12 @@ def main():
                 vals = [str(v).lower() for v in (r.get("match") or {}).get("value", []) if isinstance(v, str)] if isinstance((r.get("match") or {}).get("value"), list) else []
                 if cname == "control_action" and {"quarantined", "quarantine"} & set(vals) and not r.get("questions"):
                     err(t["_file"], f"{cname} {r.get('id')}: a quarantine translation lists the email and DLP questions it serves (questions: [...])")
+                stage = {"email.delivery_stage": "email", "dlp.egress_stage": "data_protection"}
+                for key, fam in stage.items():
+                    if key in (r.get("match") or {}):
+                        wrong = {f for qid in r.get("questions") or [] for f in users.get(qid, set())} - {fam}
+                        if not r.get("questions") or wrong:
+                            err(t["_file"], f"{cname} {r.get('id')}: a row on {key} serves {fam} questions only (each stage is its own concept; round 6)")
                 for qid in r.get("questions") or []:
                     bad = users.get(qid, set()) - {"email", "data_protection"}
                     if bad:
@@ -840,6 +972,9 @@ def main():
                     err(where, "flow must start with Q-0000")
                 elif got != want or not str((st.get("attacker_influence") or {}).get("reason", "")).strip():
                     err(where, f"Q0 attacker_influence is {got}; the fingerprint fields give {want} (with a reason)")
+                elif d.get("q0_off_reason"):
+                    if st["on_yes"] != "next":
+                        err(where, "q0_off_reason is set: Q0's on_yes must be next (a precedent never closes this detection)")
                 elif st["on_yes"] != ("next" if want == "high" else "close:inherit:precedent_match"):
                     err(where, f"Q0 rated {want}: on_yes must be {'next' if want == 'high' else 'close:inherit:precedent_match'}")
                 fb = B.q0_fallback_rating(d)
@@ -908,7 +1043,7 @@ def main():
             if out.startswith("close"):
                 n_close += 1
                 needs = B.close_path_rows(b, path, guards, detection=d)
-                n_auto_today += not needs and d.get("max_mode") != "recommend"
+                n_auto_today += not needs and B.auto_eligible_path(d, path)
 
     # use-case catalog
     ucs = b["use_cases"]
@@ -972,9 +1107,30 @@ def main():
                     else "technique-only" if fallbacks else "none")
             if u.get("coverage") != want:
                 err(w, f"coverage is {u.get('coverage')}, bank says {want}")
+    # Auto exclusions (bank/triage/auto_exclusions.yaml): detection-level codes cap at Recommend, step-level codes flag that close in Auto
+    ax = b["auto_exclusions"]
+    destructive = set((ax.get("destructive_or_anti_forensic") or {}).get("techniques") or [])
     for did, d in list(b["detections"].items()) + list(b["techniques"].items()):
         if d.get("max_mode") == "recommend" and not d.get("max_mode_reason"):
             err(d["_file"], "max_mode recommend needs a max_mode_reason")
+        codes = B.auto_excluded(d)
+        for code in codes:
+            if (ax.get(code) or {}).get("applies_to") != "detection":
+                err(d["_file"], f"auto_excluded_reason {code} is not a detection-level code in bank/triage/auto_exclusions.yaml")
+        if codes and d.get("max_mode") != "recommend":
+            err(d["_file"], "auto_excluded_reason at detection level needs max_mode: recommend")
+        if d.get("max_mode") == "recommend" and not codes:
+            err(d["_file"], "max_mode recommend needs an auto_excluded_reason code (bank/triage/auto_exclusions.yaml)")
+        if did in b["techniques"] and "no_tp_replay_data" not in codes:
+            err(d["_file"], "technique fallback needs auto_excluded_reason no_tp_replay_data")
+        if did in b["detections"] and set(d.get("techniques") or []) & destructive and "destructive_or_anti_forensic" not in codes:
+            err(d["_file"], f"destructive or anti-forensic technique {sorted(set(d['techniques']) & destructive)}: needs max_mode recommend with auto_excluded_reason destructive_or_anti_forensic")
+        for st in d["flow"]:
+            for code in B.auto_excluded(d, st):
+                if (ax.get(code) or {}).get("applies_to") != "step":
+                    err(d["_file"], f"step {st['step']}: auto_excluded_reason {code} is not a step-level code in bank/triage/auto_exclusions.yaml")
+                if not any(st[e].startswith("close") for e in ("on_yes", "on_no")):
+                    err(d["_file"], f"step {st['step']}: auto_excluded_reason on a step that never closes")
     info.append(f"close paths: {n_close} usable in Shadow and Recommend; {n_auto_today} Auto-eligible today with no customer verifications "
                 "(the rest need value-table rows verified per customer, or are technique fallbacks capped at Recommend)")
 

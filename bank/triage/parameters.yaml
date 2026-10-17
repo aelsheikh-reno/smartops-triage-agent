@@ -26,7 +26,36 @@ parameters:
       min: 2
       max: 5
     reduces_scrutiny_when: lower
-    description: Independent analyst closes of the fingerprint (distinct analysts) that make a precedent when no close passed audit.
+    description: Independent human-evidence closes of the fingerprint (manual closes in Shadow and analyst overrides, by distinct analysts; bank/contract/evidence.yaml) that make a precedent when no close passed audit. Not used in Auto, where a precedent needs an audited close.
+  proposal_min_human_closes:
+    default: 3
+    bounds:
+      min: 3
+      max: 50
+    reduces_scrutiny_when: lower
+    description: Closes counted as human evidence (bank/contract/evidence.yaml) that a Use Case Manager proposal needs (bank/triage/proposals.yaml).
+  proposal_min_analysts:
+    default: 2
+    bounds:
+      min: 2
+      max: 10
+    reduces_scrutiny_when: lower
+    description: Distinct analysts among the closes behind a Use Case Manager proposal.
+  proposal_min_days:
+    default: 3
+    bounds:
+      min: 3
+      max: 30
+    reduces_scrutiny_when: lower
+    description: Distinct days among the closes behind a Use Case Manager proposal.
+  routine_pair_min_weeks:
+    default: 4
+    bounds:
+      min: 4
+      max: 12
+    reduces_scrutiny_when: lower
+    description: Weeks of consistent human-evidence closes behind a routine (entity, detection) pair proposal.
+    unit: weeks
   entity_grouping_window_minutes:
     default: 10
     bounds:
@@ -64,6 +93,21 @@ parameters:
       workstation: 2
       network: 2
       other: 2
+  entity_day_min_detections:
+    default: 2
+    bounds:
+      min: 2
+      max: 5
+    reduces_scrutiny_when: higher
+    description: Distinct non-routine detections on the entity over the 24h look-back (C-02 day_detections), at the severities entity_day_counted_severities lists, that make the entity hot (round 6, S2).
+  entity_day_counted_severities:
+    default: [medium, high, critical]
+    bounds:
+      min_items: 2
+      max_items: 4
+      allowed: [low, medium, high, critical]
+    reduces_scrutiny_when: shrinks
+    description: Normalized severities (bank/contract/severity.yaml) whose detections count toward entity_day_min_detections.
   triage_lookback_hours:
     default: 24
     bounds:
@@ -72,15 +116,6 @@ parameters:
     reduces_scrutiny_when: lower
     description: 'The triage window: look-back only, ending at the alert time. Fixed at 24h (C-03 and event lookups).'
     unit: hours
-  edr_alert_match_window_minutes:
-    default: 10
-    bounds:
-      min: 1
-      max: 60
-    reduces_scrutiny_when: higher
-    description: When the normalized alert carries no vendor alert ID, the Tool Broker matches the endpoint product's alert by device, file hash and this window around the alert time (endpoint.run_status).
-      A wider window risks matching another alert. No match, or more than one, answers unknown.
-    unit: minutes
   alert_history_min_count:
     default: 3
     bounds:
@@ -156,7 +191,15 @@ parameters:
       min: 1
       max: 60
     reduces_scrutiny_when: higher
-    description: Deadline for one broker answer. No answer by the deadline gives status unknown and the flow continues; a late answer is logged and discarded, never applied. A longer deadline lets more answers arrive, so it reduces scrutiny.
+    description: Deadline for one broker answer. No answer by the deadline gives status source_unavailable, which never supports a close (the alert flags); a late answer is logged and discarded, never applied. A longer deadline lets more answers arrive instead of flagging, so it reduces scrutiny.
+    unit: seconds
+  defer_max_wait_seconds:
+    default: 300
+    bounds:
+      min: 30
+      max: 1800
+    reduces_scrutiny_when: higher
+    description: How long a request the broker deferred (overload or rate limiting) may wait, counted from the first defer, before it becomes source_unavailable and the alert flags. Waiting requests are served in priority order. A longer wait lets more answers arrive instead of flagging, so it reduces scrutiny.
     unit: seconds
   org_prevalence_escape_min_hosts:
     default: 1
@@ -164,7 +207,7 @@ parameters:
       min: 1
       max: 1
     reduces_scrutiny_when: higher
-    description: Hosts outside the approved security-tooling and analysis hosts on which the file's hash may appear in the alert window before the guard fires. Fixed at 1.
+    description: Hosts outside the approved security-tooling and analysis hosts on which the file's hash may appear over the look-back ending at the alert time before the guard fires. Fixed at 1.
   vuln_data_max_age_days:
     default: 30
     bounds:
@@ -271,9 +314,8 @@ parameters:
       - medium
       - high
       - critical
-      - other
     reduces_scrutiny_when: shrinks
-    description: DLP severities that flag even to approved destinations
+    description: DLP severities (normalized, bank/contract/severity.yaml) that flag even to approved destinations. other (a product value with no place on the scale) answers unknown and flags
   web_low_risk_categories:
     default:
     - advertising

@@ -1,6 +1,6 @@
 # SmartOps Triage Agent
 
-Agents (see `docs/design-decisions.md` §4):
+Agents (see `docs/design-decisions.md` §5):
 - **Triage agent** (every alert): runs the fixed flow and applies thresholds; a local model writes the explanation and reviews closes (raise-only).
 - **Tool Broker** (every question): routes each question to a domain specialist and returns a measurement plus evidence.
 - **Domain specialists** (under the Tool Broker): endpoint, network, identity, email, threat intel and Splunk; build recipes at onboarding and in Shadow, run them per question.
@@ -9,7 +9,7 @@ Agents (see `docs/design-decisions.md` §4):
 - **Falsifier** (after the fact): tries to prove sampled closes wrong and prepares approval packets; can only reopen or flag.
 - **Tier-2 analyst** (later phase): agentic investigation; a human reads the result.
 
-All agents are (designed, not built). A Reno Product Operator runs the system for the first six months (`docs/design-decisions.md` §5); pilot terms are in `docs/pilot-terms.md`.
+All agents are (designed, not built). A Reno Product Operator runs the system for the first six months (`docs/design-decisions.md` §6); pilot terms are in `docs/pilot-terms.md`.
 
 Design, workflows and question bank for the SmartOps triage agent. The question bank is the core: for each detection, the few yes/no questions that rule out its common benign explanations, plus the customer context needed to answer them.
 

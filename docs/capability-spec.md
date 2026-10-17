@@ -4,15 +4,15 @@ Status: (designed, not built). The capabilities, measurements and Triage-side ru
 
 One entry per capability in `bank/capabilities.yaml`. The list is the batch-1 set (PR #6), which adds `alert.field`, `url.reputation`, `vuln.not_applicable`, `email.*`, `traffic.denied_only`, `alert.history` and `scan.job_active` to the pilot set.
 
-Each capability is split between the two sides of the broker (design-decisions §6):
+Each capability is split between the two sides of the broker (design-decisions §7):
 - **Measures** is what the Tool Broker returns, with evidence.
-- **Triage rule** is how the Triage agent turns that measurement into yes, no or unknown. Its threshold comes from the parameter table (§9).
+- **Triage rule** is how the Triage agent turns that measurement into yes, no or unknown. Its threshold comes from the parameter table (§11).
 
 No threshold lives in a recipe.
 
 Parameter bounds are proposals. The bank does not carry minimums and maximums yet; the bank migration issue adds them to `bank/parameters.yaml`, and validation will reject values outside them. Lowering scrutiny (a lower count, a longer validity, a wider list) needs human approval with an owner and an expiry. Parameters marked *proposed* do not exist in the bank yet.
 
-Template kinds (§7):
+Template kinds (§8):
 - **Sigma**: an event search compiled to SPL by pySigma with the customer's pipeline.
 - **lookup**: a typed template against a list, lookup table or index.
 - **API**: a typed template against a tool's API.
@@ -32,7 +32,7 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Splunk:** none.
 - **Known-answer tests:** a seeded test case with a known fingerprint returns one match. A closure made by a precedent is not returned. A crown-jewel test entity returns no match.
 - **Unknown when:** case memory is unreachable (unavailable).
-- **Attacker influence:** set per detection from the fingerprint fields (Q0 rating, §10). If every field is attacker-chosen, the precedent never closes or flags by itself (the flow proceeds). Where a fingerprint field can fall back (asset ID to hostname), Q0 takes its fallback rating.
+- **Attacker influence:** set per detection from the fingerprint fields (Q0 rating, §12). If every field is attacker-chosen, the precedent never closes or flags by itself (the flow proceeds). Where a fingerprint field can fall back (asset ID to hostname), Q0 takes its fallback rating.
 - **Owner:** Tool Broker core (no specialist).
 
 ## list.lookup
@@ -165,7 +165,7 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Owner:** Splunk specialist, when change records are in Splunk. Otherwise ITSM access is an open question, since none of the six specialists covers it.
 
 ## alert.field
-- **Measures:** the alert's normalized field value. Raw vendor values go through the customer's value table (§7).
+- **Measures:** the alert's normalized field value. Raw vendor values go through the customer's value table (§8).
 - **Triage rule:** `op` (in, not_in, gte, cidr, matches) against `values`, which comes from a parameter. It answers unknown on `unknown_op` against `unknown_values`, or when the field is empty. Each parameter's bounds are listed with it, for example `dlp_record_count_flag` (default 1000, min 1, max 100000) and `usb_files_written_flag` (default 50, min 1, max 10000).
 - **Template kind:** alert field (local to the Triage agent; no broker call, outside the call budget).
 - **Splunk:** Enterprise Security notable fields after CIM normalization.
@@ -260,13 +260,13 @@ Every event-search recipe also runs a data-recency test: the data source must sh
 - **Splunk:** none.
 - **Known-answer tests:** a dry-run proposal appears in the approval queue and is withdrawn. An increase-scrutiny test change notifies the fact owner.
 - **Unknown when:** not applicable; a failure is an error, not an answer.
-- **Attacker influence:** not applicable. The anti-poisoning evidence rule (§23) guards proposals.
+- **Attacker influence:** not applicable. The anti-poisoning evidence rule (§25) guards proposals.
 - **Owner:** Use Case Manager, through the Tool Broker core.
 
 ---
 
 ## Data readiness checklist
-Owned by the Splunk specialist (design-decisions §8). It runs at onboarding, before any recipe is built, and produces the customer's data health report.
+Owned by the Splunk specialist (design-decisions §9). It runs at onboarding, before any recipe is built, and produces the customer's data health report.
 
 1. **CIM data models**
    - Enabled and accelerated: Endpoint (Processes, Filesystem, Registry), Network_Traffic, Intrusion_Detection, Web, Email, Malware, Authentication, Vulnerabilities, as the customer's detections need them.
@@ -283,10 +283,11 @@ Owned by the Splunk specialist (design-decisions §8). It runs at onboarding, be
    - Populated, with priority, owner and category.
    - The share of alert hosts and users that resolve.
    - Asset IDs available, for matching by asset ID rather than hostname.
-5. **Notables:** the notable index reachable, with the fields `alert.history` keys on, and notable volume per rule.
-6. **Search head:** concurrency headroom for our searches (feeds the concurrency cap, design-decisions §17), and a search-load test before Shadow.
+5. **Notables:** the notable index reachable, with the fields `alert.history` keys on, and notable volume per rule with historical dispositions (feeds the addressable-volume report, design-decisions §10).
+6. **Search head:** concurrency headroom for our searches (feeds the concurrency cap, design-decisions §19), and a search-load test before Shadow.
 7. **EDR agent coverage:** the share of hosts with an EDR agent reporting.
 8. **Risk-based alerting:** whether the customer uses it (risk notables change what an alert means and how often it repeats).
 9. **Asset IDs in the Malware data model:** whether AV alerts carry a device or agent ID. Without it, AV precedents rate medium (the fingerprint falls back to the hostname).
+10. **Entity resolution quality:** the share of alerts mapped to an asset ID and to an identity. The entity guard and per-entity caching (design-decisions §4) depend on it.
 
 The report lists each capability as buildable, buildable with gaps (named), or blocked, and feeds the coverage report.

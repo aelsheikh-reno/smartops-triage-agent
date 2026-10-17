@@ -20,6 +20,7 @@ This repo holds the SmartOps triage agent's design notes and question bank. The 
 - The broker measures, the Triage agent judges; no threshold lives in a recipe.
 - Runtime runs only frozen recipes; a live or unproven answer can only raise scrutiny.
 - Every parameter has bounds; removing scrutiny needs human approval.
+- Decisions are per alert; work, caching and the entity guard are per entity.
 - The promotion gate is the audited false-close rate, never agreement.
 - The falsifier can only reopen or flag.
 - Unbuilt items are labelled "(designed, not built)".

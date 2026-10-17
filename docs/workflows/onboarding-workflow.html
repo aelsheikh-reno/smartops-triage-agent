@@ -149,7 +149,7 @@ td.k{font-weight:500;white-space:nowrap}
 (function(){
 const NS='http://www.w3.org/2000/svg';
 const LANES=[
- {id:'reno',name:['Reno delivery','team'],rows:1,g:'people'},
+ {id:'reno',name:['Reno delivery','team'],rows:2,g:'people'},
  {id:'pop',name:['Reno Product','Operator'],rows:1,g:'people'},
  {id:'cop',name:['Customer operator','(shadow)'],rows:1,g:'people'},
  {id:'soc',name:['Customer SOC'],rows:1,g:'people'},
@@ -183,7 +183,7 @@ const PHASES=[
 ];
 const GATES={
  A:{when:'End of week 0',pass:'Agent reads notables and writes a test comment; Tool Broker reaches the customer’s tools read-only through the specialists’ MCP gateways; models run on the customer’s premises; data stays on premises.',by:'Customer IT + Reno'},
- B:{when:'End of week 1',pass:'Every enabled rule is mapped (known, technique or none) and classified; capabilities discovered; vendor alerts confirmed normalized for each family; coverage report reviewed.',by:'SOC lead'},
+ B:{when:'End of week 1',pass:'Every enabled rule is mapped (known, technique or none) and classified; capabilities discovered; vendor alerts confirmed normalized for each family; coverage report and addressable-volume report reviewed.',by:'SOC lead'},
  C:{when:'End of week 2',pass:'Top-ranked facts loaded with owners; custom-rule intents confirmed by rule owners or the SOC lead; dry run checked by hand; search-load test passed on the customer’s search head.',by:'SOC lead + Reno'},
  D:{when:'End of month 1',pass:'A sample of each detection’s Shadow closes audited by the Product Operator with no confirmed false close; agreement with analysts reported as a diagnostic only; injection classifier enabled and tested on the customer’s alert text, its false-positive rate measured in Shadow; close reviewer measured in Shadow and switched off where its flags are unhelpful.',by:'SOC lead'},
  E:{when:'End of month 3, or when ready',pass:'Audited false-close gate passed per detection: at least 200 sampled closes (all closes for low-volume detections), Falsifier findings reviewed by a human, zero confirmed false closes; the customer’s named owner co-signs each promotion and is the detection’s accountable owner; crown jewels excluded; audit sampling switched on; Use Case Manager proposals reviewed weekly; no unapproved reduce-scrutiny change.',by:'Customer’s named owner (co-sign) + SOC lead (and CISO where required)'},
@@ -192,7 +192,7 @@ const GATES={
 
 /* one-time steps: [num, lane, row, col, label lines, detail] */
 const NODES=[
- [1,'reno',0,0,['Kickoff: scope and','success metrics'],'Agree which notables are in scope, how success is measured (audited false-close rate, analyst hours saved) and who owns what on each side.'],
+ [1,'reno',0,0,['Kickoff: scope and','success metrics'],'Agree which notables are in scope, how success is measured (audited false-close rate, analyst hours saved, entities to review per day) and who owns what on each side.'],
  [2,'agent',0,0,['Pick local model per','role (eval harness)'],'Run the evaluation harness on Reno’s test sets within the customer’s hardware and pick a model for each role: a small fast one for per-alert roles, the largest that fits for per-rule roles. Check each model’s license.'],
  [3,'it',0,0,['Approve access and','data residency'],'Approve the service accounts and confirm the data and every model that touches it stay on the customer’s premises.'],
  [4,'reno',0,1,['Deploy agent and','local models'],'Install the triage agent and the local model picked for each role on the customer’s GPU hosts. Nothing that touches customer data leaves the premises.'],
@@ -214,23 +214,24 @@ const NODES=[
  [20,'stw',0,3,['Mine past closures','into drafts'],'The Use Case Manager turns past closure reasons into candidate questions and facts. Treated as evidence, not truth: old closures are often blank or wrong. Every draft goes to a human for approval.'],
  [21,'stw',1,3,['Drafts runbooks','from the bank'],'Human-readable runbooks are generated from the bank, so the documentation says exactly what the triage agent does. They replace hand-written runbooks as the reference.'],
  [22,'reno',0,3,['Coverage report'],'Shows how much of the alert volume has rule-level questions, technique-only questions, or none, and which questions this customer’s tools can actually answer. Questions with no capability are switched off for this customer.'],
- [23,'bank',0,4,['Rank missing facts','→ onboarding form'],'Rank the missing context facts by how many detections each one unblocks. The top of the list becomes the customer’s form.'],
- [24,'it',0,4,['Fill the','onboarding form'],'Crown jewels, VPN and egress ranges, service accounts, sanctioned admin tools, and change windows with who implements each change (a change without implementers cannot close an alert). Penetration-test and red-team engagements must be logged as approved changes naming the testers’ source addresses, or alerts from approved testers flag. Partial answers are fine.'],
- [25,'stw',0,4,['Chases fact owners','for answers'],'For each missing answer on the form, the Use Case Manager finds the right owner through the identity data and asks them directly, with reminders, until the fact is answered or marked not applicable.'],
- [26,'intent',0,4,['Reranker orders','mappings for review'],'After the vector search returns the closest known detections for each custom rule, an open-weight cross-encoder on the customer’s premises reorders them, so the mapping put to the rule owner rests on the best candidates. Offline only; never used per alert.'],
- [27,'stw',1,4,['Rule owner or SOC','lead confirms intent'],'The Use Case Manager asks each custom rule’s owner in plain language, for example: “This rule detects X. In 30 days it fired 400 times, 92% from the patch servers. Is that what you intended?” The mapping is stored once confirmed. A rule with no active owner goes to the SOC lead; a mapping nobody confirms within 14 days runs capped at Recommend until someone does. Unmapped rules get no verdict, only a context pack.'],
- [28,'ctx',0,5,['Load facts with','owner and expiry'],'Every fact gets an owner and a date to re-check it, because IP ranges and roles change.'],
- [29,'reno',0,5,['Tuning tickets for','noisy rules'],'Rules firing hundreds of times on one entity get throttling or risk-based alerting. That is a detection problem, not a triage problem.'],
- [30,'agent',0,5,['Dry run on','sample notables'],'Run the agent on recent notables and check its answers by hand before it sees live traffic.'],
- [31,'es',0,5,['Search-load test','(before Shadow)'],'Run our searches against the customer’s search head at the expected alert rate, under the concurrency cap, and confirm the customer’s own scheduled searches are unaffected. An onboarding gate before Shadow.'],
- [32,'mcp',1,5,['Build and test','recipes'],'Each specialist binds the bank’s templates to the customer’s tools (Sigma compiled by pySigma with the customer’s pipeline; typed lookup and API templates), then runs known-answer tests: a known value must return the expected result and the data source must show recent events. Recipes start in Shadow.'],
- [33,'ctl',0,6,['All detections','start in Shadow'],'The agent triages every alert, but analysts don’t see its verdicts, so their decisions stay unbiased.'],
- [34,'reno',0,7,['Month-1 review','with customer'],'Review each detection’s audited Shadow sample (agreement with analysts as a diagnostic only), the questions that came back unknown (and why: no capability, tool down, or no data), and the facts still missing.'],
- [35,'ctl',0,8,['Promote eligible','to Recommend'],'Detections that passed gate D now show their verdict to analysts.'],
- [36,'mcp',1,8,['Freeze recipes','at promotion'],'Promotion freezes the recipes each promoted detection uses. Runtime runs only frozen recipes; a live or unproven answer can only raise scrutiny.'],
- [37,'ctl',0,10,['Promote eligible','to Auto'],'Detections that pass the audited false-close gate (zero confirmed false closes in at least 200 sampled closes, or all closes for low-volume detections) move to Auto, co-signed by the customer’s named owner, never on crown-jewel assets.'],
- [38,'es',0,10,['Allow agent to','close notables'],'The Splunk account gets permission to close notables, used only for detections in Auto.'],
- [39,'cop',0,11,['Run weekly cycle','alone (4 weeks)'],'The customer operator runs the weekly cycle without the Product Operator for 4 consecutive weeks, clears the approval queue within its SLA and passes one audit with no confirmed false close. This is the handover exit test (gate F), not a date.']
+ [23,'reno',1,3,['Addressable-volume','report'],'Per rule: its share of notable volume, its historical false-positive or benign share from 6–12 months of dispositions (the ceiling), and whether the bank covers it. Addressable volume is the sum, over covered rules, of volume share × ceiling. It is the only number used in sales claims, it picks the pilot detections and it orders onboarding. (Designed, not built.)'],
+ [24,'bank',0,4,['Rank missing facts','→ onboarding form'],'Rank the missing context facts by how many detections each one unblocks. The top of the list becomes the customer’s form.'],
+ [25,'it',0,4,['Fill the','onboarding form'],'Crown jewels, VPN and egress ranges, service accounts, sanctioned admin tools, and change windows with who implements each change (a change without implementers cannot close an alert). Penetration-test and red-team engagements must be logged as approved changes naming the testers’ source addresses, or alerts from approved testers flag. Partial answers are fine.'],
+ [26,'stw',0,4,['Chases fact owners','for answers'],'For each missing answer on the form, the Use Case Manager finds the right owner through the identity data and asks them directly, with reminders, until the fact is answered or marked not applicable.'],
+ [27,'intent',0,4,['Reranker orders','mappings for review'],'After the vector search returns the closest known detections for each custom rule, an open-weight cross-encoder on the customer’s premises reorders them, so the mapping put to the rule owner rests on the best candidates. Offline only; never used per alert.'],
+ [28,'stw',1,4,['Rule owner or SOC','lead confirms intent'],'The Use Case Manager asks each custom rule’s owner in plain language, for example: “This rule detects X. In 30 days it fired 400 times, 92% from the patch servers. Is that what you intended?” The mapping is stored once confirmed. A rule with no active owner goes to the SOC lead; a mapping nobody confirms within 14 days runs capped at Recommend until someone does. Unmapped rules get no verdict, only a context pack.'],
+ [29,'ctx',0,5,['Load facts with','owner and expiry'],'Every fact gets an owner and a date to re-check it, because IP ranges and roles change.'],
+ [30,'reno',0,5,['Tuning tickets for','noisy rules'],'Rules firing hundreds of times on one entity get throttling or risk-based alerting. That is a detection problem, not a triage problem.'],
+ [31,'agent',0,5,['Dry run on','sample notables'],'Run the agent on recent notables and check its answers by hand before it sees live traffic.'],
+ [32,'es',0,5,['Search-load test','(before Shadow)'],'Run our searches against the customer’s search head at the expected alert rate, under the concurrency cap, and confirm the customer’s own scheduled searches are unaffected. An onboarding gate before Shadow.'],
+ [33,'mcp',1,5,['Build and test','recipes'],'Each specialist binds the bank’s templates to the customer’s tools (Sigma compiled by pySigma with the customer’s pipeline; typed lookup and API templates), then runs known-answer tests: a known value must return the expected result and the data source must show recent events. Recipes start in Shadow.'],
+ [34,'ctl',0,6,['All detections','start in Shadow'],'The agent triages every alert, but analysts don’t see its verdicts, so their decisions stay unbiased.'],
+ [35,'reno',0,7,['Month-1 review','with customer'],'Review each detection’s audited Shadow sample (agreement with analysts as a diagnostic only), the questions that came back unknown (and why: no capability, tool down, or no data), and the facts still missing.'],
+ [36,'ctl',0,8,['Promote eligible','to Recommend'],'Detections that passed gate D now show their verdict to analysts.'],
+ [37,'mcp',1,8,['Freeze recipes','at promotion'],'Promotion freezes the recipes each promoted detection uses. Runtime runs only frozen recipes; a live or unproven answer can only raise scrutiny.'],
+ [38,'ctl',0,10,['Promote eligible','to Auto'],'Detections that pass the audited false-close gate (zero confirmed false closes in at least 200 sampled closes, or all closes for low-volume detections) move to Auto, co-signed by the customer’s named owner, never on crown-jewel assets.'],
+ [39,'es',0,10,['Allow agent to','close notables'],'The Splunk account gets permission to close notables, used only for detections in Auto.'],
+ [40,'cop',0,11,['Run weekly cycle','alone (4 weeks)'],'The customer operator runs the weekly cycle without the Product Operator for 4 consecutive weeks, clears the approval queue within its SLA and passes one audit with no confirmed false close. This is the handover exit test (gate F), not a date.']
 ].map(a=>({num:a[0],lane:a[1],row:a[2],col:a[3],lines:a[4],detail:a[5]}));
 
 /* ongoing processes: [id, lane, row, startCol, endCol, label, cadence, owner, why] */

@@ -1,0 +1,30 @@
+# Proof records for close paths (round 8). (designed, not built: the review process that writes them.) A close path is
+# proven only when a reviewed record covers its current path ID and true-positive replay for the detection meets the bar
+# below. In Auto, a close on an unproven path becomes a flag; in Shadow and Recommend it stays a close, marked
+# "unproven path". Records live in bank/triage/proofs/ (none yet). A draft never counts, and a record whose path IDs no
+# longer match the flow (the detection's version or steps changed) is stale and does not count.
+path_id: '<detection id>@v<detection version>:<step>:<question>=<answer> > ... (every step the path answers, in order; guards are not part of it)'
+record:
+  required: [id, paths, attacker_position, why_unrealistic_or_guard, residual_risk, status]
+  fields:
+    id: PR-0001 style, unique
+    paths: the path IDs covered; paths that share the same close step and set of yes answers may share one record
+    attacker_position: the cheapest attacker position that makes every yes on the path true
+    why_unrealistic_or_guard: why that position is unrealistic, or which guard catches it
+    residual_risk: one line
+    status: draft | reviewed
+    reviewer: required when reviewed
+    reviewed_on: required when reviewed (YYYY-MM-DD)
+statuses: [draft, reviewed]
+proven_when:
+  record: a reviewed record lists the path's current ID
+  replay: true-positive replay for the detection has at least proof_min_tp_events events, none of them closed on this path, and at least one passing regression case aims at this path (aims_at)
+parameters:
+  proof_min_tp_events:
+    default: 20
+    bounds:
+      min: 20
+      max: 1000
+    reduces_scrutiny_when: lower
+    description: True-positive replay events a detection needs, with no close on the path, before a reviewed proof can make that close path proven.
+    unit: events

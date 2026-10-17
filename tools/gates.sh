@@ -12,7 +12,7 @@ python3 -c 'import sys; sys.path.insert(0, "tools"); import bank as B; B.select_
 # Replay covers the detection families only; technique fallbacks have no source rule or dataset (#26).
 replay_batches=()
 for a in "$@"; do [ "$a" != technique_fallback ] && replay_batches+=("$a"); done
-echo "== 0. executor tests (synthetic flows)"; python3 -m unittest discover -s tests/engine -t . 2>&1 | tail -1; [ "${PIPESTATUS[0]}" = 0 ] || rc=1
+echo "== 0. executor and scope tests (synthetic flows, planted fixtures)"; python3 -m unittest discover -s tests -t . 2>&1 | tail -1; [ "${PIPESTATUS[0]}" = 0 ] || rc=1
 echo "== 1. validate (incl. vendor-leak and triage-neutrality gates, contract and envelope)"; python3 tools/validate.py | grep -v '^INFO'; [ "${PIPESTATUS[0]}" = 0 ] || rc=1
 echo "== 2. attacker influence";  python3 tools/redteam_paths.py --quiet "$@" || rc=1; python3 tools/redteam_paths.py "$@" | tail -1
 if [ $# -gt 0 ] && [ ${#replay_batches[@]} -eq 0 ]; then
